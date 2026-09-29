@@ -27,6 +27,14 @@ FIELDS = {
 }
 WAVE_NAMES = {0: "OFF", 1: "TRI", 2: "SQUARE", 3: "PULSE", 4: "SAW", 5: "RAMP", 6: "SUPER SAW"}
 
+# Enum label tables established by the project so far. Values without a
+# confirmed name are rendered as "Unknown (0xNN)" — never invented here.
+# LFO waveforms and destinations use the JT-4000M manual's first-menu entries;
+# individual value names still need hardware verification (Hardware TODO).
+LFO_WAVE_NAMES = {0: "OFF", 1: "TRIANGLE", 2: "SQUARE", 3: "SAWTOOTH", 4: "RANDOM"}
+LFO_DEST_NAMES = {0: "NONE", 1: "VCF", 2: "VCA", 3: "OSC"}
+PORTAMENTO_MODE_NAMES = {0: "OFF"}
+
 
 def checksum(data: bytes) -> int:
     """JT-4000M observed 7-bit two's-complement checksum."""
@@ -130,8 +138,16 @@ def field_name(offset: int) -> str:
 
 
 def semantic_value(offset: int, value: int) -> str:
-    if offset in (0, 1, 47, 48):
-        return WAVE_NAMES.get(value, f"0x{value:02X}")
+    if offset in (0, 1):
+        return WAVE_NAMES.get(value, f"Unknown (0x{value:02X})")
+    if offset in (47, 48):
+        return LFO_WAVE_NAMES.get(value, f"Unknown (0x{value:02X})")
+    if offset == 53:
+        return LFO_DEST_NAMES.get(value, f"Unknown (0x{value:02X})")
+    if offset == 45:
+        return PORTAMENTO_MODE_NAMES.get(value, f"Unknown (0x{value:02X})")
+    if offset == 43:
+        return "ON" if value >= 65 else ("OFF" if value <= 64 else f"0x{value:02X}")
     if 55 <= offset <= 63:
         return repr(chr(value) if 32 <= value <= 126 else "\\x%02X" % value)
     return f"0x{value:02X}"

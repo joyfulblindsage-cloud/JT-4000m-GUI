@@ -35,7 +35,7 @@ def test_cross_bank_map_has_64_offsets():
     banks = [
         ('ALL EMPTY.syx', parse_file(FIX/'ALL EMPTY.syx')),
         ('ALL INIT SAW.syx', parse_file(FIX/'ALL INIT SAW.syx')),
-        ('Synthmania-EDM-Soundset-JT-4000.syx', parse_file(ROOT.parent/'Synthmania-EDM-Soundset-JT-4000.syx')),
+        ('Synthmania-EDM-Soundset-JT-4000.syx', parse_file(FIX/'Synthmania-EDM-Soundset-JT-4000.syx')),
     ]
     rows = cross_bank(banks)
     assert len(rows) == 64
