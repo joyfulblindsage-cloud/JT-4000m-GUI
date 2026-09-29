@@ -117,6 +117,7 @@ class Editor(tk.Tk):
         editmenu.add_separator()
         editmenu.add_command(label="Reset Program (Undo All Edits)", command=self.reset_program)
         menubar.add_cascade(label="Edit", menu=editmenu)
+        self._edit_menu = editmenu              # direct ref for undo/redo state
         self.config(menu=menubar)
         self.bind("<Control-o>", lambda _e: self.open_bank())
         self.bind("<Control-s>", lambda _e: self.save_bank())
@@ -305,9 +306,12 @@ class Editor(tk.Tk):
             self._history.push()
             # P1.10: mutation goes through EditorModel (bank ops are
             # byte-preserving and immediate); the GUI never writes raw bytes.
+            self.editor.commit()                # fold pending working copy
             self.editor.reset_patch_parameter(self.selected_index, key)
         except Exception as exc:
+            self._history.undo()
             messagebox.showerror("Parameter", str(exc))
+            self._after_mutation()
             return
         self._after_mutation()
         self.status_var.set(f"P{self.selected_index:02d}  {spec.label} reset to "
@@ -467,7 +471,7 @@ class Editor(tk.Tk):
             return
         self.bank = self.editor.bank        # read-only mirror for diagnostics
         self.path = Path(path)
-        self._history.reset()               # fresh history per loaded bank
+        self._history.clear()               # fresh history per loaded bank
         self._loading_bank = True
         items = self._slot_items()
         self.cmp_a["values"] = items
@@ -478,7 +482,7 @@ class Editor(tk.Tk):
         self.refresh_list()
         self._loading_bank = False
         self.select_program(1)
-        self._update_modified()
+        self._update_modified()               # CLEAN: baseline == loaded bank
         where = "" if syx.mode == "bulk" else f" (placed in slot {syx.programs[0].index:02d})"
         chk = "OK" if syx.checksum_ok else f"BAD (expected 0x{syx.checksum_expected:02X})"
         self.status_var.set(f"Loaded {self.path.name} — {len(self.bank.programs)} programs{where}, checksum {chk}")
@@ -527,6 +531,11 @@ class Editor(tk.Tk):
     def select_program(self, index: int) -> None:
         if self.bank is None or not 1 <= index <= 32:
             return
+        # Fold any pending uncommitted edit into the bank BEFORE switching
+        # slots, so a working copy can never be silently lost or applied to
+        # another patch (P1.10 §8: selection changes go through the model).
+        self.editor.commit()
+        self.editor.select_patch(index)
         self.selected_index = index
         self._sync_widgets_from_model()
         self._highlight_selection()
@@ -537,13 +546,14 @@ class Editor(tk.Tk):
         if self.bank is None or self.selected_index is None:
             return
         self._syncing = True
-        p = self.bank.get(self.selected_index)
+        patch = self.editor.get_patch(self.selected_index)   # model read API
+        p = patch.program
         self.slot_var.set(f"P{p.index:02d}")
-        self.name_var.set(p.name)
+        self.name_var.set(patch.name)
         for spec in PARAMETERS:
             if spec.offset is None or spec.key not in self.vars:
                 continue
-            raw = p.data[spec.offset]
+            raw = patch.get_raw(spec.key)     # value via ParameterValue layer
             self.vars[spec.key].set(raw)
             self.value_vars[spec.key].set(self._formatted(spec.key, raw))
             if spec.kind == "enum" and hasattr(self, f"combo_{spec.key}"):
@@ -588,11 +598,63 @@ class Editor(tk.Tk):
         return disp
 
     # ----------------------------------------------------- widgets -> model
-    def _push_undo(self) -> None:
-        if self.bank is not None:
-            self._undo.append((self.bank, self.selected_index))
-            del self._undo[:-50]
-            self._redo.clear()
+    # ------------------------------------------------------------- refresh
+    def _after_mutation(self) -> None:
+        """P1.10 single synchronization point: model -> GUI projection.
+
+        EditorModel/EditorHistory are the ONLY source of truth. This method
+        never mutates anything: it re-reads the (immutable) bank mirror from
+        the model and refreshes every dependent widget — patch list, name,
+        parameter widgets, dirty indicator, undo/redo availability and the
+        read-only developer/diagnostic views.
+
+        Exception: if the GUI mirror `self.bank` was replaced directly with a
+        *different* Bank instance (a diagnostic/test injection at the domain
+        layer), we adopt that instance into the model instead of discarding
+        it — the model remains the single source of truth afterwards.
+        """
+        try:
+            model_bank = self.editor.bank       # raises if nothing loaded
+        except RuntimeError:
+            model_bank = None
+        if (self.bank is not None and model_bank is not None
+                and self.bank is not model_bank):
+            # The mirror differs from the model.  Normally that means the
+            # GUI/test replaced `app.bank` with a diagnostic Bank instance
+            # (injection) — adopt it into the model so the model stays the
+            # single source of truth afterwards.  But when the mirror is a
+            # STALE reference to an older model bank (immutable copy-on-write
+            # banks are superseded by every commit), adopting it would roll
+            # the model back and silently discard the just-applied edit.
+            # Detect staleness via serialization identity instead.
+            stale = self.bank.to_sysex() == model_bank.to_sysex()
+            if not stale:
+                self.editor._bank = self.bank   # adopt injected mirror
+                self.editor._working = None
+                self.editor._dirty = self.editor._session_modified()
+                model_bank = self.bank
+        if model_bank is not None:
+            self.bank = model_bank              # refresh mirror from model
+        self.refresh_list()
+        self._sync_widgets_from_model()
+        self._update_modified()
+        self._update_developer()
+
+    def _update_history_buttons(self) -> None:
+        """Reflect EditorHistory state in the Edit menu (single source:
+        history.can_undo / can_redo — no GUI-side stack)."""
+        # entrycget(...,"menu") returns a Tcl path string that includes the
+        # "(...)" type tuple — nametowidget cannot parse it.  Keep a direct
+        # reference to the Edit menu instead (single source of truth for
+        # enabled state remains history.can_undo / can_redo).
+        m = getattr(self, "_edit_menu", None)
+        if m is None:
+            return                              # menu not built yet (tests)
+        try:
+            m.entryconfigure(0, state="normal" if self._history.can_undo else "disabled")
+            m.entryconfigure(1, state="normal" if self._history.can_redo else "disabled")
+        except tk.TclError:
+            pass
 
     def apply_parameter(self, key: str) -> None:
         if self._syncing or self.bank is None or self.selected_index is None:
@@ -602,18 +664,22 @@ class Editor(tk.Tk):
         if spec.kind == "boolean":
             raw = 127 if raw else 0
         try:
-            new_bank = self.bank.set_parameter(self.selected_index, key, raw)
+            self._history.push()                # record pre-mutation snapshot
+            if self.editor._bank is None:
+                raise RuntimeError("No bank loaded.")
+            self.editor.commit()                # fold any pending working copy
+            self.editor.select_patch(self.selected_index)
+            self.editor.set_parameter(key, raw)
+            self.editor.commit()                # write into the bank via model
         except Exception as exc:
             messagebox.showerror("Parameter", str(exc))
-            self._sync_widgets_from_model()
+            self._history.undo()                # revert to pre-mutation state
+            self._after_mutation()
             return
-        self._push_undo()
-        self.bank = new_bank
+        self._after_mutation()
         self.value_vars[key].set(self._formatted(key, raw))
         self.status_var.set(f"P{self.selected_index:02d}  {spec.label} = {display_value(key, raw)}"
                             f"  [raw {raw}, offset 0x{spec.offset:02X}]")
-        self._update_modified()
-        self._update_developer()
 
     def _value_preview(self, key: str) -> None:
         if self._syncing:
@@ -631,25 +697,31 @@ class Editor(tk.Tk):
         if self.bank is None or self.selected_index is None:
             return
         try:
-            new_bank = self.bank.set_name(self.selected_index, self.name_var.get())
+            self._history.push()
+            self.editor.commit()                # fold pending working copy
+            self.editor.select_patch(self.selected_index)
+            self.editor.rename(self.name_var.get())
+            self.editor.commit()
         except Exception as exc:
             messagebox.showerror("Patch name", str(exc))
+            self._history.undo()
+            self._after_mutation()
             return
-        self._push_undo()
-        self.bank = new_bank
-        self.name_var.set(new_bank.get(self.selected_index).name)
-        self.refresh_list()
-        self._update_modified()
-        self.status_var.set(f"Renamed P{self.selected_index:02d} → {new_bank.get(self.selected_index).name!r}")
+        self._after_mutation()
+        self.status_var.set(f"Renamed P{self.selected_index:02d} → "
+                            f"{self.editor.get_patch(self.selected_index).name!r}")
 
     def _revert_name(self) -> None:
         if self.bank is not None and self.selected_index is not None:
-            self.name_var.set(self.bank.get(self.selected_index).name)
+            self.name_var.set(self.editor.get_patch(self.selected_index).name)
 
     # -------------------------------------------------------- modified state
     def _update_modified(self) -> None:
-        dirty = self.bank is not None and self.bank.to_sysex() != self._saved_snapshot
+        """P1.10 §10/§12: dirty indicator is a PROJECTION of the model —
+        the GUI never keeps its own dirty flag."""
+        dirty = bool(self.editor.is_dirty()) if self.bank is not None else False
         self.modified_var.set("Modified *" if dirty else "")
+        self._update_history_buttons()
 
     def reload_from_disk(self) -> None:
         if self.path is None:
@@ -678,17 +750,22 @@ class Editor(tk.Tk):
 
     def _write(self, path: Path) -> None:
         try:
-            # Bank.save re-parses the payload before writing and rebuilds the
-            # checksum with the existing algorithm; the original 8-byte header
-            # is preserved by the model itself.
-            payload = self.bank.save(path)
+            # P1.10 §7/§14: the GUI never serializes and never computes a
+            # checksum — EditorModel.save() delegates to the existing
+            # byte-preserving Bank.save(), which re-parses the payload and
+            # rebuilds the checksum in the serializer layer.  On failure the
+            # model keeps its baseline and stays MODIFIED.
+            self.editor.commit()                # fold pending working copy
+            self.editor.save(path)
         except Exception as exc:
             messagebox.showerror("Save failed", str(exc))
+            self._update_modified()             # dirty semantics unchanged
             return
-        self.path = path
-        self._saved_snapshot = payload
-        self._update_modified()
-        self.status_var.set(f"Saved {path.name} — checksum rebuilt (0x{payload[-2]:02X})")
+        self.path = Path(path)
+        self._after_mutation()                  # is_dirty() == False now
+        saved = self.path.read_bytes() if self.path.exists() else b""
+        chk = f"0x{saved[-2]:02X}" if saved else "n/a"
+        self.status_var.set(f"Saved {self.path.name} — checksum rebuilt ({chk})")
 
     def export_single(self) -> None:
         if self.bank is None or self.selected_index is None:
@@ -699,7 +776,8 @@ class Editor(tk.Tk):
         if not path:
             return
         try:
-            Path(path).write_bytes(program_to_single(self.bank.get(self.selected_index)))
+            prog = self.bank.get(self.selected_index)
+            Path(path).write_bytes(program_to_single(prog))
         except Exception as exc:
             messagebox.showerror("Export failed", str(exc))
             return
@@ -709,7 +787,8 @@ class Editor(tk.Tk):
     def copy_program(self) -> None:
         if self.bank is None or self.selected_index is None:
             return
-        self._clipboard = self.bank.get(self.selected_index)
+        # Copy is a pure READ through the model API (P1.10 §6).
+        self._clipboard = self.editor.get_patch(self.selected_index).program
         self.status_var.set(f"Copied P{self.selected_index:02d} ({self._clipboard.name!r}) to clipboard.")
 
     def paste_program(self) -> None:
@@ -718,25 +797,34 @@ class Editor(tk.Tk):
             return
         if self.bank is None or self.selected_index is None:
             return
-        self._push_undo()
-        src = self._clipboard
-        target = self.bank.get(self.selected_index)
-        self.bank = self.bank.replace(self.selected_index,
-                                      JTProgram(self.selected_index, src.data, target.source_offset))
-        self.refresh_list()
-        self._sync_widgets_from_model()
-        self._update_modified()
-        self._update_developer()
+        self._history.push()
+        try:
+            self.editor.commit()                # fold pending working copy
+            self.editor.replace_patch(self.selected_index, self._clipboard)
+        except Exception as exc:
+            self._history.undo()
+            messagebox.showerror("Paste failed", str(exc))
+            self._after_mutation()
+            return
+        self._after_mutation()
         self.status_var.set(f"Pasted into P{self.selected_index:02d}.")
 
     def duplicate_program(self) -> None:
         if self.bank is None or self.selected_index is None:
             return
         target = self.selected_index % 32 + 1
-        self._push_undo()
-        self.bank = self.bank.copy_program(self.selected_index, target)
-        self.refresh_list()
-        self._update_modified()
+        self._history.push()
+        try:
+            if self.editor._bank is None:
+                raise RuntimeError("No bank loaded.")
+            self.editor.commit()
+            self.editor.duplicate_patch(self.selected_index, target)
+        except Exception as exc:
+            self._history.undo()
+            messagebox.showerror("Duplicate failed", str(exc))
+            self._after_mutation()
+            return
+        self._after_mutation()
         self.status_var.set(f"Duplicated P{self.selected_index:02d} → P{target:02d}.")
 
     def reset_program(self) -> None:
@@ -747,37 +835,27 @@ class Editor(tk.Tk):
         except Exception as exc:
             messagebox.showerror("Reset", str(exc))
             return
-        self._push_undo()
-        self.bank = self.bank.replace(self.selected_index, original)
-        self.refresh_list()
-        self._sync_widgets_from_model()
-        self._update_modified()
-        self._update_developer()
+        self._history.push()
+        if self.editor._bank is not None:
+            self.editor.commit()                # drop uncommitted edits
+            self.editor.revert()
+            self.editor.replace_patch(self.selected_index, original)
+        else:
+            self.bank = self.bank.replace(self.selected_index, original)
+        self._after_mutation()
         self.status_var.set(f"Reset P{self.selected_index:02d} from {self.path.name}.")
 
     def undo(self) -> None:
-        if not self._undo or self.bank is None:
-            return
-        bank, idx = self._undo.pop()
-        self._redo.append((self.bank, self.selected_index))
-        self.bank = bank
-        self.selected_index = idx
-        self.refresh_list()
-        self._sync_widgets_from_model()
-        self._update_modified()
-        self._update_developer()
+        """P1.10 §9/§13: delegate to the existing EditorHistory — no GUI-side
+        undo stack exists anymore."""
+        if self._history.undo():
+            self.selected_index = self.editor.selected
+            self._after_mutation()
 
     def redo(self) -> None:
-        if not self._redo or self.bank is None:
-            return
-        bank, idx = self._redo.pop()
-        self._undo.append((self.bank, self.selected_index))
-        self.bank = bank
-        self.selected_index = idx
-        self.refresh_list()
-        self._sync_widgets_from_model()
-        self._update_modified()
-        self._update_developer()
+        if self._history.redo():
+            self.selected_index = self.editor.selected
+            self._after_mutation()
 
     # ------------------------------------------------------- developer views
     def _update_developer(self) -> None:
@@ -789,11 +867,11 @@ class Editor(tk.Tk):
     def _refresh_value_labels(self) -> None:
         if self.bank is None or self.selected_index is None:
             return
-        p = self.bank.get(self.selected_index)
+        patch = self.editor.get_patch(self.selected_index)
         for spec in PARAMETERS:
             if spec.offset is None or spec.key not in self.value_vars:
                 continue
-            self.value_vars[spec.key].set(self._formatted(spec.key, p.data[spec.offset]))
+            self.value_vars[spec.key].set(self._formatted(spec.key, patch.get_raw(spec.key)))
 
     def _refresh_raw_table(self) -> None:
         """Raw Program table — uses syx.field_name(); mapping lives in one place."""
