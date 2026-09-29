@@ -95,6 +95,8 @@ class MidiTransport:
         self.available = self._be is not None
         self._in_port = None
         self._in_index: int | None = None
+        self._out_port = None
+        self._out_index: int | None = None
 
     # ------------------------------------------------------------- discovery
     def list_inputs(self) -> list[PortInfo]:
@@ -147,8 +149,17 @@ class MidiTransport:
             raise RuntimeError(self.note or "no MIDI backend available")
         if self.backend_name == "winmm":
             return port  # winmm helpers open/close per call; index identifies it
+        if self._out_port is not None and self._out_index == port.index:
+            return self._out_port
+        if self._out_port is not None:
+            try:
+                self._out_port.close_port()
+            finally:
+                self._out_port = None
+                self._out_index = None
         handle = self._be.MidiOut()
         handle.open_port(port.index)
+        self._out_port, self._out_index = handle, port.index
         return handle
 
     def open_input(self, port: PortInfo):
@@ -225,6 +236,8 @@ class MidiTransport:
                 return
         else:
             dev = self._in_port
+            if dev is None:
+                raise RuntimeError("No MIDI input is open.")
             while time.monotonic() < deadline:
                 msg = dev.get_message()
                 if msg:
@@ -246,3 +259,9 @@ class MidiTransport:
         finally:
             self._in_port = None
             self._in_index = None
+            if self._out_port is not None and self.backend_name == "rtmidi":
+                try:
+                    self._out_port.close_port()
+                finally:
+                    self._out_port = None
+                    self._out_index = None
