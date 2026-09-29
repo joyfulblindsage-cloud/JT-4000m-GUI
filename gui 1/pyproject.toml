@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jt4000m-editor"
+version = "0.1.4"
+description = "Behringer JT-4000M SysEx analyzer and parameter model"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+jt4000m = "jt4000m.cli:main"
+jt4000m-gui = "jt4000m.gui:main"
+
+[tool.setuptools]
+packages = ["jt4000m"]

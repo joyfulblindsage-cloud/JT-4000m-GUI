@@ -1,0 +1,5 @@
+Metadata-Version: 2.4
+Name: jt4000m-editor
+Version: 0.1.4
+Summary: Behringer JT-4000M SysEx analyzer and parameter model
+Requires-Python: >=3.10

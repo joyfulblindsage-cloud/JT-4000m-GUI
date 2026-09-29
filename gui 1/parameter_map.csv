@@ -1,0 +1,33 @@
+key,label,offset,cc,kind,minimum,maximum,orientation,confidence,notes
+modulation,Modulation,,1,continuous,0,127,0-based,working,SysEx offset not yet established
+portamento_time,Portamento Time,,5,continuous,0,127,0-based,working,SysEx offset not yet established
+osc_balance,OSC Balance,8,29,continuous,0,127,0-based,working,
+osc1_wave,OSC1 Wave,0,24,enum,0,127,0-based,working,
+osc1_pwm_fm,OSC1 PWM / Supersaw Detune / FM Feedback,2,113,continuous,0,127,0-based,working,
+osc1_coarse,OSC1 Coarse Tune,4,115,continuous,0,127,centered,working,
+osc1_fine,OSC1 Fine Tune,5,111,continuous,0,127,centered,working,
+osc2_wave,OSC2 Wave,1,25,enum,0,127,0-based,working,
+osc2_pwm,OSC2 PWM,3,114,continuous,0,127,0-based,working,
+osc2_coarse,OSC2 Coarse Tune,6,116,continuous,0,127,centered,working,
+osc2_fine,OSC2 Fine Tune,7,112,continuous,0,127,centered,working,
+filter_cutoff,VCF Cutoff,12,74,continuous,0,127,0-based,working,
+filter_resonance,VCF Resonance,13,71,continuous,0,127,0-based,working,
+filter_env_amount,Filter Envelope Amount,22,47,continuous,0,127,0-based,working,
+vcf_attack,VCF EG Attack,14,85,continuous,0,127,0-based,working,
+vcf_decay,VCF EG Decay,15,86,continuous,0,127,0-based,working,
+vcf_sustain,VCF EG Sustain,16,87,continuous,0,127,0-based,working,
+vcf_release,VCF EG Release,17,88,continuous,0,127,0-based,working,
+vca_attack,VCA EG Attack,18,81,continuous,0,127,0-based,working,
+vca_decay,VCA EG Decay,19,82,continuous,0,127,0-based,working,
+vca_sustain,VCA EG Sustain,20,83,continuous,0,127,0-based,working,
+vca_release,VCA EG Release,21,84,continuous,0,127,0-based,working,
+ring_mod_amount,Ring Modulation Amount,44,95,continuous,0,127,0-based,working,
+ring_mod_toggle,Ring Modulation On/Off,43,96,boolean,0,127,0-based,working,"CC 0-64 off, 65-127 on"
+portamento_mode,Portamento Mode,45,,enum,0,127,0-based,working,CC mapping not established
+lfo1_wave,LFO1 Wave,47,54,enum,0,127,0-based,working,
+lfo2_wave,LFO2 Wave,48,55,enum,0,127,0-based,working,
+lfo1_rate,LFO1 Rate,49,72,continuous,0,127,0-based,working,
+lfo1_amount,LFO1 Amount,50,70,continuous,0,127,0-based,working,
+lfo2_rate,LFO2 Rate,51,73,continuous,0,127,0-based,working,
+lfo2_amount,LFO2 Amount,52,28,continuous,0,127,0-based,working,
+lfo1_destination,LFO1 Destination,53,56,enum,0,127,0-based,working,

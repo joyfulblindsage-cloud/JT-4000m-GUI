@@ -1,0 +1,3 @@
+[console_scripts]
+jt4000m = jt4000m.cli:main
+jt4000m-gui = jt4000m.gui:main
