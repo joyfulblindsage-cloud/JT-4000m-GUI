@@ -7,7 +7,8 @@ never auto-promotes parameters in the Parameter Registry.
 Evidence levels (documented rules, no invented confidence):
   * KNOWN_PARAMETER          — offset exists in the project Parameter Registry
                                (confidence "registry": static mapping only).
-  * PATCH_NAME               — offsets 54..63 (Name[0..8]) changed.
+  * PATCH_NAME               — offsets 55..63 / 0x37..0x3F (Name[0..8]) changed;
+                             byte 54 is structural and never part of the name.
   * CHECKSUM                 — trailing checksum byte (recomputed at export).
   * HEADER / SERVICE         — frame bytes outside program payload.
   * UNKNOWN_OFFSET           — not in the registry: reported as

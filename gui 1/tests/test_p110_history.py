@@ -64,19 +64,59 @@ class TestEditUndoRedo:
         assert m.current_patch().name != "UNDO TEST"
 
     def test_uncommitted_working_copy_survives_history_roundtrip(self):
-        """BankSnapshot.working is what carries *uncommitted* edits."""
+        """BankSnapshot.working is what carries *uncommitted* edits.
+
+        Fixture note: ALL INIT SAW already stores osc1_wave = 4 (SAW), so the
+        edit value MUST differ from 4 or no working copy would be produced at
+        all.  We use OFF (0) and assert the uncommitted working copy itself
+        survives snapshot -> restore, not just the committed bank.
+        """
         m = model(ALL_SAW)
         h = EditorHistory(m)
         m.select(5)
-        h.push()                                # snapshot: no working copy
-        m.set_parameter("osc1_wave", 0)         # UNCOMMITTED working edit
-        assert m.current_patch().get_raw("osc1_wave") == 0
-        h.undo()                                # back to push-time snapshot
+        baseline_raw = m.current_patch().get_raw("osc1_wave")   # fixture value
+        assert baseline_raw == 4                                # documented
+        snap = m.snapshot()                                     # no working copy
+        assert snap.working is None
+        m.set_parameter("osc1_wave", 0)                         # UNCOMMITTED
+        wc = m._working
+        assert wc is not None and wc.get_raw("osc1_wave") == 0
+        m.restore(snap)                                         # back to push-time state
         assert m.selected == 5
-        assert m.current_patch().get_raw("osc1_wave") == 4   # edit undone
-        assert not m.is_dirty()                 # exact baseline -> CLEAN
+        assert m._working is None                               # snapshot had none
+        assert m.current_patch().get_raw("osc1_wave") == baseline_raw  # edit gone
+        # now prove the working copy rides along inside a snapshot that HAS one
+        m.set_parameter("osc1_wave", 0)
+        snap2 = m.snapshot()
+        assert snap2.working is not None and snap2.working.get_raw("osc1_wave") == 0
+        m.select(9)                                             # move away
+        m.restore(snap2)                                        # selection + working restored
+        assert m.selected == 5
+        assert m._working is not None
+        assert m.current_patch().get_raw("osc1_wave") == 0      # exact working-copy survival
+        m.commit()
+        assert m.is_dirty()                                     # differs from baseline
+
+    def test_uncommitted_edit_undo_redo_via_history(self):
+        """Full history roundtrip for an UNCOMMITTED working edit:
+        push -> edit(0, differs from fixture value 4) -> undo restores the
+        push-time snapshot (no working copy, exact baseline -> CLEAN) ->
+        redo brings the uncommitted working copy back -> MODIFIED."""
+        m = model(ALL_SAW)
+        h = EditorHistory(m)
+        m.select(5)
+        assert m.current_patch().get_raw("osc1_wave") == 4      # fixture SAW
+        h.push()                              # snapshot: no working copy
+        m.set_parameter("osc1_wave", 0)       # UNCOMMITTED working edit
+        assert m.current_patch().get_raw("osc1_wave") == 0
+        assert m.is_dirty()
+        h.undo()                              # back to push-time snapshot
+        assert m.selected == 5
+        assert m._working is None
+        assert m.current_patch().get_raw("osc1_wave") == 4      # edit undone
+        assert not m.is_dirty()               # exact baseline -> CLEAN
         h.redo()
-        assert m.current_patch().get_raw("osc1_wave") == 0   # edit restored
+        assert m.current_patch().get_raw("osc1_wave") == 0      # edit restored
         assert m.is_dirty()
 
     def test_new_mutation_after_undo_invalidates_redo(self):
