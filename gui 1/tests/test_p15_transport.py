@@ -40,6 +40,23 @@ def test_send_sysex_records_exact_bytes(fake_transport, fake_backend,
     assert fake_backend.tx_log == [syx.raw]
 
 
+def test_output_port_is_reused_and_released(fake_transport, fake_backend):
+    port = fake_transport.find("JT-4000M", "output")[0]
+    fake_transport.send_cc(port, 1, 74, 1)
+    first_handle = fake_backend.last_out
+    fake_transport.send_cc(port, 1, 74, 2)
+    assert fake_backend.last_out is first_handle
+    assert first_handle.opened_index == port.index
+
+    fake_transport.close()
+    assert first_handle.opened_index is None
+
+
+def test_receive_requires_an_open_input(fake_transport):
+    with pytest.raises(RuntimeError, match="No MIDI input is open"):
+        next(fake_transport.receive(timeout=0.01))
+
+
 def test_receive_yields_queued_messages(fake_transport, fake_backend):
     fake_backend.rx_queue = [bytes([0xB0, 1, 2]), b"\xF0\x00\x20\xF7"]
     port = fake_transport.find("JT-4000M", "input")[0]
