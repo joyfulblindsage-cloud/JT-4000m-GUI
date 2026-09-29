@@ -1,4 +1,4 @@
-from jt4000m.midi import make_cc, parameter_for_cc, parameter_to_cc
+from jt4000m.midi import cc_to_parameter, make_cc, parameter_for_cc, parameter_to_cc
 
 
 def test_cc_encoding():
@@ -12,3 +12,8 @@ def test_parameter_cc_mapping():
     assert msg.value == 100
     assert msg.channel == 2
     assert parameter_for_cc(74).key == 'filter_cutoff'
+
+
+def test_ring_mod_cc_is_normalized_to_its_sysex_boolean_value():
+    assert cc_to_parameter(96, 64) == ("ring_mod_toggle", 0)
+    assert cc_to_parameter(96, 65) == ("ring_mod_toggle", 1)
