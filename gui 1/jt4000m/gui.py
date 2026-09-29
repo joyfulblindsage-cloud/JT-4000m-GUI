@@ -547,10 +547,14 @@ class Editor(tk.Tk):
                 labels = [name for _v, name in enum_options(spec.key)]
                 text = self._combo_text(spec.key, raw)
                 # A raw value with no confirmed label (e.g. loaded from a
-                # third-party bank) leaves the dropdown unselected rather
-                # than snapping to a wrong option; the numeric label next to
-                # the control still shows "Unknown (0xNN)".
-                combo.current(labels.index(text) if text in labels else -1)
+                # third-party bank) must not snap to a wrong option and must
+                # not raise: ttk.Combobox.current(-1) is invalid, so we set
+                # the text directly. The numeric label next to the control
+                # still shows "Unknown (0xNN)".
+                if text in labels:
+                    combo.set(text)
+                else:
+                    combo.set(f"Unknown ({raw:#04x})")
         enabled = self.bank is not None
         self.name_entry.configure(state="normal" if enabled else "disabled")
         self.apply_name_btn.configure(state="normal" if enabled else "disabled")
@@ -670,8 +674,10 @@ class Editor(tk.Tk):
 
     def _write(self, path: Path) -> None:
         try:
-            payload = self.bank.to_sysex()
-            path.write_bytes(payload)
+            # Bank.save re-parses the payload before writing and rebuilds the
+            # checksum with the existing algorithm; the original 8-byte header
+            # is preserved by the model itself.
+            payload = self.bank.save(path)
         except Exception as exc:
             messagebox.showerror("Save failed", str(exc))
             return
