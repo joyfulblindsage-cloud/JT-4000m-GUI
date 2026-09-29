@@ -904,6 +904,44 @@ def cmd_analyze(action, args):
     raise ValueError(f"Unknown analyze action: {action}")
 
 
+def cmd_model(action: str, args) -> None:
+    """P1.8 -- offline editor data model inspection/export (no GUI, no MIDI)."""
+    from .editor_model import EditorModel, definition_for
+    if action == 'inspect':
+        m = EditorModel()
+        m.load_bank(args.file)
+        ps = m.select(args.program)
+        print(f"File: {args.file}")
+        print(f"Provenance: {m.provenance}")
+        print(f"Program {ps.index:02d}: {ps.name!r}")
+        for key in sorted(ps.all_values()):
+            v = ps.value(key)
+            d = definition_for(key)
+            hw = "NOT_CONFIRMED" if not v.hardware_confirmed else "CONFIRMED"
+            print(f"{d.label:<32} raw=0x{v.raw:02X} ({v.raw:>3})  "
+                  f"display={v.display:<16} evidence={v.evidence_level:<11} "
+                  f"hardware={hw}"
+                  + (f"  cc={d.cc}" if d.cc is not None else ""))
+        u = ps.unknown_bytes()
+        print(f"\nUnknown bytes ({len(u)}):")
+        for off in sorted(u):
+            print(f"  0x{off:02X} = 0x{u[off]:02X}")
+        return
+    if action == 'export':
+        import json as _json
+        m = EditorModel()
+        m.load_bank(args.file)
+        ps = m.select(args.program)
+        payload = _json.dumps(ps.to_json_dict(), ensure_ascii=False, indent=2)
+        if args.json:
+            Path(args.json).write_text(payload, encoding='utf-8')
+            print(f"Wrote {args.json}")
+        else:
+            print(payload)
+        return
+    raise ValueError(f"Unknown model action: {action}")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog='jt4000m')
     sp = ap.add_subparsers(dest='cmd', required=True)
@@ -1011,6 +1049,14 @@ def main(argv=None):
             x.add_argument('--name', default=None,
                            help='report stem (default: parameter_discovery)')
 
+    # P1.8 OFFLINE -- editor data model inspection/export (no GUI, no MIDI).
+    mo = sp.add_parser('model', help='P1.8 offline editor data model: '
+                       'definition/value/evidence view of a patch; reads and '
+                       'writes local files only')
+    mosp = mo.add_subparsers(dest='action', required=True)
+    x = mosp.add_parser('inspect'); x.add_argument('file'); x.add_argument('program', type=int)
+    x = mosp.add_parser('export'); x.add_argument('file'); x.add_argument('program', type=int); x.add_argument('--json', default=None)
+
     args = ap.parse_args(argv)
     try:
         if args.cmd == 'inspect': cmd_inspect(args.file)
@@ -1025,6 +1071,7 @@ def main(argv=None):
         elif args.cmd == 'experiment': cmd_experiment(args.action, args)
         elif args.cmd == 'knowledge': cmd_knowledge(args.action, args)
         elif args.cmd == 'analyze': cmd_analyze(args.action, args)
+        elif args.cmd == 'model': cmd_model(args.action, args)
     except RuntimeError as e:
         ap.error(str(e))
     except (OSError, ValueError) as e:
