@@ -102,6 +102,15 @@ class Program:
         # out left this docstring claiming 54..63 while the slice itself was
         # already correct — keep read/write boundaries in lockstep or 9-char
         # names lose their last character.
+        # NOTE: strip only trailing padding, where padding is NUL *or* space.
+        # Fixture evidence: Synthmania names are stored space-padded to the
+        # full 9 bytes ('FUNMYLEA ', 'DAHOOLEA '), while ALL EMPTY / ALL INIT
+        # SAW use NUL padding.  rstrip(" \x00") normalizes both conventions;
+        # stripping spaces alone would wrongly keep trailing blanks, and
+        # stripping NUL alone would return "INIT SAW " for padded fixtures.
+        # Round-trip symmetry with set_name (space-padded writes) holds either
+        # way because a written name never ends in a space unless the user
+        # put one there — and then the 9-byte field keeps its exact length.
         return self.data[NAME_START:NAME_END].decode("ascii", errors="replace").rstrip(" \x00")
 
     def byte(self, offset: int) -> int:

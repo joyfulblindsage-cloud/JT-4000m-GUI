@@ -187,8 +187,13 @@ class TestBankOps:
     def test_rename_patch_without_selection(self):
         m = model(ALL_SAW)
         sel = m.selected
-        m.rename_patch(7, "SLOT SEVEN")   # exactly 9 chars (field limit)
-        assert m.get_patch(7).name == "SLOT SEVEN"
+        # "SLOT SEVEN" is 10 chars; the name field holds exactly 9 bytes
+        # (offsets 55..63), so the correct contract is truncation to
+        # "SLOT SEVE".  A full 9-char name must round-trip losslessly.
+        m.rename_patch(7, "SLOT SEVEN")
+        assert m.get_patch(7).name == "SLOT SEVE"
+        m.rename_patch(8, "NINE CHAR")   # exactly 9 chars
+        assert m.get_patch(8).name == "NINE CHAR"
         assert m.selected == sel
         # >9 names follow the documented 9-byte field semantics (truncate):
         m.rename_patch(8, "TEN CHAR!X")
@@ -386,11 +391,13 @@ class TestSession:
         assert m2.is_dirty()
         assert m2.provenance == "REFERENCE_FIXTURE"
         cur = m2.current()
-        # Name field = 9 bytes at offsets 55..63 (0x37..0x3F): 'SESSION' +
-        # one padding space; the 10th char is truncated.  (Regression guard:
-        # a previous close-out attempt used window 54..63 and produced
-        # 'SSESSION ' / lost last chars.)
-        assert cur.name == "SESSION"
+        # Name field = 9 bytes at offsets 55..63 (0x37..0x3F).  The 10th
+        # input char is truncated by set_name ("SESSION TEST" -> "SESSION T").
+        # Read/write padding conventions are NUL-pad + strip(" \x00"), so the
+        # surviving 9-char name round-trips exactly.  (Regression guards:
+        # window must stay 55..63 — 54..63 produced 'SSESSION '; space-padding
+        # with NUL-only strip made a full 9-char name lose its last char.)
+        assert cur.name == "SESSION T"
         assert cur.get_parameter("filter_cutoff").raw == 21
         # pending edits still pending (bank untouched):
         assert m2.get_patch(3).get_parameter("filter_cutoff").raw != 21

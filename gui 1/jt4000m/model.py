@@ -222,8 +222,20 @@ def get_parameter(program: Program, key: str) -> int:
 
 def set_name(program: Program, name: str) -> Program:
     # The JT-4000M name field is 9 bytes (offsets 55..63 / 0x37..0x3F — the
-    # LAST nine bytes of the 64-byte record), space padded.  Byte 54 (0x36)
-    # is a structural zero and must never be written by rename.
+    # LAST nine bytes of the 64-byte record).  Byte 54 (0x36) is a structural
+    # zero and must never be written by rename.
+    # Padding convention (fixture evidence): ALL EMPTY / ALL INIT SAW pad with
+    # NUL bytes; Synthmania pads short names with spaces ('FUNMYLEA ').  We
+    # write SPACE padding because it is byte-identical to the observed Synth-
+    # mania convention AND keeps Program.name round-trip lossless for every
+    # name that does not intentionally end in whitespace:
+    #   "SLOT SEVEN" (10 chars) -> truncated to b"SLOT SEVE" (9 bytes, exact
+    #                                field capacity; the 10th char cannot fit)
+    #   "AB"       -> b"AB       " -> .name == "AB"     (spaces stripped)
+    #   "INIT SAW" -> b"INIT SAW " -> .name == "INIT SAW"
+    # NUL padding would also round-trip with the current read-side strip, but
+    # space padding matches real device dumps and the long-standing project
+    # contract (tests assert b"AB       ").
     # Names longer than 9 characters are truncated; non-ASCII characters are
     # replaced with '?' so every byte stays valid MIDI 7-bit data.
     raw = bytearray()

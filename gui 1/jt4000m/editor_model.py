@@ -845,7 +845,7 @@ class EditorModel:
     # ---- snapshot / restore (minimal; NO undo framework here) ------------
     def snapshot(self) -> "BankSnapshot":
         return BankSnapshot(self._bank, self._selected, self._path,
-                            self._provenance)
+                            self._provenance, working=self._working)
 
     def restore(self, snap: "BankSnapshot") -> None:
         """Restore a snapshot. Provenance comes back exactly as stored —
@@ -854,7 +854,7 @@ class EditorModel:
         self._selected = snap.selected
         self._path = snap.path
         self._provenance = snap.provenance
-        self._working = None
+        self._working = snap.working
         self._dirty = True
 
     # ---- editing ---------------------------------------------------------
@@ -1007,12 +1007,66 @@ class EditorModel:
 @dataclass(frozen=True)
 class BankSnapshot:
     """Immutable restore point for an EditorModel session (bank + selection
-    + path + provenance). Deliberately minimal — PatchLibrary keeps owning
-    undo/redo history; this exists for before/after workflows."""
+    + path + provenance + uncommitted working patch). Deliberately minimal —
+    PatchLibrary keeps owning undo/redo history; this exists for before/after
+    workflows and as the substrate for a thin editor-level history wrapper."""
     bank: Bank
     selected: int
     path: Path | None
     provenance: str
+    working: "PatchState | None" = None
+
+
+# ---------------------------------------------------------------------------
+# EditorHistory — thin wrapper over snapshot()/restore() (P1.10 §11)
+# ---------------------------------------------------------------------------
+class EditorHistory:
+    """Undo/redo for an EditorModel WITHOUT a second state model.
+
+    Every entry is a full immutable BankSnapshot (the domain model is
+    copy-on-write, so snapshots share unchanged programs — cheap).  The GUI
+    calls push() BEFORE any mutating operation and undo()/redo() on demand.
+    No MIDI, no raw bytes, no knowledge of SYX format.
+    """
+
+    def __init__(self, model: "EditorModel", limit: int = 100) -> None:
+        self._model = model
+        self._limit = max(2, int(limit))
+        self._undo: list[BankSnapshot] = []
+        self._redo: list[BankSnapshot] = []
+
+    def push(self) -> None:
+        """Call immediately before a mutation; records current state."""
+        self._undo.append(self._model.snapshot())
+        if len(self._undo) > self._limit:
+            self._undo.pop(0)
+        self._redo.clear()
+
+    @property
+    def can_undo(self) -> bool:
+        return bool(self._undo)
+
+    @property
+    def can_redo(self) -> bool:
+        return bool(self._redo)
+
+    def undo(self) -> bool:
+        if not self._undo:
+            return False
+        self._redo.append(self._model.snapshot())
+        self._model.restore(self._undo.pop())
+        return True
+
+    def redo(self) -> bool:
+        if not self._redo:
+            return False
+        self._undo.append(self._model.snapshot())
+        self._model.restore(self._redo.pop())
+        return True
+
+    def clear(self) -> None:
+        self._undo.clear()
+        self._redo.clear()
 
 
 # ---------------------------------------------------------------------------
