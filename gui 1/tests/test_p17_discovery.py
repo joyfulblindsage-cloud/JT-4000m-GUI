@@ -12,6 +12,8 @@ from pathlib import Path
 import pytest
 
 from jt4000m import discovery as D
+from jt4000m import syx
+from jt4000m.patch import Bank
 from jt4000m.syx import parse_file
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -137,10 +139,72 @@ def test_constant_unknown_offsets(report):
 
 
 def test_name_offsets_classified(report):
+    # Name field = LAST 9 bytes of the record: offsets 55..63 (0x37..0x3F).
+    # Fixture evidence (raw-level, all fixtures): 'INIT SAW' / 'HOOLLEAD' /
+    # 'EMPTY' all start at byte 55; byte 54 is a structural zero.  A previous
+    # close-out attempt moved the window to 54..63 on a miscounted comment
+    # ("PROGRAM_LEN - 9 == 54"); that was wrong (64-9 == 55) and garbled
+    # names.  See TestNameBoundaryRawBytes in this file for the authoritative
+    # raw-byte check.
     for off in range(55, 64):
         assert report.profiles[off].classification == D.CLS_NAME
         assert report.profiles[off].field == f"Name[{off-55}]"
     assert report.profiles[54].classification != D.CLS_NAME
+    assert report.profiles[53].classification != D.CLS_NAME
+
+
+class TestNameBoundaryRawBytes:
+    """Authoritative regression guard for the name boundary 55..63.
+
+    Checks RAW fixture bytes directly (not through any constant), so the
+    boundary can never be 'fixed' blindly again without failing here.
+    """
+
+    FIXTURES = [
+        "fixtures/ALL EMPTY.syx",
+        "fixtures/ALL INIT SAW.syx",
+        "fixtures/EMPTY.syx",
+        "fixtures/Synthmania-EDM-Soundset-JT-4000.syx",
+    ]
+
+    def _programs(self, path):
+        parsed = syx.parse_file(path)
+        return list(getattr(parsed, "programs", None) or [parsed.program])
+
+    def test_byte54_is_structural_zero_in_every_fixture_program(self):
+        total = 0
+        for fx in self.FIXTURES:
+            for p in self._programs(ROOT / fx):
+                total += 1
+                assert p.data[54] == 0x00, (fx, p.index)
+        assert total >= 97
+
+    def test_trailing_printable_run_starts_at_55(self):
+        for fx in self.FIXTURES:
+            for p in self._programs(ROOT / fx):
+                d = p.data
+                k = 63
+                while k > 0 and 32 <= d[k - 1] < 127:
+                    k -= 1
+                assert k == 55, (fx, p.index, k)
+
+    def test_rename_touches_only_55_to_63_and_leaves_byte54_zero(self):
+        bank = Bank.load(str(ROOT / "fixtures/ALL INIT SAW.syx"))
+        edited = bank.set_name(1, "MY PATCH!")          # exactly 9 chars
+        orig_data = bank.get(1).data
+        new_data = edited.get(1).data
+        changed = {i for i in range(64) if orig_data[i] != new_data[i]}
+        assert changed <= set(range(55, 64))
+        assert new_data[54] == 0x00                     # structural byte intact
+        assert new_data[55:64] == b"MY PATCH!"          # full 9-char name kept
+        assert edited.get(1).name == "MY PATCH!"
+
+    def test_name_roundtrip_9_char_exact(self):
+        bank = Bank.load(str(ROOT / "fixtures/ALL EMPTY.syx"))
+        b2 = bank.set_name(5, "ABCDEFGH")               # 8 chars
+        assert b2.get(5).name == "ABCDEFGH"
+        b3 = bank.set_name(5, "ABCDEFGHIJ")             # 10 chars -> truncate 9
+        assert b3.get(5).name == "ABCDEFGHI"
 
 
 def test_frequency_and_zero_pct_consistent(report):
@@ -206,7 +270,9 @@ def test_fixture_constant_bucket_holds_only_unknown_offsets(report):
     assert "0x2D" not in report.spread["fixture_constant"]
     assert any(s.startswith("0x2D") for s in
                report.spread["known_parameter_constant_in_corpus"])
-    # unknown constant offsets are still there
+    # unknown constant offsets are still there — INCLUDING 0x36, which is a
+    # structural-zero UNKNOWN byte (name field starts at 0x37; see
+    # TestNameBoundaryRawBytes).
     for off in ("0x09", "0x0A", "0x0B", "0x17", "0x2A", "0x36"):
         assert off in report.spread["fixture_constant"]
 

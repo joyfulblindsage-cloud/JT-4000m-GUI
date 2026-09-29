@@ -221,8 +221,9 @@ def get_parameter(program: Program, key: str) -> int:
 
 
 def set_name(program: Program, name: str) -> Program:
-    # The JT-4000M name field is 9 bytes (offsets 54..63 / 0x36..0x3F — the
-    # LAST nine bytes of the 64-byte record), space padded.
+    # The JT-4000M name field is 9 bytes (offsets 55..63 / 0x37..0x3F — the
+    # LAST nine bytes of the 64-byte record), space padded.  Byte 54 (0x36)
+    # is a structural zero and must never be written by rename.
     # Names longer than 9 characters are truncated; non-ASCII characters are
     # replaced with '?' so every byte stays valid MIDI 7-bit data.
     raw = bytearray()
