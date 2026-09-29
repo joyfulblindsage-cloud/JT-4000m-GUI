@@ -19,6 +19,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from .analyzer import cross_bank
 from .diff import format_change, semantic_diff
+from .editor_model import EditorHistory, EditorModel
 from .model import BY_KEY, PARAMETERS, display_value, enum_options
 from .patch import Bank, JTProgram, program_to_single
 from .syx import SysExFile, field_name, parse_file, semantic_value
@@ -49,13 +50,16 @@ class Editor(tk.Tk):
         self.configure(bg="#202124")
 
         # ----- state -------------------------------------------------------
-        self.bank: Bank | None = None            # current (possibly edited) model
+        # P1.10: the GUI is a thin presentation layer.  EditorModel is the
+        # single source of truth for patch data, dirty state and history;
+        # `self.bank` is only a *read-only view* refreshed after every model
+        # mutation (used by the diagnostic Raw/Compare/Analyze tabs).
+        self.editor = EditorModel()
+        self._history = EditorHistory(self.editor)
+        self.bank: Bank | None = None            # read-only mirror of editor.bank
         self.path: Path | None = None            # last loaded/saved file
-        self.selected_index: int | None = None   # program slot 1..32
-        self._saved_snapshot: bytes | None = None  # serialized saved bank
+        self.selected_index: int | None = None   # program slot 1..32 (UI state)
         self._clipboard: JTProgram | None = None
-        self._undo: list[tuple[Bank, int]] = []
-        self._redo: list[tuple[Bank, int]] = []
         self._loading_bank = False
         self._syncing = False                    # guard: model->widget->event loop
 
@@ -298,15 +302,14 @@ class Editor(tk.Tk):
             return
         spec = BY_KEY[key]
         try:
-            new_bank = self.bank.reset_parameter(self.selected_index, key)
+            self._history.push()
+            # P1.10: mutation goes through EditorModel (bank ops are
+            # byte-preserving and immediate); the GUI never writes raw bytes.
+            self.editor.reset_patch_parameter(self.selected_index, key)
         except Exception as exc:
             messagebox.showerror("Parameter", str(exc))
             return
-        self._push_undo()
-        self.bank = new_bank
-        self._sync_widgets_from_model()
-        self._update_modified()
-        self._update_developer()
+        self._after_mutation()
         self.status_var.set(f"P{self.selected_index:02d}  {spec.label} reset to "
                             f"default {display_value(key, spec.default)}")
 
@@ -451,19 +454,20 @@ class Editor(tk.Tk):
             self.load_path(path)
 
     def load_path(self, path: str | Path) -> None:
-        """Load a bank (bulk, or single placed into its slot) from disk."""
+        """Load a bank (bulk, or single placed into its slot) from disk.
+
+        P1.10: parsing lives in the SYX layer; EditorModel.load_bank is the
+        only entry point the GUI uses.  The GUI never touches raw bytes.
+        """
         try:
-            syx = parse_file(path)
-            # Bank.load is the single model entry point: bulk -> 32 programs,
-            # single -> 32-slot bank with the program at its own index.
-            self.bank = Bank.load(path)
+            syx = parse_file(path)          # status info only (checksum display)
+            self.editor.load_bank(path)     # model entry point
         except Exception as exc:
             messagebox.showerror("Open failed", str(exc))
             return
+        self.bank = self.editor.bank        # read-only mirror for diagnostics
         self.path = Path(path)
-        self._saved_snapshot = self.bank.to_sysex()
-        self._undo.clear()
-        self._redo.clear()
+        self._history.reset()               # fresh history per loaded bank
         self._loading_bank = True
         items = self._slot_items()
         self.cmp_a["values"] = items

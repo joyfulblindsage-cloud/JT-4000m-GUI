@@ -20,6 +20,7 @@ from jt4000m.editor_model import EditorHistory, EditorModel
 ROOT = Path(__file__).resolve().parent.parent
 ALL_EMPTY = str(ROOT / "ALL EMPTY.syx")
 ALL_SAW = str(ROOT / "ALL INIT SAW.syx")
+SYNTHMANIA = str(ROOT / "Synthmania-EDM-Soundset-JT-4000.syx")
 
 
 def model(path):
@@ -153,15 +154,19 @@ class TestRenameAndOps:
         assert m.current_patch().name == "SLOT SEVE"
 
     def test_duplicate_undo_restores_bank(self):
-        m = model(ALL_SAW)
+        # ALL INIT SAW slots are content-identical, so comparing slot contents
+        # proves nothing; use a fixture with distinct patches (Synthmania).
+        m = model(SYNTHMANIA)
         h = EditorHistory(m)
-        src = m.get_patch(1)
-        dst_before = m.get_patch(5)
+        src_data = bytes(m.get_patch(1).data)          # snapshot pre-state as raw bytes
+        dst_before = bytes(m.get_patch(5).data)        # PatchState is live -> copy bytes
+        assert src_data != dst_before                  # otherwise test is vacuous
         h.push()
         m.duplicate_patch(1, 5)
-        assert m.get_patch(5).data == src.data
+        assert bytes(m.get_patch(5).data) == src_data  # destination now holds source
         h.undo()
-        assert m.get_patch(5).data == dst_before       # slot 5 restored
+        assert bytes(m.get_patch(5).data) == dst_before  # slot 5 restored exactly
+        assert m.selected == 1                           # selection restored too
 
     def test_swap_and_move_undo(self):
         m = model(ALL_SAW)
@@ -216,11 +221,15 @@ class TestDirtySemantics:
     def test_undo_back_to_loaded_state_is_clean(self):
         m = model(ALL_SAW)
         h = EditorHistory(m)
+        # filter_resonance fixture value is 0; 9 is a real change (continuous 0..127)
+        assert m.get_parameter("filter_resonance").raw == 0
         h.push()
-        m.set_parameter("filter_res", 9)
+        m.set_parameter("filter_resonance", 9)
         m.commit()
+        assert m.get_parameter("filter_resonance").raw == 9
         assert m.is_dirty()
         h.undo()
+        assert m.get_parameter("filter_resonance").raw == 0
         assert not m.is_dirty()                  # exact baseline match
 
     def test_failed_save_keeps_dirty(self, tmp_path):
