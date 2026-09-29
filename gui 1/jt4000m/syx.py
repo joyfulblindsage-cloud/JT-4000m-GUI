@@ -10,6 +10,11 @@ SINGLE_CMD = 0x15
 BULK_CMD = 0x10
 HEADER_LEN = 8
 PROGRAM_LEN = 64
+# The patch name occupies the LAST 9 bytes of the 64-byte program record:
+# offsets 54..63 (0x36..0x3F). Fixture evidence: ALL INIT SAW ends with
+# ... 00 | 01 | 00 | 'INIT SAW ' — so byte 0x36 is the first name character.
+NAME_START = PROGRAM_LEN - 9   # == 54 == 0x36
+NAME_END = PROGRAM_LEN         # exclusive; last name offset is 63 (0x3F)
 SINGLE_RESERVED_LEN = 1
 CHECKSUM_LEN = 1
 
@@ -64,8 +69,13 @@ class Program:
 
     @property
     def name(self) -> str:
-        # The 9-byte name occupies relative offsets 55..63.
-        return self.data[55:64].decode("ascii", errors="replace").rstrip(" \x00")
+        # The 9-byte name occupies relative offsets 54..63 (0x36..0x3F).
+        # Fixture evidence: ALL INIT SAW record ends with
+        #   ... 00 | 01 | 00 | 'INIT SAW '
+        # i.e. two structural bytes at 0x34/0x35 and the padded ASCII name in
+        # the LAST 9 bytes of the 64-byte record. (Earlier code used 55..63,
+        # which silently dropped the first name character.)
+        return self.data[NAME_START:].decode("ascii", errors="replace").rstrip(" \x00")
 
     def byte(self, offset: int) -> int:
         return self.data[offset]
@@ -138,8 +148,8 @@ def serialize_bulk(programs: Iterable[Program | bytes], *, header: bytes | None 
 
 
 def field_name(offset: int) -> str:
-    if 55 <= offset <= 63:
-        return f"Name[{offset - 55}]"
+    if NAME_START <= offset < NAME_END:
+        return f"Name[{offset - NAME_START}]"
     return FIELDS.get(offset, f"Byte 0x{offset:02X}")
 
 
@@ -154,6 +164,6 @@ def semantic_value(offset: int, value: int) -> str:
         return PORTAMENTO_MODE_NAMES.get(value, f"Unknown (0x{value:02X})")
     if offset == 43:
         return "ON" if value >= 65 else ("OFF" if value <= 64 else f"0x{value:02X}")
-    if 55 <= offset <= 63:
+    if NAME_START <= offset < NAME_END:
         return repr(chr(value) if 32 <= value <= 126 else "\\x%02X" % value)
     return f"0x{value:02X}"
