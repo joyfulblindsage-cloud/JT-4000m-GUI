@@ -6,6 +6,9 @@ from .syx import LFO_DEST_NAMES, LFO_WAVE_NAMES, PORTAMENTO_MODE_NAMES, Program,
 
 # Enum value -> label maps. These only contain values established by the
 # project's analysis; unknown values render as "Unknown (0xNN)" in the UI.
+# NOTE: CC numbers on ParameterSpec below are documentation carried over from
+# the existing parameter map; this editor NEVER sends MIDI and does not treat
+# them as verified beyond what the project already recorded.
 ENUM_OPTIONS: dict[str, dict[int, str]] = {
     "osc1_wave": WAVE_NAMES,
     "osc2_wave": WAVE_NAMES,
@@ -13,6 +16,10 @@ ENUM_OPTIONS: dict[str, dict[int, str]] = {
     "lfo2_wave": LFO_WAVE_NAMES,
     "lfo1_destination": LFO_DEST_NAMES,
     "portamento_mode": PORTAMENTO_MODE_NAMES,
+    # Ring Mod toggle: banks observed so far store clean 0/1 values here.
+    # The manual-style split (<=64 OFF / >=65 ON) is kept for raw-value
+    # display; individual >1 values still render as Unknown (0xNN).
+    "ring_mod_toggle": {0: "OFF", 1: "ON"},
 }
 
 
@@ -37,9 +44,10 @@ class ParameterSpec:
 # CC exists but its SysEx offset is not yet established, offset stays None.
 PARAMETERS: tuple[ParameterSpec, ...] = (
     ParameterSpec("osc1_wave", "OSC1 Wave", 0, 24, "enum", section="OSCILLATORS"),
-    ParameterSpec("osc2_wave", "OSC2 Wave", 1, 25, "enum", section="OSCILLATORS"),
-    ParameterSpec("osc1_pwm_fm", "OSC1 PWM / Supersaw Detune / FM Feedback", 2, 113, section="OSCILLATORS"),
-    ParameterSpec("osc2_pwm", "OSC2 PWM", 3, 114, section="OSCILLATORS"),
+    ParameterSpec("osc2_wave", "OSC2 Wave", 1, 25, "enum", default=0, section="OSCILLATORS"),
+    ParameterSpec("osc1_pwm_fm", "OSC1 PWM / Supersaw Detune / FM Feedback", 2, 113, section="OSCILLATORS", default=64),
+    ParameterSpec("osc2_pwm", "OSC2 PWM", 3, 114, section="OSCILLATORS", default=64),
+    ParameterSpec("osc_balance", "OSC Balance", 8, 29, section="OSCILLATORS", default=64),
     ParameterSpec("osc1_coarse", "OSC1 Coarse Tune", 4, 115, "continuous", orientation="centered", section="OSCILLATORS"),
     ParameterSpec("osc1_fine", "OSC1 Fine Tune", 5, 111, "continuous", orientation="centered", section="OSCILLATORS"),
     ParameterSpec("osc2_coarse", "OSC2 Coarse Tune", 6, 116, "continuous", orientation="centered", section="OSCILLATORS"),
@@ -63,7 +71,12 @@ PARAMETERS: tuple[ParameterSpec, ...] = (
     ParameterSpec("lfo2_rate", "LFO2 Rate", 51, 73, section="LFO"),
     ParameterSpec("lfo2_amount", "LFO2 Amount", 52, 28, section="LFO"),
     ParameterSpec("lfo1_destination", "LFO1 Destination", 53, 56, "enum", section="LFO"),
-    ParameterSpec("ring_mod_toggle", "Ring Modulation On/Off", 43, 96, "boolean", notes="CC 0-64 off, 65-127 on", section="MODULATION"),
+    # Observed banks store clean 0/1 values at offset 0x2B, so the toggle is
+    # exposed as an enum (OFF/ON) in the editor; the manual-style CC split
+    # (0-64 off / 65-127 on) is documented in notes but not invented here.
+    ParameterSpec("ring_mod_toggle", "Ring Modulation On/Off", 43, 96, "enum",
+                  notes="Observed banks use 0/1; CC convention 0-64 off, 65-127 on",
+                  section="MODULATION"),
     ParameterSpec("ring_mod_amount", "Ring Modulation Amount", 44, 95, section="MODULATION"),
     ParameterSpec("portamento_mode", "Portamento Mode", 45, None, "enum", notes="CC mapping not established", section="MODULATION"),
     # Offset 0x2E (46) is documented in the project field map as Portamento
@@ -88,23 +101,34 @@ def enum_options(key: str) -> list[tuple[int, str]]:
     """Return (value, label) pairs for an enum parameter.
 
     Only values established by the project are labelled; unknown values are
-    shown as ``Unknown (0xNN)`` instead of invented names. The observed value
-    range from the parameter map is always covered so existing banks load.
+    shown as ``Unknown (0xNN)`` instead of invented names. Enum parameters
+    offer exactly the confirmed value set — no invented range is exposed in
+    dropdowns. Banks containing other raw values still load and display them
+    via ``display_value`` / the raw table.
     """
-    spec = BY_KEY[key]
     labels = ENUM_OPTIONS.get(key, {})
-    values = sorted(set(range(spec.minimum, spec.maximum + 1)) | set(labels))
-    return [(v, labels.get(v, f"Unknown (0x{v:02X})")) for v in values]
+    if not labels:
+        # No confirmed enum table exists for this key: expose nothing rather
+        # than inventing options. The editor falls back to numeric controls.
+        return []
+    return [(v, labels[v]) for v in sorted(labels)]
 
 
 def display_value(key: str, raw: int) -> str:
     """Semantic display string for a raw byte value."""
     spec = BY_KEY[key]
-    if spec.kind == "boolean":
-        return "ON" if raw >= 65 else ("OFF" if raw <= 64 else f"0x{raw:02X}")
     if spec.kind == "enum":
         labels = ENUM_OPTIONS.get(key, {})
-        return labels.get(raw, f"Unknown (0x{raw:02X})")
+        if raw in labels:
+            return labels[raw]
+        if spec.key == "ring_mod_toggle":
+            # Manual-style convention documented by the project: 0-64 off,
+            # 65-127 on. Individual unconfirmed values stay marked Unknown.
+            side = "OFF" if raw <= 64 else "ON"
+            return f"{side} (Unknown (0x{raw:02X}))"
+        return f"Unknown (0x{raw:02X})"
+    if spec.kind == "boolean":
+        return "ON" if raw >= 65 else ("OFF" if raw <= 64 else f"0x{raw:02X}")
     if spec.orientation == "centered":
         return f"{raw - 64:+d}"
     return str(raw)
@@ -131,9 +155,36 @@ def set_parameter(program: Program, key: str, value: int) -> Program:
         raise ValueError(f"{key} must be an integer.")
     if not spec.minimum <= value <= spec.maximum:
         raise ValueError(f"{key} must be between {spec.minimum} and {spec.maximum}.")
+    if spec.kind == "enum":
+        # Only values established by the project's enum tables are writable.
+        # Unknown/undocumented values stay visible in the raw table but cannot
+        # be introduced through the editor — nothing is invented here.
+        labels = ENUM_OPTIONS.get(key, {})
+        if not labels:
+            raise ValueError(f"{key}: no confirmed enum values exist yet (hardware TODO).")
+        if value not in labels:
+            raise ValueError(
+                f"{key}: value {value} is not a confirmed enum option "
+                f"(allowed: {sorted(labels)})."
+            )
     data = bytearray(program.data)
     data[spec.offset] = value
     return Program(program.index, bytes(data), program.source_offset)
+
+
+def reset_parameter(program: Program, key: str) -> Program:
+    """Restore one parameter to its documented default value."""
+    spec = BY_KEY[key]
+    return set_parameter(program, key, spec.default)
+
+
+def editable_parameters() -> tuple[ParameterSpec, ...]:
+    """All parameters with an established SysEx offset (editor-visible set).
+
+    CC-only specs (offset=None) are intentionally excluded — their SysEx
+    location is not established, so they are never rendered as editable.
+    """
+    return tuple(p for p in PARAMETERS if p.offset is not None)
 
 
 def set_name(program: Program, name: str) -> Program:

@@ -188,6 +188,7 @@ class Editor(tk.Tk):
             self.controls.grid_columnconfigure(col, weight=1)
 
         self.section_labels: dict[str, tk.Label] = {}
+        self.reset_buttons: dict[str, tuple[tk.Button, tk.Label]] = {}
         self._build_sections()
 
         # ---- right: developer panel ------------------------------------
@@ -249,19 +250,27 @@ class Editor(tk.Tk):
                          fg="#bfc3c8", width=26, anchor="w")
         label.pack(side="left")
         self.section_labels[spec.key] = label
-        var = tk.IntVar(value=spec.minimum)
+        # Initial value = documented default; it is overwritten from the model
+        # as soon as a bank is loaded (_sync_widgets_from_model).
+        var = tk.IntVar(value=spec.default)
         self.vars[spec.key] = var
-        value = tk.StringVar(value=str(spec.minimum))
+        value = tk.StringVar(value=self._formatted(spec.key, spec.default))
         self.value_vars[spec.key] = value
 
         if spec.kind == "enum":
             options = enum_options(spec.key)
-            combo = ttk.Combobox(row, state="readonly", width=16,
-                                 values=[name for _v, name in options])
-            combo.pack(side="right")
-            setattr(self, f"combo_{spec.key}", combo)
-            combo.bind("<<ComboboxSelected>>",
-                       lambda _e, key=spec.key, w=combo: self._combo_apply(key, w))
+            if options:
+                combo = ttk.Combobox(row, state="readonly", width=16,
+                                     values=[name for _v, name in options])
+                combo.pack(side="right")
+                setattr(self, f"combo_{spec.key}", combo)
+                combo.bind("<<ComboboxSelected>>",
+                           lambda _e, key=spec.key, w=combo: self._combo_apply(key, w))
+            else:
+                # No confirmed enum table exists yet (hardware TODO): show the
+                # raw value read-only instead of inventing editable options.
+                tk.Label(row, text="values not established", bg="#292a2d",
+                         fg="#9aa0a6").pack(side="right")
         elif spec.kind == "boolean":
             check = ttk.Checkbutton(row, text="ON", variable=var,
                                     command=lambda key=spec.key: self.apply_parameter(key))
@@ -274,8 +283,32 @@ class Editor(tk.Tk):
                              command=lambda _v, key=spec.key: self._value_preview(key))
             scale.pack(side="left", fill="x", expand=True, padx=5)
             scale.bind("<ButtonRelease-1>", lambda _e, key=spec.key: self.apply_parameter(key))
-        tk.Label(row, textvariable=value, bg="#292a2d", fg="#f1f1f1", width=11,
-                 anchor="e").pack(side="right", padx=(4, 0))
+        val_lbl = tk.Label(row, textvariable=value, bg="#292a2d", fg="#f1f1f1", width=11,
+                           anchor="e")
+        val_lbl.pack(side="right", padx=(4, 0))
+        reset = tk.Button(row, text="D", width=2, relief="flat", bg="#292a2d", fg="#9aa0a6",
+                          highlightthickness=0, bd=0,
+                          command=lambda key=spec.key: self.reset_one(key))
+        reset.pack(side="right", padx=(2, 0))
+        self.reset_buttons[spec.key] = (reset, val_lbl)
+
+    def reset_one(self, key: str) -> None:
+        """Reset a single parameter to its documented default value."""
+        if self.bank is None or self.selected_index is None:
+            return
+        spec = BY_KEY[key]
+        try:
+            new_bank = self.bank.reset_parameter(self.selected_index, key)
+        except Exception as exc:
+            messagebox.showerror("Parameter", str(exc))
+            return
+        self._push_undo()
+        self.bank = new_bank
+        self._sync_widgets_from_model()
+        self._update_modified()
+        self._update_developer()
+        self.status_var.set(f"P{self.selected_index:02d}  {spec.label} reset to "
+                            f"default {display_value(key, spec.default)}")
 
     # ------------------------------------------------------------- raw table
     def _build_raw_tab(self) -> None:
@@ -513,20 +546,37 @@ class Editor(tk.Tk):
                 combo = getattr(self, f"combo_{spec.key}")
                 labels = [name for _v, name in enum_options(spec.key)]
                 text = self._combo_text(spec.key, raw)
-                combo.current(labels.index(text) if text in labels else 0)
+                # A raw value with no confirmed label (e.g. loaded from a
+                # third-party bank) leaves the dropdown unselected rather
+                # than snapping to a wrong option; the numeric label next to
+                # the control still shows "Unknown (0xNN)".
+                combo.current(labels.index(text) if text in labels else -1)
         enabled = self.bank is not None
         self.name_entry.configure(state="normal" if enabled else "disabled")
         self.apply_name_btn.configure(state="normal" if enabled else "disabled")
         self._syncing = False
 
     def _combo_text(self, key: str, raw: int) -> str:
-        return dict(enum_options(key)).get(raw, f"Unknown (0x{raw:02X})")
+        return dict(enum_options(key)).get(raw, "")
 
     def _formatted(self, key: str, raw: int) -> str:
         """Value string; developer mode appends the raw byte."""
         disp = display_value(key, raw)
         if self.developer_var.get():
-            return f"{disp} ({raw})"
+            disp = f"{disp} ({raw})"
+        # During initial widget construction value_vars may not contain the
+        # key yet; callers set the StringVar right afterwards.
+        lbl = self.value_vars.get(key)
+        if lbl is not None:
+            lbl.set(disp)
+            # Widen the shared label so long values like "OFF (Unknown (0x3F))"
+            # are never visually truncated.
+            widget = self.reset_buttons.get(key, (None, None))[1]
+            if widget is not None:
+                try:
+                    widget.configure(width=max(11, len(disp)))
+                except tk.TclError:
+                    pass
         return disp
 
     # ----------------------------------------------------- widgets -> model

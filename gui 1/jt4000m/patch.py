@@ -28,6 +28,10 @@ class JTProgram:
         p = set_parameter(self.to_program(), key, value)
         return JTProgram.from_program(p)
 
+    def reset_parameter(self, key: str) -> "JTProgram":
+        from .model import reset_parameter
+        return JTProgram.from_program(reset_parameter(self.to_program(), key))
+
     def set_name(self, name: str) -> "JTProgram":
         p = set_name(self.to_program(), name)
         return JTProgram.from_program(p)
@@ -85,6 +89,9 @@ class Bank:
 
     def set_parameter(self, index: int, key: str, value: int) -> "Bank":
         return self.replace(index, self.get(index).set_parameter(key, value))
+
+    def reset_parameter(self, index: int, key: str) -> "Bank":
+        return self.replace(index, self.get(index).reset_parameter(key))
 
     def set_name(self, index: int, name: str) -> "Bank":
         return self.replace(index, self.get(index).set_name(name))
