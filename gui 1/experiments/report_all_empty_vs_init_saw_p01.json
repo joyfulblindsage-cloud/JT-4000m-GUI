@@ -1,0 +1,121 @@
+{
+  "schema": "jt4000m-experiment/1",
+  "timestamp": "2026-09-29T09:12:42+00:00",
+  "program": 1,
+  "before": {
+    "path": "fixtures/ALL EMPTY.syx",
+    "provenance": "REFERENCE_FIXTURE"
+  },
+  "after": {
+    "path": "fixtures/ALL INIT SAW.syx",
+    "provenance": "REFERENCE_FIXTURE"
+  },
+  "hypothesis": "osc1_wave",
+  "expected_cc": 24,
+  "verdict": "CONFIRMED",
+  "evidence": "A/B_SYSEX",
+  "changes": [
+    {
+      "offset": 0,
+      "old": 0,
+      "new": 4,
+      "classification": "KNOWN_PARAMETER",
+      "field": "OSC1 Wave",
+      "parameter_key": "osc1_wave",
+      "old_semantic": "OFF",
+      "new_semantic": "SAW",
+      "confidence": "experimentally_confirmed"
+    },
+    {
+      "offset": 55,
+      "old": 69,
+      "new": 73,
+      "classification": "PATCH_NAME",
+      "field": "Name[0]",
+      "parameter_key": null,
+      "old_semantic": "'E'",
+      "new_semantic": "'I'",
+      "confidence": "observed"
+    },
+    {
+      "offset": 56,
+      "old": 77,
+      "new": 78,
+      "classification": "PATCH_NAME",
+      "field": "Name[1]",
+      "parameter_key": null,
+      "old_semantic": "'M'",
+      "new_semantic": "'N'",
+      "confidence": "observed"
+    },
+    {
+      "offset": 57,
+      "old": 80,
+      "new": 73,
+      "classification": "PATCH_NAME",
+      "field": "Name[2]",
+      "parameter_key": null,
+      "old_semantic": "'P'",
+      "new_semantic": "'I'",
+      "confidence": "observed"
+    },
+    {
+      "offset": 59,
+      "old": 89,
+      "new": 32,
+      "classification": "PATCH_NAME",
+      "field": "Name[4]",
+      "parameter_key": null,
+      "old_semantic": "'Y'",
+      "new_semantic": "' '",
+      "confidence": "observed"
+    },
+    {
+      "offset": 60,
+      "old": 32,
+      "new": 83,
+      "classification": "PATCH_NAME",
+      "field": "Name[5]",
+      "parameter_key": null,
+      "old_semantic": "' '",
+      "new_semantic": "'S'",
+      "confidence": "observed"
+    },
+    {
+      "offset": 61,
+      "old": 32,
+      "new": 65,
+      "classification": "PATCH_NAME",
+      "field": "Name[6]",
+      "parameter_key": null,
+      "old_semantic": "' '",
+      "new_semantic": "'A'",
+      "confidence": "observed"
+    },
+    {
+      "offset": 62,
+      "old": 32,
+      "new": 87,
+      "classification": "PATCH_NAME",
+      "field": "Name[7]",
+      "parameter_key": null,
+      "old_semantic": "' '",
+      "new_semantic": "'W'",
+      "confidence": "observed"
+    }
+  ],
+  "detected_offsets": [
+    "0x00",
+    "0x37",
+    "0x38",
+    "0x39",
+    "0x3B",
+    "0x3C",
+    "0x3D",
+    "0x3E"
+  ],
+  "service_changes": {},
+  "notes": [
+    "Only the hypothesised offset changed (name bytes treated as PATCH_NAME); parameter mapping EXPERIMENTALLY CONFIRMED."
+  ]
+}
