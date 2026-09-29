@@ -563,6 +563,10 @@ class EditorModel:
         self._selected: int = 1
         self._working: PatchState | None = None   # uncommitted patch edits
         self._dirty: bool = False
+        # Baseline bytes of the last successful load/save.  This is the ONE
+        # dirty-state source of truth for editor sessions (P1.10 §6): the GUI
+        # never computes dirty itself — it asks is_dirty().
+        self._baseline: bytes | None = None
 
     # ---- loading ---------------------------------------------------------
     def load_bank(self, path: str | Path, *, provenance: str | None = None) -> Bank:
@@ -573,6 +577,7 @@ class EditorModel:
         self._provenance = provenance or detect_provenance(p)
         self._selected = 1
         self._working = None
+        self._baseline = bank.to_sysex()
         self._dirty = False
         return bank
 
@@ -887,6 +892,7 @@ class EditorModel:
             return self.bank
         self._bank = self.bank.replace(self._selected, self._working.program)
         self._working = None
+        self._dirty = self._bank_modified()
         return self._bank
 
     def revert(self) -> None:
@@ -894,12 +900,16 @@ class EditorModel:
         self._dirty = self._bank_modified()
 
     def _bank_modified(self) -> bool:
-        if self._path is None:
+        """Dirty iff current serialized bank differs from the load/save
+        baseline.  Uses the in-memory baseline captured at the last
+        successful load or save — NOT a disk re-read — so undo-ing back to
+        the exact loaded state returns CLEAN even if the file on disk was
+        changed meanwhile."""
+        if self._bank is None:
+            return False
+        if self._baseline is None:
             return True
-        try:
-            return self.bank.to_sysex() != self._path.read_bytes()
-        except OSError:
-            return True
+        return self._bank.to_sysex() != self._baseline
 
     # ---- saving ----------------------------------------------------------
     def save(self, path: str | Path | None = None) -> Path:
@@ -912,8 +922,9 @@ class EditorModel:
         if target is None:
             raise RuntimeError("No target path for save.")
         self.commit()
-        payload = self.bank.save(target)
+        payload = self.bank.save(target)   # raises on failure; dirty stays True
         self._path = target.resolve()
+        self._baseline = bytes(payload)    # serializer output == file bytes
         self._dirty = False
         return target
 
@@ -1055,6 +1066,9 @@ class EditorHistory:
             return False
         self._redo.append(self._model.snapshot())
         self._model.restore(self._undo.pop())
+        # restore() conservatively marks dirty; re-derive from the baseline
+        # so undo-ing back to the exact loaded state reports CLEAN (§6).
+        self._model._dirty = self._model._bank_modified()
         return True
 
     def redo(self) -> bool:
@@ -1062,11 +1076,22 @@ class EditorHistory:
             return False
         self._undo.append(self._model.snapshot())
         self._model.restore(self._redo.pop())
+        self._model._dirty = self._model._bank_modified()
         return True
 
     def clear(self) -> None:
         self._undo.clear()
         self._redo.clear()
+
+    # ---- dirty semantics (P1.10 §6; single source of truth = model) ------
+    def sync_dirty(self) -> bool:
+        """Recompute the model's dirty flag from the load/save baseline.
+
+        Call after mutations that were performed directly on the domain
+        layer (e.g. EditorModel.bank.replace(...) via a GUI helper) so the
+        GUI never needs its own dirty tracking.  Returns the new state."""
+        self._model._dirty = self._model._bank_modified()
+        return self._model._dirty
 
 
 # ---------------------------------------------------------------------------
