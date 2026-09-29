@@ -52,7 +52,11 @@ LEVEL_INFERRED = discovery.LEVEL_INFERRED  # INFERRED      (statistical)
 LEVEL_HARDWARE = discovery.LEVEL_HARDWARE  # vocabulary member ONLY; never emitted
 _OFFLINE_LEVELS = frozenset({LEVEL_STATIC, LEVEL_OBSERVED, LEVEL_INFERRED})
 
-NAME_RANGE = range(NAME_START, PROGRAM_LEN)  # name bytes 0x36..0x3F (last 9)
+# Name field = the LAST nine bytes of the 64-byte record: offsets 55..63
+# (0x37..0x3F).  NAME_START == PROGRAM_LEN - 9 == 55.  Byte 54 (0x36) is a
+# structural fixture-constant byte and must NEVER be treated as part of the
+# name (rename evidence test: changed_offsets never include 54).
+NAME_RANGE = range(NAME_START, PROGRAM_LEN)  # == range(55, 64) — 9 bytes
 
 # Canonical group order — taken from the registry `section` metadata values.
 _GROUP_ORDER = ("OSCILLATORS", "FILTER", "VCF ENVELOPE", "VCA ENVELOPE",
@@ -762,7 +766,8 @@ class EditorModel:
 
     def rename_patch(self, index: int, name: str) -> PatchState:
         """Rename a slot without selecting it. Changes ONLY name bytes
-        0x36..0x3F (domain-level guarantee). Uses the existing Bank.set_name
+        0x37..0x3F / offsets 55..63 (domain-level guarantee; byte 54 is
+        structural and never written). Uses the existing Bank.set_name
         (same helper as PatchLibrary), so the 9-byte field semantics
         (truncate >9, space padding) are identical everywhere."""
         self._require_loaded()
@@ -892,12 +897,12 @@ class EditorModel:
             return self.bank
         self._bank = self.bank.replace(self._selected, self._working.program)
         self._working = None
-        self._dirty = self._bank_modified()
+        self._dirty = self._session_modified()
         return self._bank
 
     def revert(self) -> None:
         self._working = None
-        self._dirty = self._bank_modified()
+        self._dirty = self._session_modified()
 
     def _bank_modified(self) -> bool:
         """Dirty iff current serialized bank differs from the load/save
@@ -910,6 +915,22 @@ class EditorModel:
         if self._baseline is None:
             return True
         return self._bank.to_sysex() != self._baseline
+
+    def _session_modified(self) -> bool:
+        """Full dirty semantics (P1.10 §6): the session is MODIFIED when the
+        committed bank OR the uncommitted working patch copy differs from the
+        load/save baseline.  The working copy lives outside `Bank`, so a bare
+        `_bank_modified()` check would wrongly report CLEAN while an edited
+        patch is pending commit — exactly the state a GUI must show as
+        MODIFIED and must not silently discard."""
+        if self._working is not None:
+            try:
+                base = self.bank.get(self._selected)
+            except Exception:
+                return True
+            if bytes(self._working.data) != bytes(base.data):
+                return True
+        return self._bank_modified()
 
     # ---- saving ----------------------------------------------------------
     def save(self, path: str | Path | None = None) -> Path:
@@ -1068,7 +1089,7 @@ class EditorHistory:
         self._model.restore(self._undo.pop())
         # restore() conservatively marks dirty; re-derive from the baseline
         # so undo-ing back to the exact loaded state reports CLEAN (§6).
-        self._model._dirty = self._model._bank_modified()
+        self._model._dirty = self._model._session_modified()
         return True
 
     def redo(self) -> bool:
@@ -1076,7 +1097,7 @@ class EditorHistory:
             return False
         self._undo.append(self._model.snapshot())
         self._model.restore(self._redo.pop())
-        self._model._dirty = self._model._bank_modified()
+        self._model._dirty = self._model._session_modified()
         return True
 
     def clear(self) -> None:
@@ -1090,7 +1111,7 @@ class EditorHistory:
         Call after mutations that were performed directly on the domain
         layer (e.g. EditorModel.bank.replace(...) via a GUI helper) so the
         GUI never needs its own dirty tracking.  Returns the new state."""
-        self._model._dirty = self._model._bank_modified()
+        self._model._dirty = self._model._session_modified()
         return self._model._dirty
 
 
