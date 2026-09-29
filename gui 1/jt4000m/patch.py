@@ -22,13 +22,18 @@ class JTProgram:
     index: int
     data: bytes
     source_offset: int = 0
+    # Frame-level reserved byte for single-dump mode (bulk programs have none;
+    # every fixture shows 0x00 there). Carried through parse->serialize so the
+    # round-trip is lossless without assigning it any meaning.
+    reserved: bytes = b""
 
     @classmethod
     def from_program(cls, program: Program) -> "JTProgram":
-        return cls(program.index, bytes(program.data), program.source_offset)
+        return cls(program.index, bytes(program.data), program.source_offset,
+                   getattr(program, "reserved", b""))
 
     def to_program(self) -> Program:
-        return Program(self.index, bytes(self.data), self.source_offset)
+        return Program(self.index, bytes(self.data), self.source_offset, self.reserved)
 
     @property
     def name(self) -> str:

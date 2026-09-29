@@ -84,16 +84,25 @@ class Program:
     index: int
     data: bytes
     source_offset: int
+    # Single-dump frames carry one reserved byte between the 64-byte program
+    # record and the checksum (observed 0x00 in every fixture). Bulk programs
+    # have no such byte; keep it here so parse -> serialize is lossless for
+    # both modes without inventing any semantics for it.
+    reserved: bytes = b""
 
     @property
     def name(self) -> str:
-        # The 9-byte name occupies relative offsets 54..63 (0x36..0x3F).
-        # Fixture evidence: ALL INIT SAW record ends with
-        #   ... 00 | 01 | 00 | 'INIT SAW '
-        # i.e. two structural bytes at 0x34/0x35 and the padded ASCII name in
-        # the LAST 9 bytes of the 64-byte record. (Earlier code used 55..63,
-        # which silently dropped the first name character.)
-        return self.data[NAME_START:].decode("ascii", errors="replace").rstrip(" \x00")
+        # The 9-byte name occupies relative offsets 55..63 (0x37..0x3F) — the
+        # LAST nine bytes of the 64-byte record.  Fixture evidence: ALL INIT
+        # SAW record ends with
+        #   ... 00 | 01 | 00 | 'I' 'N' 'I' 'T' ' ' 'S' 'A' 'W' ' '
+        # i.e. byte 53 = LFO1 Destination, byte 54 = structural zero, and the
+        # padded ASCII name starts at index 55.  Reading must use the same
+        # NAME_START boundary as writing (model.set_name); a previous close-
+        # out left this docstring claiming 54..63 while the slice itself was
+        # already correct — keep read/write boundaries in lockstep or 9-char
+        # names lose their last character.
+        return self.data[NAME_START:NAME_END].decode("ascii", errors="replace").rstrip(" \x00")
 
     def byte(self, offset: int) -> int:
         return self.data[offset]
@@ -123,7 +132,7 @@ def parse(raw: bytes) -> SysExFile:
         reserved = raw[72:73]
         chk = raw[73]
         expected = checksum(data)
-        return SysExFile(raw, "single", raw[:8], (Program(1, data, 8),), chk, expected, chk == expected, reserved)
+        return SysExFile(raw, "single", raw[:8], (Program(1, data, 8, reserved),), chk, expected, chk == expected, reserved)
     if command == BULK_CMD:
         expected_len = HEADER_LEN + 32 * PROGRAM_LEN + CHECKSUM_LEN + 1
         if len(raw) != expected_len:
@@ -140,8 +149,12 @@ def parse_file(path: str | Path) -> SysExFile:
     return parse(Path(path).read_bytes())
 
 
-def serialize_single(program: Program | bytes, *, header: bytes | None = None, reserved: bytes = b"\x00") -> bytes:
+def serialize_single(program: Program | bytes, *, header: bytes | None = None, reserved: bytes | None = None) -> bytes:
     data = program.data if isinstance(program, Program) else bytes(program)
+    if reserved is None:
+        # Use the byte captured at parse time when serializing a parsed
+        # Program; fall back to the observed fixture value 0x00 otherwise.
+        reserved = program.reserved if isinstance(program, Program) and program.reserved else b"\x00"
     if len(data) != PROGRAM_LEN:
         raise ValueError("Program data must be exactly 64 bytes.")
     h = header or HEADER_PREFIX + bytes([SINGLE_CMD])
