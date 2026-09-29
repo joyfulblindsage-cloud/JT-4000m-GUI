@@ -623,12 +623,22 @@ class Editor(tk.Tk):
             model_bank = None
         if (self.bank is not None and model_bank is not None
                 and self.bank is not model_bank):
-            self.editor._bank = self.bank       # adopt injected mirror
-            self.editor._working = None
-            self.editor._dirty = self.editor._session_modified()
-            model_bank = self.bank
-        elif model_bank is not None:
-            self.bank = model_bank              # normal case: refresh mirror
+            # The mirror differs from the model.  Normally that means the
+            # GUI/test replaced `app.bank` with a diagnostic Bank instance
+            # (injection) — adopt it into the model so the model stays the
+            # single source of truth afterwards.  But when the mirror is a
+            # STALE reference to an older model bank (immutable copy-on-write
+            # banks are superseded by every commit), adopting it would roll
+            # the model back and silently discard the just-applied edit.
+            # Detect staleness via serialization identity instead.
+            stale = self.bank.to_sysex() == model_bank.to_sysex()
+            if not stale:
+                self.editor._bank = self.bank   # adopt injected mirror
+                self.editor._working = None
+                self.editor._dirty = self.editor._session_modified()
+                model_bank = self.bank
+        if model_bank is not None:
+            self.bank = model_bank              # refresh mirror from model
         self.refresh_list()
         self._sync_widgets_from_model()
         self._update_modified()

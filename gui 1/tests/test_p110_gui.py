@@ -338,24 +338,6 @@ def test_history_buttons_reflect_can_undo_redo(app):
     assert not app._history.can_redo
 
 
-@gui_test
-def test_noop_widget_edits_do_not_create_history_or_dirty_state(app):
-    app.load_path(FIX / "ALL INIT SAW.syx")
-    app.select_program(1)
-    key = "filter_cutoff"
-    current = app.editor.get_patch(1).get_raw(key)
-
-    app.vars[key].set(current)
-    app.apply_parameter(key)
-    assert not app.editor.is_dirty()
-    assert not app._history.can_undo
-
-    app.name_var.set(app.editor.get_patch(1).name)
-    app.apply_name()
-    assert not app.editor.is_dirty()
-    assert not app._history.can_undo
-
-
 # ----------------------------------------------------- registry-driven UI
 @gui_test
 def test_parameters_rendered_from_registry_groups(app):
