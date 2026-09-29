@@ -56,3 +56,52 @@ def format_change(d: ByteDiff) -> str:
         return f"{old} -> {new}"
     delta = d.new - d.old
     return f"{old} -> {new} (Δ {delta:+d})"
+
+
+# --------------------------------------------------------------------------
+# P1 — program/bank comparison helpers built on the SAME ByteDiff/formatting
+# logic as semantic_diff above. No second diff system is introduced.
+# --------------------------------------------------------------------------
+
+def _as_program(obj):
+    """Accept a syx.Program or a patch.JTProgram without importing patch."""
+    to_program = getattr(obj, "to_program", None)
+    return to_program() if callable(to_program) else obj
+
+
+def program_diff(a, b) -> list[ByteDiff]:
+    """Byte-level differences between two programs (raw records preserved).
+
+    Uses the existing field_name()/semantic_value() mapping so unknown bytes
+    are reported as 'Byte 0xNN' — never renamed into invented parameters.
+    """
+    pa, pb = _as_program(a), _as_program(b)
+    out = []
+    for rel, (x, y) in enumerate(zip(pa.data, pb.data)):
+        if x != y:
+            out.append(ByteDiff(pb.source_offset + rel, rel, pa.index, x, y,
+                                field_name(rel)))
+    return out
+
+
+def bank_diff(a, b) -> list[ByteDiff]:
+    """Per-slot differences between two 32-program banks.
+
+    Accepts Bank objects (patch.Bank) or SysExFile bulk dumps; both sides
+    must have the same number of programs.
+    """
+    progs_a = a.programs
+    progs_b = b.programs
+    if len(progs_a) != len(progs_b):
+        raise ValueError(
+            f"Cannot compare banks with different program counts: {len(progs_a)} vs {len(progs_b)}.")
+    out = []
+    for pqa, pqb in zip(progs_a, progs_b):
+        da, db = _as_program(pqa), _as_program(pqb)
+        if da.data == db.data:
+            continue
+        for rel, (x, y) in enumerate(zip(da.data, db.data)):
+            if x != y:
+                out.append(ByteDiff(db.source_offset + rel, rel, da.index, x, y,
+                                    field_name(rel)))
+    return out
