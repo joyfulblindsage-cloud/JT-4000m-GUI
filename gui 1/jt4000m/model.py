@@ -187,6 +187,35 @@ def editable_parameters() -> tuple[ParameterSpec, ...]:
     return tuple(p for p in PARAMETERS if p.offset is not None)
 
 
+def writable_parameters() -> tuple[ParameterSpec, ...]:
+    """Editable parameters the editor may actually change offline.
+
+    Excludes enum parameters that have no confirmed value table yet (e.g.
+    portamento_mode: only OFF is observed; nothing else is invented), and
+    excludes duplicate keys of osc_balance so each byte is represented once.
+    """
+    seen: set[str] = set()
+    out: list[ParameterSpec] = []
+    for p in editable_parameters():
+        if p.key in seen:
+            continue
+        if p.kind == "enum" and not ENUM_OPTIONS.get(p.key):
+            continue  # no confirmed enum values -> not writable (hardware TODO)
+        seen.add(p.key)
+        out.append(p)
+    return tuple(out)
+
+
+def get_parameter(program: Program, key: str) -> int:
+    """Read the raw byte value of a parameter from a program."""
+    spec = BY_KEY.get(key)
+    if spec is None:
+        raise KeyError(f"Unknown parameter: {key}")
+    if spec.offset is None:
+        raise ValueError(f"Parameter {key} has no established SysEx offset.")
+    return program.data[spec.offset]
+
+
 def set_name(program: Program, name: str) -> Program:
     # The JT-4000M name field is 9 bytes (offsets 55..63), space padded.
     # Names longer than 9 characters are truncated; non-ASCII characters are
