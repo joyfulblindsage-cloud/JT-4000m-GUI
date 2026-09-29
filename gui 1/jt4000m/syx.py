@@ -10,10 +10,28 @@ SINGLE_CMD = 0x15
 BULK_CMD = 0x10
 HEADER_LEN = 8
 PROGRAM_LEN = 64
-# The patch name occupies the LAST 9 bytes of the 64-byte program record:
-# offsets 54..63 (0x36..0x3F). Fixture evidence: ALL INIT SAW ends with
-# ... 00 | 01 | 00 | 'INIT SAW ' — so byte 0x36 is the first name character.
-NAME_START = PROGRAM_LEN - 9   # == 54 == 0x36
+# ---------------------------------------------------------------------------
+# NAME FIELD BOUNDARY — fixture-verified (offline evidence, not hardware).
+# The patch name occupies the LAST NINE bytes of the 64-byte program record:
+# offsets 55..63 (0x37..0x3F).  NAME_START == PROGRAM_LEN - 9 == 55.
+# Evidence (every .syx fixture in this repository, all 97 program records):
+#   * ALL INIT SAW / EMPTY tails:  ... 00 00 01 | 00 | 'I' 'N' 'I' 'T' ' '
+#     'S' 'A' 'W' ' '  — the trailing printable run ending at index 63
+#     always STARTS at index 55.
+#   * Synthmania: 'HOOLLEAD' likewise starts at 55.
+#   * Byte 54 (0x36) is 0x00 in EVERY fixture program: it is a structural
+#     zero byte, NOT part of the name and NOT a registry parameter
+#     (FIXTURE-CONSTANT / UNKNOWN status; do not interpret its meaning
+#     without hardware evidence).
+#   * Byte 53 (0x35) is LFO1 Destination per the project FIELDS map
+#     (values {0,1} observed); it is also not part of the name.
+# A previous close-out attempt briefly moved the window to 54..63 on a
+# miscounted comment ("PROGRAM_LEN - 9 == 54"); that was arithmetically
+# wrong (64-9 == 55) and caused garbled/truncated names.  Do not repeat it.
+# See tests/test_p19_api.py::TestNameBoundaryRawBytes for the raw-level
+# regression guard over all fixtures.
+# ---------------------------------------------------------------------------
+NAME_START = PROGRAM_LEN - 9   # == 55 == 0x37 (first name byte)
 NAME_END = PROGRAM_LEN         # exclusive; last name offset is 63 (0x3F)
 SINGLE_RESERVED_LEN = 1
 CHECKSUM_LEN = 1
@@ -66,16 +84,25 @@ class Program:
     index: int
     data: bytes
     source_offset: int
+    # Single-dump frames carry one reserved byte between the 64-byte program
+    # record and the checksum (observed 0x00 in every fixture). Bulk programs
+    # have no such byte; keep it here so parse -> serialize is lossless for
+    # both modes without inventing any semantics for it.
+    reserved: bytes = b""
 
     @property
     def name(self) -> str:
-        # The 9-byte name occupies relative offsets 54..63 (0x36..0x3F).
-        # Fixture evidence: ALL INIT SAW record ends with
-        #   ... 00 | 01 | 00 | 'INIT SAW '
-        # i.e. two structural bytes at 0x34/0x35 and the padded ASCII name in
-        # the LAST 9 bytes of the 64-byte record. (Earlier code used 55..63,
-        # which silently dropped the first name character.)
-        return self.data[NAME_START:].decode("ascii", errors="replace").rstrip(" \x00")
+        # The 9-byte name occupies relative offsets 55..63 (0x37..0x3F) — the
+        # LAST nine bytes of the 64-byte record.  Fixture evidence: ALL INIT
+        # SAW record ends with
+        #   ... 00 | 01 | 00 | 'I' 'N' 'I' 'T' ' ' 'S' 'A' 'W' ' '
+        # i.e. byte 53 = LFO1 Destination, byte 54 = structural zero, and the
+        # padded ASCII name starts at index 55.  Reading must use the same
+        # NAME_START boundary as writing (model.set_name); a previous close-
+        # out left this docstring claiming 54..63 while the slice itself was
+        # already correct — keep read/write boundaries in lockstep or 9-char
+        # names lose their last character.
+        return self.data[NAME_START:NAME_END].decode("ascii", errors="replace").rstrip(" \x00")
 
     def byte(self, offset: int) -> int:
         return self.data[offset]
@@ -105,7 +132,7 @@ def parse(raw: bytes) -> SysExFile:
         reserved = raw[72:73]
         chk = raw[73]
         expected = checksum(data)
-        return SysExFile(raw, "single", raw[:8], (Program(1, data, 8),), chk, expected, chk == expected, reserved)
+        return SysExFile(raw, "single", raw[:8], (Program(1, data, 8, reserved),), chk, expected, chk == expected, reserved)
     if command == BULK_CMD:
         expected_len = HEADER_LEN + 32 * PROGRAM_LEN + CHECKSUM_LEN + 1
         if len(raw) != expected_len:
@@ -122,8 +149,12 @@ def parse_file(path: str | Path) -> SysExFile:
     return parse(Path(path).read_bytes())
 
 
-def serialize_single(program: Program | bytes, *, header: bytes | None = None, reserved: bytes = b"\x00") -> bytes:
+def serialize_single(program: Program | bytes, *, header: bytes | None = None, reserved: bytes | None = None) -> bytes:
     data = program.data if isinstance(program, Program) else bytes(program)
+    if reserved is None:
+        # Use the byte captured at parse time when serializing a parsed
+        # Program; fall back to the observed fixture value 0x00 otherwise.
+        reserved = program.reserved if isinstance(program, Program) and program.reserved else b"\x00"
     if len(data) != PROGRAM_LEN:
         raise ValueError("Program data must be exactly 64 bytes.")
     h = header or HEADER_PREFIX + bytes([SINGLE_CMD])
@@ -148,6 +179,13 @@ def serialize_bulk(programs: Iterable[Program | bytes], *, header: bytes | None 
 
 
 def field_name(offset: int) -> str:
+    # FIELDS has priority over the NAME window: fixtures show byte 0x35
+    # ('LFO1 Destination', e.g. ALL INIT SAW tail ... 01 | 00 | 'INIT SAW ')
+    # behaving as a parameter, while the name starts at 0x36. If the two ever
+    # overlap, the registry mapping wins and this must be treated as a
+    # registry contradiction (report-only), never silently reclassified.
+    if offset in FIELDS:
+        return FIELDS[offset]
     if NAME_START <= offset < NAME_END:
         return f"Name[{offset - NAME_START}]"
     return FIELDS.get(offset, f"Byte 0x{offset:02X}")

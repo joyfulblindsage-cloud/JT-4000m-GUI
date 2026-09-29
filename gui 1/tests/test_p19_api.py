@@ -233,7 +233,10 @@ class TestBankOps:
         m.set_parameter("filter_cutoff", 1)
         m.commit()
         m.restore(snap)
-        assert m.get_patch(1).get_parameter("filter_cutoff") == \
+        # Contract: EditorModel.get_parameter returns a ParameterValue object;
+        # JTProgram (snapshot bank) returns the raw int. Compare .raw to keep
+        # the type boundary explicit (regression test for the P1.9 API).
+        assert m.get_patch(1).get_parameter("filter_cutoff").raw == \
             snap.bank.get(1).get_parameter("filter_cutoff")
         assert m.provenance == "REFERENCE_FIXTURE"
 
@@ -383,7 +386,11 @@ class TestSession:
         assert m2.is_dirty()
         assert m2.provenance == "REFERENCE_FIXTURE"
         cur = m2.current()
-        assert cur.name == "SESSION TEST"   # 9-byte field truncates to 9 chars
+        # Name field = 9 bytes at offsets 55..63 (0x37..0x3F): 'SESSION' +
+        # one padding space; the 10th char is truncated.  (Regression guard:
+        # a previous close-out attempt used window 54..63 and produced
+        # 'SSESSION ' / lost last chars.)
+        assert cur.name == "SESSION"
         assert cur.get_parameter("filter_cutoff").raw == 21
         # pending edits still pending (bank untouched):
         assert m2.get_patch(3).get_parameter("filter_cutoff").raw != 21
