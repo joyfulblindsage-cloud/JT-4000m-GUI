@@ -129,6 +129,91 @@ def cmd_parameter_map(out=None, json_out=None):
         print(f"{r['key']:<24} {off:<8} {cc:<5} {r['kind']:<12} {r['label']}")
 
 
+# ---------------------------------------------------------------------------
+# P1 — patch library commands (offline .syx file operations only; no MIDI).
+# These are additive subcommands; every pre-existing command is untouched.
+# ---------------------------------------------------------------------------
+
+def _slot(n: int, label: str) -> int:
+    try:
+        v = int(n)
+    except ValueError:
+        raise ValueError(f"{label} must be an integer 1..32; got {n!r}.")
+    if not 1 <= v <= 32:
+        raise ValueError(f"{label} must be 1..32; got {v}.")
+    return v
+
+
+def cmd_library(action: str, args) -> None:
+    from .library import PatchLibrary
+
+    if action == 'inspect':
+        lib = PatchLibrary.from_file(args.file)
+        syx = parse_file(args.file)
+        chk = 'OK' if syx.checksum_ok else 'BAD'
+        print(f"file: {args.file}\nmode: {syx.mode}\nprograms: {len(lib.bank.programs)}"
+              f"\nchecksum: 0x{syx.checksum_value:02X} ({chk})")
+        for p in lib.bank.programs:
+            print(f"{p.index:02}: {p.name!r}")
+        return
+
+    if action == 'rename':
+        lib = PatchLibrary.from_file(args.file)
+        idx = _slot(args.program, 'program')
+        before = lib.get(idx).name
+        lib.rename(idx, args.name)
+        after = lib.get(idx).name
+        if args.output:
+            payload = lib.save_bank(args.output)
+            print(f"Renamed P{idx:02d} {before!r} -> {after!r}; wrote {args.output} "
+                  f"({len(payload)} bytes)")
+        else:
+            print(f"P{idx:02d}: {before!r} -> {after!r} (dry run; use --output to save)")
+        return
+
+    if action == 'duplicate':
+        lib = PatchLibrary.from_file(args.file)
+        src = _slot(args.source, 'source')
+        dst = _slot(args.target, 'target')
+        lib.duplicate(src, dst)
+        assert lib.get(dst).data == lib.get(src).data
+        if args.output:
+            payload = lib.save_bank(args.output)
+            print(f"Duplicated P{src:02d} -> P{dst:02d}; wrote {args.output} "
+                  f"({len(payload)} bytes)")
+        else:
+            print(f"P{src:02d} -> P{dst:02d}: {lib.get(dst).name!r} (dry run; use --output to save)")
+        return
+
+    if action == 'swap':
+        lib = PatchLibrary.from_file(args.file)
+        a = _slot(args.a, 'a')
+        b = _slot(args.b, 'b')
+        na, nb = lib.get(a).name, lib.get(b).name
+        lib.swap(a, b)
+        if args.output:
+            payload = lib.save_bank(args.output)
+            print(f"Swapped P{a:02d} <-> P{b:02d}; wrote {args.output} "
+                  f"({len(payload)} bytes)")
+        else:
+            print(f"P{a:02d} {na!r} <-> P{b:02d} {nb!r} (dry run; use --output to save)")
+        return
+
+    if action == 'export':
+        # Pure re-export: load, then save through the exporter (header frame
+        # preserved, checksum recomputed at export time). Also validates that
+        # our own parser accepts what we write.
+        lib = PatchLibrary.from_file(args.file)
+        payload = lib.save_bank(args.output)
+        reparsed = parse_file(args.output)
+        status = 'OK' if reparsed.checksum_ok and reparsed.raw == payload else 'MISMATCH'
+        print(f"Exported {args.file} -> {args.output} ({len(payload)} bytes, "
+              f"re-parse: {status})")
+        return
+
+    raise ValueError(f"Unknown library action: {action}")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog='jt4000m')
     sp = ap.add_subparsers(dest='cmd', required=True)
@@ -139,6 +224,15 @@ def main(argv=None):
     x = sp.add_parser('semantic-diff'); x.add_argument('a'); x.add_argument('b')
     x = sp.add_parser('cross-bank'); x.add_argument('files', nargs='+'); x.add_argument('--csv'); x.add_argument('--json')
     x = sp.add_parser('parameter-map'); x.add_argument('--csv'); x.add_argument('--json')
+
+    lib = sp.add_parser('library', help='P1 patch-library operations on local .syx files (no MIDI)')
+    libsp = lib.add_subparsers(dest='action', required=True)
+    x = libsp.add_parser('inspect'); x.add_argument('file')
+    x = libsp.add_parser('rename'); x.add_argument('file'); x.add_argument('program', type=int); x.add_argument('name'); x.add_argument('--output')
+    x = libsp.add_parser('duplicate'); x.add_argument('file'); x.add_argument('source', type=int); x.add_argument('target', type=int); x.add_argument('--output')
+    x = libsp.add_parser('swap'); x.add_argument('file'); x.add_argument('a', type=int); x.add_argument('b', type=int); x.add_argument('--output')
+    x = libsp.add_parser('export'); x.add_argument('file'); x.add_argument('output')
+
     args = ap.parse_args(argv)
     try:
         if args.cmd == 'inspect': cmd_inspect(args.file)
@@ -148,6 +242,7 @@ def main(argv=None):
         elif args.cmd == 'raw-diff': print_diff(raw_diff(parse_file(args.a), parse_file(args.b)), False)
         elif args.cmd == 'cross-bank': cmd_cross(args.files, args.csv, args.json)
         elif args.cmd == 'parameter-map': cmd_parameter_map(args.csv, args.json)
+        elif args.cmd == 'library': cmd_library(args.action, args)
     except (OSError, ValueError) as e:
         ap.error(str(e))
 

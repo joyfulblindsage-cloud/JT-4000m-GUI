@@ -133,6 +133,36 @@ class Bank:
         """Duplicate one program's data into another slot (software only)."""
         return self.replace(target, JTProgram(target, self.get(source).data, self.get(target).source_offset))
 
+    def swap(self, a: int, b: int) -> "Bank":
+        """Exchange the raw 64-byte records of two slots.
+
+        The programs keep their original byte-for-byte data; only the slot
+        order changes. Nothing else in the bank is modified.
+        """
+        pa, pb = self.get(a), self.get(b)
+        items = list(self.programs)
+        items[a - 1] = JTProgram(a, pb.data, pb.source_offset)
+        items[b - 1] = JTProgram(b, pa.data, pa.source_offset)
+        return Bank(tuple(items), source_header=self.source_header)
+
+    def move(self, source: int, target: int) -> "Bank":
+        """Move a program to another slot, shifting the programs in between.
+
+        This preserves every raw record exactly (unlike copy_program, which
+        overwrites the destination). Slots between source and target shift by
+        one position, like dragging an item in a list editor. Software-only.
+        """
+        if source == target:
+            return self
+        items = list(self.programs)
+        moved = items.pop(source - 1)
+        items.insert(target - 1, moved)
+        # Re-number indices so the Bank invariant (indices 1..32 in order)
+        # holds; raw data bytes are untouched.
+        renumbered = tuple(JTProgram(i + 1, p.data, p.source_offset)
+                           for i, p in enumerate(items))
+        return Bank(renumbered, source_header=self.source_header)
+
     @classmethod
     def empty(cls) -> "Bank":
         """A fresh 32-slot bank filled with the observed all-zero INIT record."""
