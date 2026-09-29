@@ -530,8 +530,8 @@ def test_gui_unknown_raw_value_shows_placeholder_not_wrong_option(editor):
     data = bytearray(editor.bank.get(1).data)
     data[0] = 9
     editor.bank = editor.bank.replace(1, JTProgram(1, bytes(data)))
-    editor.select_program(1)
-    assert editor.combo_osc1_wave.current() == -1
+    editor.select_program(1)  # must not raise on out-of-table raw value
+    assert editor.combo_osc1_wave.get() == "Unknown (0x09)"
     assert editor.value_vars["osc1_wave"].get() == "Unknown (0x09)"
 
 

@@ -15,3 +15,9 @@ jt4000m-gui = "jt4000m.gui:main"
 
 [tool.setuptools]
 packages = ["jt4000m"]
+
+[tool.pytest.ini_options]
+# The environment ships a broken third-party pytest plugin (libtmux applies
+# pytest marks to fixtures, which newer pytest rejects at startup).
+# Disable it so `python -m pytest` works without extra flags.
+addopts = "-p no:libtmux"
