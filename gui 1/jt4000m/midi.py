@@ -44,4 +44,13 @@ def cc_to_parameter(controller: int, value: int) -> tuple[str, int] | None:
     spec = parameter_for_cc(controller)
     if spec is None:
         return None
+    if not 0 <= value <= 127:
+        raise ValueError("MIDI CC value must be 0..127.")
+    # The device's documented CC convention for this one boolean is a
+    # threshold, while its SysEx record stores the canonical 0/1 value.
+    # Convert at this boundary so a received physical knob/button event can
+    # always be applied through the same validated editor model as an offline
+    # SysEx edit.
+    if spec.key == "ring_mod_toggle":
+        value = 0 if value <= 64 else 1
     return spec.key, value
