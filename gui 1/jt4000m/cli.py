@@ -827,6 +827,190 @@ def main(argv=None):
     x = knsp.add_parser('csv'); x.add_argument('output')
     x.add_argument('--json-out', default=None)
 
+def cmd_analyze(action, args):
+    """P1.7 OFFLINE — statistical parameter discovery from local .syx files.
+
+    analyze-bank   : dataset inventory (mode/checksum/provenance/duplicates)
+    analyze-offsets: per-offset entropy/frequency/transition table
+    registry-audit : every registry parameter vs the fixture corpus
+    cc-audit       : CC mapping sources (never hardware-confirmed offline)
+    report         : full JSON + Markdown dataset under analysis/
+    Nothing here touches MIDI; results are deterministic.
+    """
+    import json as _json
+    from pathlib import Path as _Path
+    from . import discovery as D
+
+    paths = list(args.files) if args.files else [str(p) for p in D.discover_fixtures()]
+    rep = D.generate(paths, mi_threshold=getattr(args, 'mi', 0.3))
+
+    if action == 'analyze-bank':
+        print("P1.7 DATASET INVENTORY (all provenance = REFERENCE_FIXTURE)")
+        for f in rep.files:
+            dupes = sum(len(s) for s in f.duplicate_programs.values())
+            print(f"\n{f.path}")
+            print(f"  mode: {f.mode}  programs: {f.programs}  bytes: {f.total_bytes}")
+            print(f"  checksum: stored {f.checksum_stored} expected "
+                  f"{f.checksum_expected} status {'OK' if f.checksum_ok else 'BAD'}")
+            print(f"  provenance: {f.provenance}")
+            print(f"  unique programs: {f.unique_programs}  "
+                  f"duplicate slots: {dupes}")
+            names = [n.strip() or '(empty)' for n in f.names]
+            shown = ', '.join(names[:8]) + ('...' if len(names) > 8 else '')
+            print(f"  names: {shown}")
+        return
+    if action == 'analyze-offsets':
+        print(f"{'Offset':6} {'Field':28} {'Class':20} {'Level':12} "
+              f"{'N':>3} {'Entropy':>8} {'Min':5} {'Max':5} {'Trans':>5}")
+        for p in rep.profiles:
+            mn = '-' if p.min is None else f"0x{p.min:02X}"
+            mx = '-' if p.max is None else f"0x{p.max:02X}"
+            print(f"0x{p.offset:02X}   {p.field:28} {p.classification:20} "
+                  f"{p.evidence_level:12} {p.unique_count:>3} "
+                  f"{p.entropy:>8.3f} {mn:>5} {mx:>5} {p.transition_count:>5}")
+        print("\nClassification summary:",
+              ', '.join(f'{k}={v}' for k, v in sorted(rep.classifications.items())))
+        print("NOTE: classifications describe DATA BEHAVIOUR only; unknown "
+              "offsets keep candidate_meaning=UNKNOWN (no hardware used).")
+        return
+    if action == 'registry-audit':
+        for r in rep.registry_audit:
+            print(f"{r['key']:22} off={r['offset']} cc={r['cc']} "
+                  f"kind={r['kind']} level={r['evidence_level']} "
+                  f"coverage={r['fixture_coverage']} "
+                  f"contradictions={len(r['contradictions'])} "
+                  f"hardware={'NO (REQUIRED)' if not r['hardware_evidence'] else 'YES'}")
+            for c in r['contradictions']:
+                print(f"    - {c}")
+        return
+    if action == 'cc-audit':
+        for c in rep.cc_audit:
+            print(f"CC {c['cc']:>3} -> {c['parameter']:22} off={c['offset']} "
+                  f"| source: {c['source']} | fixtures: {c['offset_fixture_evidence']} "
+                  f"| {c['hardware_evidence']}")
+        return
+    if action == 'report':
+        out_dir = args.output or 'analysis'
+        stem = args.name or 'parameter_discovery'
+        jp, mp = D.write_reports(rep, out_dir, stem)
+        print(f"Wrote {jp}")
+        print(f"Wrote {mp}")
+        print(f"Offsets analyzed: {len(rep.profiles)}; "
+              f"correlations (INFERRED): {len(rep.pairs)}; "
+              f"contradictions: {len(rep.contradictions)}; "
+              f"unknown dossiers: {len(rep.dossiers)}")
+        print("Hardware-confirmed parameters: 0 (no physical JT-4000M was used)")
+        return
+    raise ValueError(f"Unknown analyze action: {action}")
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(prog='jt4000m')
+    sp = ap.add_subparsers(dest='cmd', required=True)
+    x = sp.add_parser('inspect'); x.add_argument('file')
+    x = sp.add_parser('program'); x.add_argument('file'); x.add_argument('program', type=int)
+    x = sp.add_parser('diff'); x.add_argument('a'); x.add_argument('b')
+    x = sp.add_parser('raw-diff'); x.add_argument('a'); x.add_argument('b')
+    x = sp.add_parser('semantic-diff'); x.add_argument('a'); x.add_argument('b')
+    x = sp.add_parser('cross-bank'); x.add_argument('files', nargs='+'); x.add_argument('--csv'); x.add_argument('--json')
+    x = sp.add_parser('parameter-map'); x.add_argument('--csv'); x.add_argument('--json')
+
+    lib = sp.add_parser('library', help='P1 patch-library operations on local .syx files (no MIDI)')
+    libsp = lib.add_subparsers(dest='action', required=True)
+    x = libsp.add_parser('inspect'); x.add_argument('file')
+    x = libsp.add_parser('rename'); x.add_argument('file'); x.add_argument('program', type=int); x.add_argument('name'); x.add_argument('--output')
+    x = libsp.add_parser('duplicate'); x.add_argument('file'); x.add_argument('source', type=int); x.add_argument('target', type=int); x.add_argument('--output')
+    x = libsp.add_parser('swap'); x.add_argument('file'); x.add_argument('a', type=int); x.add_argument('b', type=int); x.add_argument('--output')
+    x = libsp.add_parser('export'); x.add_argument('file'); x.add_argument('output')
+
+    # P1.5 — midi subcommands. list/probe are discovery-only; cc/sysex-send/
+    # listen/capture touch the device ONLY when a human invokes them and are
+    # never exercised against real hardware by automated tests.
+    md = sp.add_parser('midi', help='P1.5/P1.6 MIDI transport commands '
+                       '(list/probe are safe discovery; send requires '
+                       'explicit user action; every live command writes a '
+                       'JSON session log under sessions/)')
+    mdsp = md.add_subparsers(dest='action', required=True)
+
+    def _common(p):
+        p.add_argument('--sessions-dir', default=None,
+                       help='directory for session logs (default ./sessions)')
+        p.add_argument('--no-session-log', action='store_true',
+                       help='do not write the machine-readable session JSON')
+        return p
+
+    _common(mdsp.add_parser('list'))
+    x = _common(mdsp.add_parser('probe')); x.add_argument('--name', default=None,
+        help='substring to match endpoints by name (default: JT-4000M)')
+    x = _common(mdsp.add_parser('cc', aliases=['cc-test'])); x.add_argument('channel', type=int)
+    x.add_argument('controller', type=int); x.add_argument('value', type=int)
+    x.add_argument('--port', type=int, default=None)
+    x.add_argument('--device', default=None)
+    x = _common(mdsp.add_parser('sysex-send')); x.add_argument('file')
+    x.add_argument('--port', type=int, default=None); x.add_argument('--device', default=None)
+    x.add_argument('--yes', action='store_true',
+                   help='skip interactive YES confirmation (for scripts; '
+                        'NEVER used in automated tests)')
+    x = _common(mdsp.add_parser('listen')); x.add_argument('--port', type=int, default=None)
+    x.add_argument('--device', default=None); x.add_argument('--timeout', type=float, default=10.0)
+    x.add_argument('--raw-log', default=None,
+                   help='log EVERY received packet (typed hex) to this JSONL file')
+    x = _common(mdsp.add_parser('capture')); x.add_argument('--port', type=int, default=None)
+    x.add_argument('--device', default=None); x.add_argument('--timeout', type=float, default=10.0)
+    x.add_argument('--output', required=True, help='write received SysEx dump here')
+    x.add_argument('--raw-log', default=None,
+                   help='log EVERY received packet (typed hex) to this JSONL file')
+
+    # P1.5 — experiment subcommands (pure offline analysis of .syx files).
+    ex = sp.add_parser('experiment', help='P1.5 A/B SysEx experiment protocol '
+                       '(offline file analysis only; sends no MIDI)')
+    exsp = ex.add_subparsers(dest='action', required=True)
+    x = exsp.add_parser('compare'); x.add_argument('before'); x.add_argument('after')
+    x.add_argument('--program', type=int, default=1)
+    x.add_argument('--hypothesis', default=None,
+                   help='registry parameter key this experiment is about')
+    x.add_argument('--before-prov', choices=('fixture', 'device', 'auto'), default='fixture')
+    x.add_argument('--after-prov', choices=('fixture', 'device', 'auto'), default='fixture')
+    x.add_argument('--json', default=None); x.add_argument('--md', default=None)
+    x.add_argument('--log', action='store_true',
+                   help='append evidence records to experiments/evidence_log.jsonl')
+    x = exsp.add_parser('report'); x.add_argument('parameter')
+    x.add_argument('--program', type=int, default=1)
+    exsp.add_parser('registry-status')
+
+    # P1.6 OFFLINE — reverse-engineering knowledge reports (fixtures only).
+    kn = sp.add_parser('knowledge', help='P1.6 offline RE knowledge base '
+                       '(cross-bank statistics, CC/offset matrix, conflicts; '
+                       'reads local .syx files only, no MIDI)')
+    knsp = kn.add_subparsers(dest='action', required=True)
+    x = knsp.add_parser('report'); x.add_argument('--all-unknown',
+        action='store_true', help='also list fixture-constant unknown offsets')
+    x = knsp.add_parser('csv'); x.add_argument('output')
+    x.add_argument('--json-out', default=None)
+
+    # P1.7 OFFLINE — statistical parameter discovery over the local .syx corpus.
+    an = sp.add_parser('analyze', help='P1.7 offline statistical RE '
+                       '(dataset inventory, entropy/transition tables, '
+                       'registry & CC audits, JSON+Markdown reports; '
+                       'reads local files only, no MIDI, deterministic)')
+    ansp = an.add_subparsers(dest='action', required=True)
+    for name_, helptxt in (('analyze-bank', 'dataset inventory of all .syx files'),
+                           ('analyze-offsets', 'per-offset entropy/frequency/transition table'),
+                           ('registry-audit', 'every registry parameter vs the fixture corpus'),
+                           ('cc-audit', 'CC mapping sources; never hardware-confirmed offline'),
+                           ('report', 'write full JSON + Markdown discovery dataset')):
+        x = ansp.add_parser(name_, help=helptxt)
+        x.add_argument('files', nargs='*',
+                       help='.syx files (default: auto-discovered corpus, '
+                            'deduplicated by content hash)')
+        x.add_argument('--mi', type=float, default=0.3,
+                       help='normalized-MI threshold for correlation pairs')
+        if name_ == 'report':
+            x.add_argument('--output', default=None,
+                           help='output directory (default: analysis/)')
+            x.add_argument('--name', default=None,
+                           help='report stem (default: parameter_discovery)')
+
     args = ap.parse_args(argv)
     try:
         if args.cmd == 'inspect': cmd_inspect(args.file)
@@ -840,6 +1024,7 @@ def main(argv=None):
         elif args.cmd == 'midi': cmd_midi(args.action, args)
         elif args.cmd == 'experiment': cmd_experiment(args.action, args)
         elif args.cmd == 'knowledge': cmd_knowledge(args.action, args)
+        elif args.cmd == 'analyze': cmd_analyze(args.action, args)
     except RuntimeError as e:
         ap.error(str(e))
     except (OSError, ValueError) as e:
