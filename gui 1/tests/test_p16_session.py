@@ -247,7 +247,9 @@ def test_ab_report_json_contains_provenance(tmp_path, all_init_saw):
     res = _compare(a, b, hypothesis="osc1_wave",
                    before_prov=PROVENANCE_FIXTURE, after_prov=PROVENANCE_FIXTURE)
     d = json.loads(res.to_json())
-    assert d["before_provenance"] == "REFERENCE_FIXTURE"
+    # JSON schema nests provenance: {"before": {"path", "provenance"}, ...}
+    assert d["before"]["provenance"] == "REFERENCE_FIXTURE"
+    assert d["after"]["provenance"] == "REFERENCE_FIXTURE"
     assert d["verdict"] == "CONFIRMED"
     md = res.to_markdown()
     assert "REFERENCE_FIXTURE" in md
