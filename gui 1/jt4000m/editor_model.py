@@ -899,17 +899,17 @@ class EditorModel:
 
     def edit_parameter(self, key: str, value: int) -> PatchState:
         self._working = self.current_patch().set_parameter(key, value)
-        self._dirty = True
+        self._dirty = self._session_modified()
         return self._working
 
     def edit_parameters(self, updates: Mapping[str, int]) -> PatchState:
         self._working = self.current_patch().set_parameters(updates)
-        self._dirty = True
+        self._dirty = self._session_modified()
         return self._working
 
     def edit_name(self, name: str) -> PatchState:
         self._working = self.current_patch().set_name(name)
-        self._dirty = True
+        self._dirty = self._session_modified()
         return self._working
 
     def commit(self) -> Bank:
