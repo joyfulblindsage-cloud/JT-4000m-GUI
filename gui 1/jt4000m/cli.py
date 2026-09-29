@@ -251,6 +251,26 @@ def _print_ports(tr):
         print(f"{p.index}: {p.name}")
 
 
+def _session(tr, note: str = ""):
+    """P1.6: every live midi command records a machine-readable session log."""
+    from .session import SessionLog
+    sl = SessionLog(tr.backend_name)
+    if note:
+        sl.note(note)
+    return sl
+
+
+def _save_session(sl, args) -> None:
+    """Save the session JSON unless --no-session-log was passed. Prints path."""
+    if getattr(args, 'no_session_log', False):
+        return
+    try:
+        path = sl.save(getattr(args, 'sessions_dir', None))
+        print(f"Session log:\n  {path}")
+    except OSError as e:  # logging must never mask the real MIDI result
+        print(f"WARNING: session log could not be saved: {e}")
+
+
 def cmd_midi(action, args):
     tr = _transport()
 
@@ -259,31 +279,103 @@ def cmd_midi(action, args):
         return
 
     if action == 'probe':
-        # Discovery only: find JT-4000M endpoints BY NAME. Sends nothing.
+        # P1.6 probe: discovery + open/close test ONLY. Nothing is ever sent.
         needle = args.name or DEVICE_NAME_HINT
-        _print_ports(tr)
+        sl = _session(tr)
+        try:
+            _print_ports(tr)
+        except RuntimeError as e:
+            # Enumeration can fail on systems without a working MIDI
+            # subsystem (e.g. no ALSA sequencer). Honest report, no crash.
+            print(f"MIDI PROBE for {needle!r} (backend: {tr.backend_name}):")
+            print(f"  enumeration failed: {e}")
+            print("RESULT: TRANSPORT NOT AVAILABLE")
+            print("NOTE: this is an environment/backend limitation, not "
+                  "proof about the device; on Windows/winmm re-run the probe.")
+            sl.add_action('probe', rx_count=0, error=str(e),
+                          detail={"result": "TRANSPORT NOT AVAILABLE",
+                                  "sent": 0})
+            _save_session(sl, args)
+            raise SystemExit(2)
         matches = tr.find(needle)
-        print(f"\nPROBE for {needle!r}:")
+        print(f"\nMIDI PROBE for {needle!r} (backend: {tr.backend_name}):")
         if not matches:
             print("  no endpoints matched; NOT assuming any port index.")
+            self_note = ("probe: no endpoints matched; RESULT: TRANSPORT NOT "
+                         "AVAILABLE")
+            print(self_note)
+            sl.add_action('probe', rx_count=0,
+                          detail={"matched": 0, "sent": 0})
+            _save_session(sl, args)
             return
         for p in matches:
             print(f"  [{p.direction}] {p.index}: {p.name}")
         ins = [p for p in matches if p.direction == 'input']
         outs = [p for p in matches if p.direction == 'output']
-        print("\nProbe result: discovery only — NO SysEx was sent, NO "
-              "parameters were changed, and communication with the device "
-              "is still UNVERIFIED until an RX/SysEx response is captured.")
-        if ins and outs:
-            print("Both input and output endpoints found by name; use "
-                  "`midi listen` (RX) to verify the device actually talks.")
+        sl.set_ports(input_port=ins[0] if ins else None,
+                     output_port=outs[0] if outs else None)
+        # Open/close test — no data crosses the wire.
+        in_ok = out_ok = None
+        if ins:
+            try:
+                tr.open_input(ins[0])
+                in_ok = True
+            except Exception as e:
+                in_ok = False
+                print(f"  INPUT OPEN failed: {e}")
+            finally:
+                try:
+                    tr.close()
+                except Exception:
+                    pass
+        if outs:
+            try:
+                h = tr.open_output(outs[0])
+                out_ok = True
+                if tr.backend_name != 'winmm' and h is not None:
+                    try:
+                        h.close_port()
+                    except Exception:
+                        pass
+            except Exception as e:
+                out_ok = False
+                print(f"  OUTPUT OPEN failed: {e}")
+        print(f"INPUT OPEN : {'OK' if in_ok else ('N/A' if in_ok is None else 'FAILED')}")
+        print(f"OUTPUT OPEN: {'OK' if out_ok else ('N/A' if out_ok is None else 'FAILED')}")
+        transport_available = bool(in_ok or out_ok)
+        print("RESULT:", "TRANSPORT AVAILABLE" if transport_available
+              else "TRANSPORT NOT AVAILABLE")
+        print("\nProbe result: discovery + open/close only — NO SysEx was "
+              "sent, NO parameters were changed.")
+        print("This proves AT MOST 'TRANSPORT AVAILABLE'. It does NOT say "
+              "'DEVICE VERIFIED': device behavior remains UNVERIFIED until an "
+              "A/B SysEx capture (midi capture + experiment compare) exists.")
+        sl.add_action('probe', rx_count=0, detail={
+            "matched": len(matches),
+            "input_open_ok": in_ok, "output_open_ok": out_ok,
+            "result": ("TRANSPORT AVAILABLE" if transport_available
+                       else "TRANSPORT NOT AVAILABLE"),
+            "sent": 0,
+        })
+        _save_session(sl, args)
         return
 
     if action == 'cc':
         # Explicit diagnostic TX. Requires a resolvable output endpoint.
         out_port = _resolve_output(tr, args)
+        sl = _session(tr)
+        sl.set_ports(output_port=out_port)
         rep = tr.send_cc(out_port, args.channel, args.controller, args.value)
         print(rep.format())
+        sl.add_action('cc', tx_bytes=rep.tx_bytes, api_ok=rep.api_ok,
+                      error=rep.error, rx_count=0,
+                      detail={"channel": args.channel,
+                              "controller": args.controller,
+                              "value": args.value,
+                              "device_response": "NOT VERIFIED"})
+        sl.note("TX-level result only; the synth's reaction was not and "
+                "cannot be concluded from this command alone.")
+        _save_session(sl, args)
         if not rep.api_ok:
             raise SystemExit(2)
         return
@@ -300,56 +392,109 @@ def cmd_midi(action, args):
         print(f"File:\n  {args.file}\nMode:\n  {syx.mode}\nPrograms:\n  "
               f"{len(syx.programs)}\nChecksum:\n  {chk} "
               f"(0x{syx.checksum_value:02X})\nBytes:\n  {len(syx.raw)}")
+        print("Provenance of this file: REFERENCE_FIXTURE (bundled analysis "
+              "bank) unless you know otherwise.")
         out_port = _resolve_output(tr, args)
+        sl = _session(tr)
+        sl.set_ports(output_port=out_port)
+        sl.add_file(args.file, "fixture", checksum_status=chk)
         print(f"Send to:\n  [{out_port.index}] {out_port.name}")
         if not args.yes:
             ans = input("Confirm: type YES to send: ").strip()
             if ans != 'YES':
                 print("Aborted; nothing was sent.")
+                sl.add_action('sysex-send-aborted', rx_count=0)
+                _save_session(sl, args)
                 return
         rep = tr.send_sysex(out_port, syx.raw)
         print(rep.format())
+        sl.add_action('sysex-send', tx_bytes=rep.tx_bytes, api_ok=rep.api_ok,
+                      error=rep.error, rx_count=0,
+                      detail={"file": str(args.file), "mode": syx.mode,
+                              "device_response": "NOT VERIFIED"})
+        sl.note("TX-level result only. Whether the JT-4000M applied the "
+                "bank requires an A/B capture afterwards (DEVICE BEHAVIOR "
+                "level), never assumed here.")
+        _save_session(sl, args)
         if not rep.api_ok:
             raise SystemExit(2)
         return
 
     if action in ('listen', 'capture'):
+        from .capture import CaptureBuffer
         in_port = _resolve_input(tr, args)
         out_path = getattr(args, 'output', None)
+        raw_path = getattr(args, 'raw_log', None)
         timeout = args.timeout
+        sl = _session(tr)
+        sl.set_ports(input_port=in_port)
         print(f"Listening on input [{in_port.index}] {in_port.name} "
               f"for {timeout:.1f}s...")
         print("Waiting for MIDI...")
-        from .transport import PortInfo  # noqa: F401  (typing clarity)
-        got = 0
-        captures = []
+        buf = CaptureBuffer()
         try:
             tr.open_input(in_port)
             for ts, data in tr.receive(timeout=timeout):
-                got += 1
-                kind = classify_midi(data)
+                rec = buf.add(ts, data)
                 shown = data if len(data) <= 32 else data[:24] + b'..'
                 hexed = ' '.join(f'{b:02X}' for b in shown)
-                print(f"[{ts:.3f}] {kind:20} len={len(data):5}  {hexed}")
-                if data.startswith(b'\xF0'):
-                    captures.append(data)
+                print(f"[{ts:.3f}] {rec.kind:20} len={len(data):5}  {hexed}")
         except RuntimeError as e:
             print(f"Input unavailable: {e}")
+            sl.add_action(action, rx_count=0, error=str(e))
+            _save_session(sl, args)
             raise SystemExit(2)
         finally:
             tr.close()
-        if got == 0:
+        label = buf.result_label()
+        counts = buf.counts_by_kind()
+        print(f"\nRX messages: {buf.total}"
+              + ("  (" + ", ".join(f"{k}: {v}" for k, v in
+                                   sorted(counts.items())) + ")"
+                 if counts else ""))
+        print(f"RESULT: {label}")
+        if buf.total == 0:
             print("No MIDI received within the timeout. This is NOT a Python "
                   "error — absence of RX simply means no device response was "
                   "observed (DEVICE BEHAVIOR: NOT VERIFIED).")
+        saved = None
         if out_path is not None:
-            if not captures:
-                print(f"--output given but no SysEx was received; {out_path} "
-                      "was NOT written.")
+            saved = buf.save_last_sysex(out_path)
+            if saved is None:
+                print(f"--output given but no COMPLETE SysEx was received; "
+                      f"{out_path} was NOT written.")
             else:
-                Path(out_path).write_bytes(captures[-1])
-                print(f"Saved last SysEx capture ({len(captures[-1])} bytes) "
-                      f"to {out_path}")
+                print(f"Saved last complete SysEx capture "
+                      f"({saved.stat().st_size} bytes) to {saved} "
+                      "[CAPTURED_FROM_DEVICE]")
+                # Honest post-check: does it even parse as a JT-4000M dump?
+                chk_note = ""
+                try:
+                    from .syx import parse_file as pf2
+                    s2 = pf2(saved)
+                    chk_note = ('OK' if s2.checksum_ok else
+                                f"BAD (0x{s2.checksum_value:02X}, expected "
+                                f"0x{s2.checksum_expected:02X})")
+                    print(f"Parse check: mode={s2.mode}, "
+                          f"programs={len(s2.programs)}, checksum={chk_note}")
+                except Exception as e:
+                    chk_note = f"PARSE FAILED: {e}"
+                    print(f"Parse check: {chk_note} — kept raw bytes as "
+                          "captured; do NOT feed it to experiments without "
+                          "inspection.")
+                sl.add_file(saved, "capture",
+                            provenance="CAPTURED_FROM_DEVICE",
+                            checksum_status=chk_note,
+                            messages=len(buf.sysex_complete))
+        if raw_path is not None:
+            rp = buf.save_all(raw_path)
+            print(f"All {buf.total} RX packets logged to {rp}")
+            sl.add_file(rp, "rx-log", provenance="CAPTURED_FROM_DEVICE",
+                        messages=buf.total)
+        sl.add_action(action, rx_count=buf.total,
+                      detail={"counts": counts, "result": label,
+                              "sent": 0})
+        _save_session(sl, args)
         return
 
     raise ValueError(f"Unknown midi action: {action}")
@@ -417,15 +562,22 @@ def cmd_experiment(action, args):
                              registry_status, PROVENANCE_FIXTURE,
                              PROVENANCE_DEVICE)
 
-    def prov(v):
-        return PROVENANCE_DEVICE if v == 'device' else PROVENANCE_FIXTURE
+    def prov(v, path=None):
+        # P1.6: 'auto' detects CAPTURED_FROM_DEVICE via recorded capture
+        # files (sessions/*.json) and REFERENCE_FIXTURE for bundled banks.
+        if v == 'device':
+            return PROVENANCE_DEVICE
+        if v == 'fixture':
+            return PROVENANCE_FIXTURE
+        from .experiment import detect_provenance
+        return detect_provenance(path)
 
     if action == 'compare':
         res = compare_experiment(
             args.before, args.after, program=args.program,
             hypothesis=args.hypothesis,
-            before_provenance=prov(args.before_prov),
-            after_provenance=prov(args.after_prov))
+            before_provenance=prov(args.before_prov, args.before),
+            after_provenance=prov(args.after_prov, args.after))
         print(res.summary_text())
 
         def _write(path, text):
@@ -459,18 +611,35 @@ def cmd_experiment(action, args):
         print(f"Parameter : {args.parameter} ({spec.label})\n"
               f"SysEx offset: {off}\nExpected CC: {cc}\n"
               f"Program slot: {args.program:02d}\n\n"
+              "REQUEST-DUMP STATUS:\n"
+              "  No documented/established JT-4000M SysEx request-dump "
+              "command exists in this project.\n"
+              "  REQUEST_DUMP: NOT ESTABLISHED — the tool will NEVER send an\n"
+              "  invented request packet (no guessing of manufacturer/"
+              "realtime-dump bytes).\n"
+              "  A capture therefore requires a device-initiated dump (e.g. a\n"
+              "  front-panel bank-dump action, if the synth has one) observed\n"
+              "  via `midi listen` / `midi capture`.\n\n"
               "Workflow (manual, hardware side):\n"
-              f"  1. python -m jt4000m.cli midi capture --output BEFORE.syx\n"
-              "     (dump the current state from the JT-4000M)\n"
-              "  2. Change the parameter physically on the synth.\n"
-              f"  3. python -m jt4000m.cli midi capture --output AFTER.syx\n"
+              "  1. python -m jt4000m.cli midi capture --output BEFORE.syx "
+              "--timeout 60\n     (start listening, then trigger a dump from "
+              "the JT-4000M)\n"
+              "  2. Change ONLY this parameter physically on the synth.\n"
+              "  3. python -m jt4000m.cli midi capture --output AFTER.syx "
+              "--timeout 60\n"
               "  4. python -m jt4000m.cli experiment compare BEFORE.syx "
               f"AFTER.syx --program {args.program} --hypothesis "
               f"{args.parameter} --before-prov device --after-prov device "
               "--log\n\n"
-              "The tool will then classify every changed byte and give a "
-              "CONFIRMED / AMBIGUOUS verdict without ever renaming unknown "
-              "bytes automatically.")
+              "Interpretation rules (fixed, no guessing):\n"
+              "  * only bytes actually received over a MIDI input are "
+              "CAPTURED_FROM_DEVICE;\n"
+              "    bundled banks remain REFERENCE_FIXTURE;\n"
+              "  * CONFIRMED requires exactly the hypothesised offset to "
+              "change;\n"
+              "  * any additional changed byte => AMBIGUOUS, listed, never "
+              "auto-attributed;\n"
+              "  * TX success alone NEVER means DEVICE BEHAVIOR VERIFIED.")
         return
 
     if action == 'registry-status':
@@ -484,6 +653,94 @@ def cmd_experiment(action, args):
         return
 
     raise ValueError(f"Unknown experiment action: {action}")
+
+
+def cmd_knowledge(action, args):
+    """P1.6 OFFLINE — reverse-engineering knowledge reports (no MIDI)."""
+    from . import knowledge as K
+    if action == 'report':
+        rep = K.generate()
+        c = rep.counts()
+        print("JT-4000M OFFLINE KNOWLEDGE REPORT (all evidence REFERENCE_FIXTURE)")
+        print(f"Known parameters: {c['known_parameters']}")
+        print(f"Fixture-observed offsets: {c['fixture_observed']}")
+        print(f"Static CC mappings: {c['static_cc_mappings']} "
+              f"(FIXTURE_OBSERVED_SYSEX corroborated: {c['fixture_observed_cc']})")
+        print(f"Hardware-confirmed parameters: {c['hardware_confirmed']}")
+        print(f"Unknown offsets: {c['unknown_offsets']}")
+        print(f"Fixture-constant offsets: {c['fixture_constant_offsets']}")
+        print(f"Name bytes: 9 (0x37..0x3F)")
+        print(f"Correlation hypotheses: {c['correlation_hypotheses']}")
+        print(f"Conflicts: {c['conflicts']}")
+        print("\nFixtures:")
+        for f in rep.fixtures:
+            chk = 'OK' if f['checksum_ok'] else 'BAD'
+            print(f"  {f['file']:<42} {f['mode']:<7} "
+                  f"programs={f['programs']:>2} checksum={chk}")
+        print("\nPARAMETER KNOWLEDGE MATRIX (offset | param | CC | fixture | hardware | status)")
+        print('-' * 100)
+        for r in rep.offsets:
+            if r.status == K.STATUS_NAME:
+                continue
+            if r.status == K.STATUS_UNKNOWN and r.unique_count == 1 and not args.all_unknown:
+                continue
+            fix = 'YES' if r.confidence in (K.CONF_FIXTURE, K.CONF_HW) else 'const/static'
+            hw = 'YES' if r.confidence == K.CONF_HW else 'NO'
+            key = r.parameter_key or '—'
+            cc = str(r.cc) if r.cc is not None else '—'
+            print(f"0x{r.offset:02X}   {key:<22} CC:{cc:<4} fixture:{fix:<12} hw:{hw:<4} "
+                  f"{r.status:<15} uniq={r.unique_count:>3} [{r.min:02X}..{r.max:02X}]")
+        print("\nCC <-> SYSEX MAPPING STATUS (never HARDWARE_CONFIRMED offline)")
+        print('-' * 100)
+        for m in rep.cc_table:
+            off = m['sysex_offset'] or 'not established'
+            print(f"CC {m['cc']:<3} -> {m['key']:<22} offset {off:<15} {m['status']}")
+        if rep.corr:
+            print("\nCORRELATIONS (HYPOTHESIS ONLY — never promoted automatically)")
+            for x in rep.corr:
+                print(f"  0x{int(x['unknown_offset'],16):02X}... "
+                      f"{x['unknown_offset']} ~ {x['correlated_with']} "
+                      f"(jaccard={x['jaccard']}) [{x['status']}]")
+        if rep.conflicts:
+            print("\nCONFLICTS (OPEN — no source auto-wins)")
+            for cf in rep.conflicts:
+                print(f"  [{cf['topic']}] A={cf['source_a']} B={cf['source_b']}")
+                print(f"      observed: {cf['observed']}  status: {cf['status']}")
+        print("\nCHECKSUMS (algorithm unchanged; coverage verified)")
+        for srow in rep.checksums:
+            print(f"  {srow['file']:<42} stored={srow['stored_checksum']} "
+                  f"calc={srow['calculated_checksum']} {srow['status']}")
+        print("\nNAME FIELD STUDY")
+        n = rep.name
+        print(f"  programs={n['programs_analyzed']} distinct={n['distinct_names']} "
+              f"max_len={n['max_used_length']} pad00={n['padding_0x00_programs']} "
+              f"pad20={n['padding_0x20_programs']} all_7bit={n['all_bytes_7bit']}")
+        print("\nNOTE: fixture-derived CONFIRMED verdicts validate the PROTOCOL "
+              "only;\nDEVICE BEHAVIOR VERIFIED requires CAPTURED_FROM_DEVICE "
+              "evidence.")
+        return
+    if action == 'csv':
+        import csv as _csv, json as _json
+        rep = K.generate()
+        out_path = Path(args.output)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(out_path, 'w', newline='', encoding='utf-8') as fh:
+            w = _csv.writer(fh)
+            w.writerow(['offset', 'field', 'status', 'key', 'kind', 'cc',
+                        'unique_count', 'min', 'max', 'fixture_constant',
+                        'confidence'])
+            for r in rep.offsets:
+                w.writerow([f"0x{r.offset:02X}", r.field, r.status,
+                            r.parameter_key or '', r.kind or '',
+                            '' if r.cc is None else r.cc, r.unique_count,
+                            f"0x{r.min:02X}", f"0x{r.max:02X}",
+                            r.fixture_constant, r.confidence])
+        db = K.build_evidence_db()
+        Path(args.json_out or Path(args.output).with_suffix('.json')).write_text(
+            _json.dumps(db, ensure_ascii=False, indent=2), encoding='utf-8')
+        print(f"Wrote {args.output} and evidence JSON")
+        return
+    raise ValueError(f"Unknown knowledge action: {action}")
 
 
 def main(argv=None):
@@ -508,27 +765,40 @@ def main(argv=None):
     # P1.5 — midi subcommands. list/probe are discovery-only; cc/sysex-send/
     # listen/capture touch the device ONLY when a human invokes them and are
     # never exercised against real hardware by automated tests.
-    md = sp.add_parser('midi', help='P1.5 MIDI transport commands '
+    md = sp.add_parser('midi', help='P1.5/P1.6 MIDI transport commands '
                        '(list/probe are safe discovery; send requires '
-                       'explicit user action)')
+                       'explicit user action; every live command writes a '
+                       'JSON session log under sessions/)')
     mdsp = md.add_subparsers(dest='action', required=True)
-    mdsp.add_parser('list')
-    x = mdsp.add_parser('probe'); x.add_argument('--name', default=None,
+
+    def _common(p):
+        p.add_argument('--sessions-dir', default=None,
+                       help='directory for session logs (default ./sessions)')
+        p.add_argument('--no-session-log', action='store_true',
+                       help='do not write the machine-readable session JSON')
+        return p
+
+    _common(mdsp.add_parser('list'))
+    x = _common(mdsp.add_parser('probe')); x.add_argument('--name', default=None,
         help='substring to match endpoints by name (default: JT-4000M)')
-    x = mdsp.add_parser('cc', aliases=['cc-test']); x.add_argument('channel', type=int)
+    x = _common(mdsp.add_parser('cc', aliases=['cc-test'])); x.add_argument('channel', type=int)
     x.add_argument('controller', type=int); x.add_argument('value', type=int)
     x.add_argument('--port', type=int, default=None)
     x.add_argument('--device', default=None)
-    x = mdsp.add_parser('sysex-send'); x.add_argument('file')
+    x = _common(mdsp.add_parser('sysex-send')); x.add_argument('file')
     x.add_argument('--port', type=int, default=None); x.add_argument('--device', default=None)
     x.add_argument('--yes', action='store_true',
                    help='skip interactive YES confirmation (for scripts; '
                         'NEVER used in automated tests)')
-    x = mdsp.add_parser('listen'); x.add_argument('--port', type=int, default=None)
+    x = _common(mdsp.add_parser('listen')); x.add_argument('--port', type=int, default=None)
     x.add_argument('--device', default=None); x.add_argument('--timeout', type=float, default=10.0)
-    x = mdsp.add_parser('capture'); x.add_argument('--port', type=int, default=None)
+    x.add_argument('--raw-log', default=None,
+                   help='log EVERY received packet (typed hex) to this JSONL file')
+    x = _common(mdsp.add_parser('capture')); x.add_argument('--port', type=int, default=None)
     x.add_argument('--device', default=None); x.add_argument('--timeout', type=float, default=10.0)
     x.add_argument('--output', required=True, help='write received SysEx dump here')
+    x.add_argument('--raw-log', default=None,
+                   help='log EVERY received packet (typed hex) to this JSONL file')
 
     # P1.5 — experiment subcommands (pure offline analysis of .syx files).
     ex = sp.add_parser('experiment', help='P1.5 A/B SysEx experiment protocol '
@@ -538,14 +808,24 @@ def main(argv=None):
     x.add_argument('--program', type=int, default=1)
     x.add_argument('--hypothesis', default=None,
                    help='registry parameter key this experiment is about')
-    x.add_argument('--before-prov', choices=('fixture', 'device'), default='fixture')
-    x.add_argument('--after-prov', choices=('fixture', 'device'), default='fixture')
+    x.add_argument('--before-prov', choices=('fixture', 'device', 'auto'), default='fixture')
+    x.add_argument('--after-prov', choices=('fixture', 'device', 'auto'), default='fixture')
     x.add_argument('--json', default=None); x.add_argument('--md', default=None)
     x.add_argument('--log', action='store_true',
                    help='append evidence records to experiments/evidence_log.jsonl')
     x = exsp.add_parser('report'); x.add_argument('parameter')
     x.add_argument('--program', type=int, default=1)
     exsp.add_parser('registry-status')
+
+    # P1.6 OFFLINE — reverse-engineering knowledge reports (fixtures only).
+    kn = sp.add_parser('knowledge', help='P1.6 offline RE knowledge base '
+                       '(cross-bank statistics, CC/offset matrix, conflicts; '
+                       'reads local .syx files only, no MIDI)')
+    knsp = kn.add_subparsers(dest='action', required=True)
+    x = knsp.add_parser('report'); x.add_argument('--all-unknown',
+        action='store_true', help='also list fixture-constant unknown offsets')
+    x = knsp.add_parser('csv'); x.add_argument('output')
+    x.add_argument('--json-out', default=None)
 
     args = ap.parse_args(argv)
     try:
@@ -559,6 +839,7 @@ def main(argv=None):
         elif args.cmd == 'library': cmd_library(args.action, args)
         elif args.cmd == 'midi': cmd_midi(args.action, args)
         elif args.cmd == 'experiment': cmd_experiment(args.action, args)
+        elif args.cmd == 'knowledge': cmd_knowledge(args.action, args)
     except RuntimeError as e:
         ap.error(str(e))
     except (OSError, ValueError) as e:

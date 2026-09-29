@@ -52,7 +52,8 @@ PARAMETERS: tuple[ParameterSpec, ...] = (
     ParameterSpec("osc1_fine", "OSC1 Fine Tune", 5, 111, "continuous", orientation="centered", section="OSCILLATORS"),
     ParameterSpec("osc2_coarse", "OSC2 Coarse Tune", 6, 116, "continuous", orientation="centered", section="OSCILLATORS"),
     ParameterSpec("osc2_fine", "OSC2 Fine Tune", 7, 112, "continuous", orientation="centered", section="OSCILLATORS"),
-    ParameterSpec("osc_balance", "OSC Balance", 8, 29, section="OSCILLATORS"),
+    # NOTE: the duplicate osc_balance entry (offset 8) was removed here; it was
+    # a data conflict recorded in the P1.6 knowledge report CONFLICTS section.
     ParameterSpec("filter_cutoff", "VCF Cutoff", 12, 74, section="FILTER"),
     ParameterSpec("filter_resonance", "VCF Resonance", 13, 71, section="FILTER"),
     ParameterSpec("filter_env_amount", "Filter Envelope Amount", 22, 47, section="FILTER"),
@@ -191,8 +192,9 @@ def writable_parameters() -> tuple[ParameterSpec, ...]:
     """Editable parameters the editor may actually change offline.
 
     Excludes enum parameters that have no confirmed value table yet (e.g.
-    portamento_mode: only OFF is observed; nothing else is invented), and
-    excludes duplicate keys of osc_balance so each byte is represented once.
+    portamento_mode: only OFF is observed; nothing else is invented).
+    (The historical osc_balance duplicate entry was removed from PARAMETERS
+    in P1.6; the seen-set below stays as a cheap safety net.)
     """
     seen: set[str] = set()
     out: list[ParameterSpec] = []

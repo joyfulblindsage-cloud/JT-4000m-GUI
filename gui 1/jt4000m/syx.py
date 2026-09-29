@@ -27,6 +27,12 @@ FIELDS = {
 }
 WAVE_NAMES = {0: "OFF", 1: "TRI", 2: "SQUARE", 3: "PULSE", 4: "SAW", 5: "RAMP", 6: "SUPER SAW"}
 
+# Fixture-observed wave value 0x07 appears in commercial banks (Synthmania
+# 'FUNMYLEAD', 'CLAP') but has NO confirmed name anywhere in the project.
+# It is deliberately left unlabelled ("Unknown (0x07)") — naming it would be
+# inventing a parameter value (Hardware TODO). Recorded as an OPEN conflict by
+# the P1.6 knowledge report.
+
 # Enum label tables established by the project so far. Values without a
 # confirmed name are rendered as "Unknown (0xNN)" — never invented here.
 # LFO waveforms and destinations use the JT-4000M manual's first-menu entries;
