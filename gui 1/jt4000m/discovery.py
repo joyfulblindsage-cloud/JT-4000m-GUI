@@ -47,9 +47,11 @@ LEVEL_OBSERVED = "OBSERVED"
 LEVEL_INFERRED = "INFERRED"
 LEVEL_HARDWARE = "HARDWARE_CONFIRMED"   # vocabulary member only; NEVER emitted offline
 
-NAME_RANGE = range(54, 64)             # patch-name bytes 0x36..0x3F (last 9
-                                       # bytes of the record; fixture evidence:
-                                       # ALL INIT SAW ends ...01 00 'INIT SAW ')
+NAME_RANGE = range(55, 64)             # patch-name bytes 0x37..0x3F: the last
+                                       # 9 bytes of the record; fixture
+                                       # evidence: ALL INIT SAW ends
+                                       # ...01 | 00 | 'INIT SAW ' (byte 54 is
+                                       # a structural zero, NOT part of name)
 
 # Data-behaviour classifications (NOT claims about parameter meaning).
 CLS_NAME = "NAME"
