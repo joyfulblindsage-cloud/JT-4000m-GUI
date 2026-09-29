@@ -31,7 +31,9 @@ from .analyzer import cross_bank
 from .experiment import (CLASS_NAME, CONF_EXPERIMENTAL, EVIDENCE_AB_SYSEX,
                          PROVENANCE_DEVICE, read_evidence)
 from .model import BY_CC, BY_KEY, BY_OFFSET, PARAMETERS, ParameterSpec
-from .syx import FIELDS, PROGRAM_LEN, SysExFile, checksum, field_name, parse_file, semantic_value
+from .syx import (FIELDS, NAME_END, NAME_START, PROGRAM_LEN,
+                  SysExFile, checksum, field_name, parse_file,
+                  semantic_value)
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -134,7 +136,7 @@ def build_offset_matrix(banks: list[tuple[str, SysExFile]],
     for r in stats:
         off = r["offset"]
         spec = BY_OFFSET.get(off)
-        if 55 <= off <= 63:
+        if NAME_START <= off < NAME_END:
             status, key, kind, cc = STATUS_NAME, None, "text", None
             conf = CONF_FIXTURE
         elif spec is not None:
@@ -276,7 +278,7 @@ def correlations(offset_rows: list[OffsetRow],
 
 
 # ---------------------------------------------------------------------------
-# Name encoding study (0x37..0x3F)
+# Name encoding study (0x36..0x3F)
 # ---------------------------------------------------------------------------
 
 def name_study(banks: list[tuple[str, SysExFile]]) -> dict:
@@ -287,7 +289,7 @@ def name_study(banks: list[tuple[str, SysExFile]]) -> dict:
     padded_space = padded_zero = trailing_mixed = 0
     for _, b in banks:
         for p in b.programs:
-            nb = p.data[55:64]
+            nb = p.data[NAME_START:NAME_END]
             raw_bytes.update(nb)
             stripped = nb.rstrip(b"\x00")
             maxlen = max(maxlen, len(stripped.rstrip(b" ")))
@@ -301,7 +303,7 @@ def name_study(banks: list[tuple[str, SysExFile]]) -> dict:
     non_ascii = sorted(v for v in raw_bytes if v > 0x7F)
     control = sorted(v for v in raw_bytes if v < 0x20 and v != 0x00)
     return {
-        "name_offsets": "0x37..0x3F (9 bytes)",
+        "name_offsets": "0x36..0x3F (9 bytes)",
         "programs_analyzed": len(names),
         "distinct_names": len(set(names)),
         "max_used_length": maxlen,
@@ -444,7 +446,7 @@ def build_evidence_db(base: str | Path = ROOT,
             }
             for r in rows if r.status == STATUS_KNOWN
         ],
-        "name_field": {"offsets": "0x37..0x3F", "confidence": CONF_FIXTURE,
+        "name_field": {"offsets": "0x36..0x3F", "confidence": CONF_FIXTURE,
                        "study": name_study(banks)},
         "unknown_offsets": [
             {"offset": r.offset, "field": r.field,

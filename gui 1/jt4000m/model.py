@@ -2,7 +2,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from .syx import LFO_DEST_NAMES, LFO_WAVE_NAMES, PORTAMENTO_MODE_NAMES, Program, WAVE_NAMES, field_name, semantic_value
+from .syx import (LFO_DEST_NAMES, LFO_WAVE_NAMES, NAME_END, NAME_START,
+                  PORTAMENTO_MODE_NAMES, Program, WAVE_NAMES, field_name,
+                  semantic_value)
 
 # Enum value -> label maps. These only contain values established by the
 # project's analysis; unknown values render as "Unknown (0xNN)" in the UI.
@@ -219,7 +221,8 @@ def get_parameter(program: Program, key: str) -> int:
 
 
 def set_name(program: Program, name: str) -> Program:
-    # The JT-4000M name field is 9 bytes (offsets 55..63), space padded.
+    # The JT-4000M name field is 9 bytes (offsets 54..63 / 0x36..0x3F — the
+    # LAST nine bytes of the 64-byte record), space padded.
     # Names longer than 9 characters are truncated; non-ASCII characters are
     # replaced with '?' so every byte stays valid MIDI 7-bit data.
     raw = bytearray()
@@ -230,5 +233,5 @@ def set_name(program: Program, name: str) -> Program:
             b = b"?"
         raw.extend(b)
     data = bytearray(program.data)
-    data[55:64] = bytes(raw).ljust(9, b" ")
+    data[NAME_START:NAME_END] = bytes(raw).ljust(9, b" ")
     return Program(program.index, bytes(data), program.source_offset)

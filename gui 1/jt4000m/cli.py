@@ -743,6 +743,169 @@ def cmd_knowledge(action, args):
     raise ValueError(f"Unknown knowledge action: {action}")
 
 
+def cmd_analyze(action, args):
+    """P1.7 OFFLINE — statistical parameter discovery from local .syx files.
+
+    analyze-bank   : dataset inventory (mode/checksum/provenance/duplicates)
+    analyze-offsets: per-offset entropy/frequency/transition table
+    registry-audit : every registry parameter vs the fixture corpus
+    cc-audit       : CC mapping sources (never hardware-confirmed offline)
+    report         : full JSON + Markdown dataset under analysis/
+    Nothing here touches MIDI; results are deterministic.
+    """
+    import json as _json
+    from pathlib import Path as _Path
+    from . import discovery as D
+
+    paths = list(args.files) if args.files else [str(p) for p in D.discover_fixtures()]
+    rep = D.generate(paths, mi_threshold=getattr(args, 'mi', 0.3))
+
+    if action == 'analyze-bank':
+        print("P1.7 DATASET INVENTORY (all provenance = REFERENCE_FIXTURE)")
+        for f in rep.files:
+            dupes = sum(len(s) for s in f.duplicate_programs.values())
+            print(f"\n{f.path}")
+            print(f"  mode: {f.mode}  programs: {f.programs}  bytes: {f.total_bytes}")
+            print(f"  checksum: stored {f.checksum_stored} expected "
+                  f"{f.checksum_expected} status {'OK' if f.checksum_ok else 'BAD'}")
+            print(f"  provenance: {f.provenance}")
+            print(f"  unique programs: {f.unique_programs}  "
+                  f"duplicate slots: {dupes}")
+            names = [n.strip() or '(empty)' for n in f.names]
+            shown = ', '.join(names[:8]) + ('...' if len(names) > 8 else '')
+            print(f"  names: {shown}")
+        return
+    if action == 'analyze-offsets':
+        print(f"{'Offset':6} {'Field':28} {'Class':20} {'Level':12} "
+              f"{'N':>3} {'Entropy':>8} {'Min':5} {'Max':5} {'Trans':>5}")
+        for p in rep.profiles:
+            mn = '-' if p.min is None else f"0x{p.min:02X}"
+            mx = '-' if p.max is None else f"0x{p.max:02X}"
+            print(f"0x{p.offset:02X}   {p.field:28} {p.classification:20} "
+                  f"{p.evidence_level:12} {p.unique_count:>3} "
+                  f"{p.entropy:>8.3f} {mn:>5} {mx:>5} {p.transition_count:>5}")
+        print("\nClassification summary:",
+              ', '.join(f'{k}={v}' for k, v in sorted(rep.classifications.items())))
+        print("NOTE: classifications describe DATA BEHAVIOUR only; unknown "
+              "offsets keep candidate_meaning=UNKNOWN (no hardware used).")
+        return
+    if action == 'registry-audit':
+        for r in rep.registry_audit:
+            print(f"{r['key']:22} off={r['offset']} cc={r['cc']} "
+                  f"kind={r['kind']} level={r['evidence_level']} "
+                  f"coverage={r['fixture_coverage']} "
+                  f"contradictions={len(r['contradictions'])} "
+                  f"hardware={'NO (REQUIRED)' if not r['hardware_evidence'] else 'YES'}")
+            for c in r['contradictions']:
+                print(f"    - {c}")
+        return
+    if action == 'cc-audit':
+        for c in rep.cc_audit:
+            print(f"CC {c['cc']:>3} -> {c['parameter']:22} off={c['offset']} "
+                  f"| source: {c['source']} | fixtures: {c['offset_fixture_evidence']} "
+                  f"| {c['hardware_evidence']}")
+        return
+    if action == 'report':
+        out_dir = args.output or 'analysis'
+        stem = args.name or 'parameter_discovery'
+        jp, mp = D.write_reports(rep, out_dir, stem)
+        print(f"Wrote {jp}")
+        print(f"Wrote {mp}")
+        print(f"Offsets analyzed: {len(rep.profiles)}; "
+              f"correlations (INFERRED): {len(rep.pairs)}; "
+              f"contradictions: {len(rep.contradictions)}; "
+              f"unknown dossiers: {len(rep.dossiers)}")
+        print("Hardware-confirmed parameters: 0 (no physical JT-4000M was used)")
+        return
+    raise ValueError(f"Unknown analyze action: {action}")
+
+
+def cmd_model(action: str, args) -> None:
+    """P1.8 -- offline editor data model inspection/export (no GUI, no MIDI)."""
+    from .editor_model import EditorModel, definition_for
+    if action == 'inspect':
+        m = EditorModel()
+        m.load_bank(args.file)
+        ps = m.select(args.program)
+        print(f"File: {args.file}")
+        print(f"Provenance: {m.provenance}")
+        print(f"Program {ps.index:02d}: {ps.name!r}")
+        for key in sorted(ps.all_values()):
+            v = ps.value(key)
+            d = definition_for(key)
+            hw = "NOT_CONFIRMED" if not v.hardware_confirmed else "CONFIRMED"
+            print(f"{d.label:<32} raw=0x{v.raw:02X} ({v.raw:>3})  "
+                  f"display={v.display:<16} evidence={v.evidence_level:<11} "
+                  f"hardware={hw}"
+                  + (f"  cc={d.cc}" if d.cc is not None else ""))
+        u = ps.unknown_bytes()
+        print(f"\nUnknown bytes ({len(u)}):")
+        for off in sorted(u):
+            print(f"  0x{off:02X} = 0x{u[off]:02X}")
+        return
+    if action == 'export':
+        import json as _json
+        m = EditorModel()
+        m.load_bank(args.file)
+        ps = m.select(args.program)
+        payload = _json.dumps(ps.to_json_dict(), ensure_ascii=False, indent=2)
+        if args.json:
+            Path(args.json).write_text(payload, encoding='utf-8')
+            print(f"Wrote {args.json}")
+        else:
+            print(payload)
+        return
+    # ---- P1.9 public-API surface (regression/testing aid, not a GUI) ----
+    if action == 'search':
+        m = EditorModel(); m.load_bank(args.file)
+        hits = m.search_patches(args.query)
+        print(f"Search {args.query!r}: {len(hits)} patch(es)")
+        for p in hits:
+            print(f"  {p.index:02d}  {p.name}")
+        return
+    if action == 'groups':
+        m = EditorModel(); m.load_bank(args.file)
+        for g in m.list_groups():
+            print(f"{g:<16} {len(m.parameters(g))} parameter(s)")
+        return
+    if action == 'parameters':
+        m = EditorModel(); m.load_bank(args.file)
+        for d in m.parameters(args.group):
+            off = f"0x{d.offset:02X}" if d.offset is not None else "-"
+            rng = ("enum " + ",".join(str(v) for v in d.enum_options)
+                   if d.enum_options else f"{d.minimum}..{d.maximum}")
+            print(f"{d.key:<22} {d.label:<28} offset={off:<5} cc={d.cc if d.cc is not None else '-':<4} "
+                  f"kind={d.kind:<11} {rng:<24} evidence={d.evidence_level} "
+                  f"hardware={'CONFIRMED' if d.hardware_confirmed else 'NOT_CONFIRMED'}")
+        return
+    if action == 'session-save':
+        m = EditorModel(); m.load_bank(args.file)
+        m.save_session(args.session)
+        print(f"Wrote session {args.session}")
+        return
+    if action == 'session-load':
+        m = EditorModel.load_session(args.session)
+        print(f"Session loaded from {args.session}")
+        print(f"Source: {m.path}")
+        print(f"Provenance: {m.provenance}")
+        print(f"Selected patch: {m.selected:02d} ({m.current().name!r})")
+        print(f"Dirty: {m.is_dirty()}")
+        return
+    if action == 'diff':
+        from .editor_model import definition_for
+        ma = EditorModel(); ma.load_bank(args.a)
+        mb = EditorModel(); mb.load_bank(args.b)
+        pa = ma.select(args.program_a); pb = mb.select(args.program_b)
+        changes = pa.diff_to(pb)
+        print(f"{args.a}[{args.program_a}] {pa.name!r} vs "
+              f"{args.b}[{args.program_b}] {pb.name!r}: {len(changes)} byte change(s)")
+        for c in changes:
+            print(f"  0x{c['offset']:02X}  {c['old']:>3} -> {c['new']:>3}   "
+                  f"[{c['category']}] {c['field']}")
+        return
+    raise ValueError(f"Unknown model action: {action}")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog='jt4000m')
     sp = ap.add_subparsers(dest='cmd', required=True)
@@ -827,6 +990,50 @@ def main(argv=None):
     x = knsp.add_parser('csv'); x.add_argument('output')
     x.add_argument('--json-out', default=None)
 
+    # P1.7 OFFLINE — statistical parameter discovery over the local .syx corpus.
+    an = sp.add_parser('analyze', help='P1.7 offline statistical RE '
+                       '(dataset inventory, entropy/transition tables, '
+                       'registry & CC audits, JSON+Markdown reports; '
+                       'reads local files only, no MIDI, deterministic)')
+    ansp = an.add_subparsers(dest='action', required=True)
+    for name_, helptxt in (('analyze-bank', 'dataset inventory of all .syx files'),
+                           ('analyze-offsets', 'per-offset entropy/frequency/transition table'),
+                           ('registry-audit', 'every registry parameter vs the fixture corpus'),
+                           ('cc-audit', 'CC mapping sources; never hardware-confirmed offline'),
+                           ('report', 'write full JSON + Markdown discovery dataset')):
+        x = ansp.add_parser(name_, help=helptxt)
+        x.add_argument('files', nargs='*',
+                       help='.syx files (default: auto-discovered corpus, '
+                            'deduplicated by content hash)')
+        x.add_argument('--mi', type=float, default=0.3,
+                       help='normalized-MI threshold for correlation pairs')
+        if name_ == 'report':
+            x.add_argument('--output', default=None,
+                           help='output directory (default: analysis/)')
+            x.add_argument('--name', default=None,
+                           help='report stem (default: parameter_discovery)')
+
+    # P1.8 OFFLINE -- editor data model inspection/export (no GUI, no MIDI).
+    mo = sp.add_parser('model', help='P1.8 offline editor data model: '
+                       'definition/value/evidence view of a patch; reads and '
+                       'writes local files only')
+    mosp = mo.add_subparsers(dest='action', required=True)
+    x = mosp.add_parser('inspect'); x.add_argument('file'); x.add_argument('program', type=int)
+    x = mosp.add_parser('export'); x.add_argument('file'); x.add_argument('program', type=int); x.add_argument('--json', default=None)
+    x = mosp.add_parser('search', help='P1.9: search patches by name (read-only)')
+    x.add_argument('file'); x.add_argument('query')
+    x = mosp.add_parser('groups', help='P1.9: registry parameter groups')
+    x.add_argument('file')
+    x = mosp.add_parser('parameters', help='P1.9: definitions of one group')
+    x.add_argument('file'); x.add_argument('group')
+    x = mosp.add_parser('session-save', help='P1.9: write editor session JSON (state only; SYX stays authoritative)')
+    x.add_argument('file'); x.add_argument('session')
+    x = mosp.add_parser('session-load', help='P1.9: restore editor state from session JSON')
+    x.add_argument('session')
+    x = mosp.add_parser('diff', help='P1.9: byte diff between two patches via PatchState.diff_to')
+    x.add_argument('a'); x.add_argument('b')
+    x.add_argument('program_a', type=int); x.add_argument('program_b', type=int)
+
     args = ap.parse_args(argv)
     try:
         if args.cmd == 'inspect': cmd_inspect(args.file)
@@ -840,6 +1047,8 @@ def main(argv=None):
         elif args.cmd == 'midi': cmd_midi(args.action, args)
         elif args.cmd == 'experiment': cmd_experiment(args.action, args)
         elif args.cmd == 'knowledge': cmd_knowledge(args.action, args)
+        elif args.cmd == 'analyze': cmd_analyze(args.action, args)
+        elif args.cmd == 'model': cmd_model(args.action, args)
     except RuntimeError as e:
         ap.error(str(e))
     except (OSError, ValueError) as e:

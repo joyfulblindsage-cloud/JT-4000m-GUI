@@ -7,7 +7,7 @@ never auto-promotes parameters in the Parameter Registry.
 Evidence levels (documented rules, no invented confidence):
   * KNOWN_PARAMETER          — offset exists in the project Parameter Registry
                                (confidence "registry": static mapping only).
-  * PATCH_NAME               — offsets 55..63 (Name[0..8]) changed.
+  * PATCH_NAME               — offsets 54..63 (Name[0..8]) changed.
   * CHECKSUM                 — trailing checksum byte (recomputed at export).
   * HEADER / SERVICE         — frame bytes outside program payload.
   * UNKNOWN_OFFSET           — not in the registry: reported as
@@ -35,7 +35,8 @@ from typing import Iterable
 
 from .diff import ByteDiff, program_diff
 from .model import BY_KEY
-from .syx import Program, field_name, parse_file, semantic_value
+from .syx import (NAME_END, NAME_START, Program, field_name, parse_file,
+                  semantic_value)
 
 # ---------------------------------------------------------------------------
 # Classification constants (stable strings — used by reports/tests/registry)
@@ -126,7 +127,7 @@ class Capture:
 
 def classify_offset(offset: int) -> str:
     """Classify one relative program offset by the EXISTING registry only."""
-    if 55 <= offset <= 63:
+    if NAME_START <= offset < NAME_END:
         return CLASS_NAME
     spec = next((p for p in BY_KEY.values() if p.offset == offset), None)
     return CLASS_KNOWN if spec is not None else CLASS_UNKNOWN
@@ -451,7 +452,7 @@ def registry_status(log_path: str | Path | None = None) -> list:
         out.append({"offset": spec.offset, "key": spec.key, "label": spec.label,
                     "level": level, "evidence": confirmed.get(spec.offset)})
     for off, r in sorted(observed.items()):
-        if off in seen_offsets or 55 <= off <= 63:
+        if off in seen_offsets or NAME_START <= off < NAME_END:
             continue
         out.append({"offset": off, "key": None, "label": field_name(off),
                     "level": "observed", "evidence": r})
