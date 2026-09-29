@@ -278,7 +278,7 @@ def correlations(offset_rows: list[OffsetRow],
 
 
 # ---------------------------------------------------------------------------
-# Name encoding study (0x37..0x3F / offsets 55..63)
+# Name encoding study (0x36..0x3F)
 # ---------------------------------------------------------------------------
 
 def name_study(banks: list[tuple[str, SysExFile]]) -> dict:
@@ -303,7 +303,7 @@ def name_study(banks: list[tuple[str, SysExFile]]) -> dict:
     non_ascii = sorted(v for v in raw_bytes if v > 0x7F)
     control = sorted(v for v in raw_bytes if v < 0x20 and v != 0x00)
     return {
-        "name_offsets": "0x37..0x3F (9 bytes, offsets 55..63; byte 54 structural)",
+        "name_offsets": "0x36..0x3F (9 bytes)",
         "programs_analyzed": len(names),
         "distinct_names": len(set(names)),
         "max_used_length": maxlen,
@@ -446,7 +446,7 @@ def build_evidence_db(base: str | Path = ROOT,
             }
             for r in rows if r.status == STATUS_KNOWN
         ],
-        "name_field": {"offsets": "0x37..0x3F (55..63)", "confidence": CONF_FIXTURE,
+        "name_field": {"offsets": "0x36..0x3F", "confidence": CONF_FIXTURE,
                        "study": name_study(banks)},
         "unknown_offsets": [
             {"offset": r.offset, "field": r.field,
