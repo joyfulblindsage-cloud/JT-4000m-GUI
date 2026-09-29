@@ -775,6 +775,27 @@ class EditorModel:
         self._dirty = True
         return self.get_patch(index)
 
+    def reset_patch_parameter(self, index: int, key: str) -> PatchState:
+        """Reset one slot's parameter to its documented registry default —
+        without changing the selection and WITHOUT touching the uncommitted
+        working copy of another slot.
+
+        Same history/dirty semantics as rename_patch(): immediate domain
+        mutation through the existing model helpers, session becomes
+        MODIFIED. The GUI never writes raw bytes itself; this exists so a
+        per-parameter 'reset to default' button is a single public-API call.
+        """
+        self._require_loaded()
+        spec = BY_KEY[key]                      # raises UnknownParameterError
+        if not spec.editable or spec.offset is None:
+            raise ParameterNotEditableError(
+                f"{key} is not editable through the editor API")
+        prog = self._bank.get(index)            # raises on bad index
+        new_prog = prog.set_parameter(key, spec.default)
+        self._bank = self._bank.replace(index, new_prog)
+        self._dirty = True
+        return self.get_patch(index)
+
     def registry_status(self) -> dict:
         """Report-only registry audit (P1.8 validate_registry). NEVER
         mutates the registry; contradictions stay observations."""
