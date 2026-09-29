@@ -1,0 +1,65 @@
+offset,field,status,key,kind,cc,unique_count,min,max,fixture_constant,confidence
+0x00,OSC1 Wave,KNOWN_PARAMETER,osc1_wave,enum,24,7,0x00,0x07,False,fixture_observed
+0x01,OSC2 Wave,KNOWN_PARAMETER,osc2_wave,enum,25,5,0x00,0x04,False,fixture_observed
+0x02,OSC1 PWM / Detune / FM,KNOWN_PARAMETER,osc1_pwm_fm,continuous,113,22,0x00,0x5B,False,fixture_observed
+0x03,OSC2 PWM,KNOWN_PARAMETER,osc2_pwm,continuous,114,15,0x00,0x4C,False,fixture_observed
+0x04,OSC1 Coarse,KNOWN_PARAMETER,osc1_coarse,continuous,115,8,0x00,0x18,False,fixture_observed
+0x05,OSC1 Fine,KNOWN_PARAMETER,osc1_fine,continuous,111,16,0x00,0x39,False,fixture_observed
+0x06,OSC2 Coarse,KNOWN_PARAMETER,osc2_coarse,continuous,116,7,0x00,0x18,False,fixture_observed
+0x07,OSC2 Fine,KNOWN_PARAMETER,osc2_fine,continuous,112,12,0x00,0x19,False,fixture_observed
+0x08,OSC Balance,KNOWN_PARAMETER,osc_balance,continuous,29,9,0x40,0x77,False,fixture_observed
+0x09,Byte 0x09,UNKNOWN,,,,1,0x00,0x00,True,FIXTURE_CONSTANT
+0x0A,Byte 0x0A,UNKNOWN,,,,1,0x00,0x00,True,FIXTURE_CONSTANT
+0x0B,Byte 0x0B,UNKNOWN,,,,1,0x00,0x00,True,FIXTURE_CONSTANT
+0x0C,Filter Frequency,KNOWN_PARAMETER,filter_cutoff,continuous,74,26,0x00,0x63,False,fixture_observed
+0x0D,Filter Resonance,KNOWN_PARAMETER,filter_resonance,continuous,71,23,0x00,0x63,False,fixture_observed
+0x0E,VCF Attack,KNOWN_PARAMETER,vcf_attack,continuous,85,20,0x00,0x60,False,fixture_observed
+0x0F,VCF Decay,KNOWN_PARAMETER,vcf_decay,continuous,86,22,0x00,0x63,False,fixture_observed
+0x10,VCF Sustain,KNOWN_PARAMETER,vcf_sustain,continuous,87,17,0x00,0x63,False,fixture_observed
+0x11,VCF Release,KNOWN_PARAMETER,vcf_release,continuous,88,27,0x00,0x63,False,fixture_observed
+0x12,VCA Attack,KNOWN_PARAMETER,vca_attack,continuous,81,18,0x00,0x48,False,fixture_observed
+0x13,VCA Decay,KNOWN_PARAMETER,vca_decay,continuous,82,20,0x00,0x63,False,fixture_observed
+0x14,VCA Sustain,KNOWN_PARAMETER,vca_sustain,continuous,83,21,0x00,0x63,False,fixture_observed
+0x15,VCA Release,KNOWN_PARAMETER,vca_release,continuous,84,21,0x00,0x4C,False,fixture_observed
+0x16,VCF Amount,KNOWN_PARAMETER,filter_env_amount,continuous,47,28,0x00,0x63,False,fixture_observed
+0x17,Byte 0x17,UNKNOWN,,,,1,0x00,0x00,True,FIXTURE_CONSTANT
+0x18,Byte 0x18,UNKNOWN,,,,1,0x00,0x00,True,FIXTURE_CONSTANT
+0x19,Byte 0x19,UNKNOWN,,,,1,0x00,0x00,True,FIXTURE_CONSTANT
+0x1A,Byte 0x1A,UNKNOWN,,,,1,0x00,0x00,True,FIXTURE_CONSTANT
+0x1B,Byte 0x1B,UNKNOWN,,,,1,0x00,0x00,True,FIXTURE_CONSTANT
+0x1C,Byte 0x1C,UNKNOWN,,,,1,0x00,0x00,True,FIXTURE_CONSTANT
+0x1D,Byte 0x1D,UNKNOWN,,,,1,0x00,0x00,True,FIXTURE_CONSTANT
+0x1E,Byte 0x1E,UNKNOWN,,,,1,0x00,0x00,True,FIXTURE_CONSTANT
+0x1F,Byte 0x1F,UNKNOWN,,,,1,0x00,0x00,True,FIXTURE_CONSTANT
+0x20,Byte 0x20,UNKNOWN,,,,1,0x00,0x00,True,FIXTURE_CONSTANT
+0x21,Byte 0x21,UNKNOWN,,,,1,0x00,0x00,True,FIXTURE_CONSTANT
+0x22,Byte 0x22,UNKNOWN,,,,1,0x00,0x00,True,FIXTURE_CONSTANT
+0x23,Byte 0x23,UNKNOWN,,,,1,0x00,0x00,True,FIXTURE_CONSTANT
+0x24,Byte 0x24,UNKNOWN,,,,1,0x00,0x00,True,FIXTURE_CONSTANT
+0x25,Byte 0x25,UNKNOWN,,,,1,0x00,0x00,True,FIXTURE_CONSTANT
+0x26,Byte 0x26,UNKNOWN,,,,1,0x00,0x00,True,FIXTURE_CONSTANT
+0x27,Byte 0x27,UNKNOWN,,,,1,0x00,0x00,True,FIXTURE_CONSTANT
+0x28,Byte 0x28,UNKNOWN,,,,1,0x00,0x00,True,FIXTURE_CONSTANT
+0x29,Byte 0x29,UNKNOWN,,,,1,0x00,0x00,True,FIXTURE_CONSTANT
+0x2A,Byte 0x2A,UNKNOWN,,,,1,0x00,0x00,True,FIXTURE_CONSTANT
+0x2B,Ring Mod On/Off,KNOWN_PARAMETER,ring_mod_toggle,enum,96,2,0x00,0x01,False,fixture_observed
+0x2C,Ring Mod Amount,KNOWN_PARAMETER,ring_mod_amount,continuous,95,10,0x00,0x63,False,fixture_observed
+0x2D,Portamento Mode,KNOWN_PARAMETER,portamento_mode,enum,,1,0x00,0x00,True,static_mapping
+0x2E,Portamento Amount,KNOWN_PARAMETER,portamento_amount,continuous,,3,0x00,0x04,False,fixture_observed
+0x2F,LFO1 Wave,KNOWN_PARAMETER,lfo1_wave,enum,54,3,0x00,0x02,False,fixture_observed
+0x30,LFO2 Wave,KNOWN_PARAMETER,lfo2_wave,enum,55,2,0x00,0x02,False,fixture_observed
+0x31,LFO1 Speed,KNOWN_PARAMETER,lfo1_rate,continuous,72,12,0x00,0x63,False,fixture_observed
+0x32,LFO1 Amount,KNOWN_PARAMETER,lfo1_amount,continuous,70,16,0x00,0x63,False,fixture_observed
+0x33,LFO2 Speed,KNOWN_PARAMETER,lfo2_rate,continuous,73,8,0x00,0x63,False,fixture_observed
+0x34,LFO2 Amount,KNOWN_PARAMETER,lfo2_amount,continuous,28,16,0x00,0x50,False,fixture_observed
+0x35,LFO1 Destination,KNOWN_PARAMETER,lfo1_destination,enum,56,2,0x00,0x01,False,fixture_observed
+0x36,Byte 0x36,UNKNOWN,,,,1,0x00,0x00,True,FIXTURE_CONSTANT
+0x37,Name[0],PATCH_NAME,,text,,21,0x33,0x5A,False,fixture_observed
+0x38,Name[1],PATCH_NAME,,text,,17,0x33,0x56,False,fixture_observed
+0x39,Name[2],PATCH_NAME,,text,,18,0x20,0x59,False,fixture_observed
+0x3A,Name[3],PATCH_NAME,,text,,16,0x20,0x57,False,fixture_observed
+0x3B,Name[4],PATCH_NAME,,text,,15,0x20,0x59,False,fixture_observed
+0x3C,Name[5],PATCH_NAME,,text,,14,0x20,0x5A,False,fixture_observed
+0x3D,Name[6],PATCH_NAME,,text,,12,0x20,0x55,False,fixture_observed
+0x3E,Name[7],PATCH_NAME,,text,,14,0x20,0x57,False,fixture_observed
+0x3F,Name[8],PATCH_NAME,,text,,9,0x20,0x59,False,fixture_observed

@@ -59,6 +59,41 @@ PROVENANCE_DEVICE = "CAPTURED_FROM_DEVICE"
 PROVENANCE_GENERATED = "SOFTWARE_GENERATED"
 
 
+def detect_provenance(path: str | Path | None,
+                      sessions_dir: str | Path | None = None) -> str:
+    """P1.6 — honest provenance detection for an .syx file path.
+
+    Rules (documented, no guessing):
+      * CAPTURED_FROM_DEVICE only if the exact absolute path appears as a
+        recorded 'capture' file in a session log (sessions/*.json written by
+        `midi capture`).  Bundled banks are NEVER promoted automatically.
+      * everything else stays REFERENCE_FIXTURE (default label).
+    This is a convenience for `experiment compare --*-prov auto`; the operator
+    can still override explicitly with device/fixture.
+    """
+    if path is None:
+        return PROVENANCE_FIXTURE
+    target = str(Path(path).resolve())
+    base = Path(sessions_dir) if sessions_dir else Path.cwd() / "sessions"
+    if not base.is_dir():
+        return PROVENANCE_FIXTURE
+    import json as _json
+    for f in sorted(base.glob("*.json")):
+        try:
+            data = _json.loads(f.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        for rec in data.get("files", []):
+            if rec.get("kind") == "capture" and \
+                    rec.get("provenance") == PROVENANCE_DEVICE:
+                try:
+                    if str(Path(rec.get("path", "")).resolve()) == target:
+                        return PROVENANCE_DEVICE
+                except OSError:
+                    continue
+    return PROVENANCE_FIXTURE
+
+
 def _load_program(path: str | Path, program_index: int) -> tuple[Program, str]:
     """Load a program record from a local .syx file (bulk slot or single dump).
 

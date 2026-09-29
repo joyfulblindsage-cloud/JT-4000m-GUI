@@ -1,0 +1,1297 @@
+{
+  "schema": "jt4000m-parameter-evidence/1",
+  "generated_by": "python -m jt4000m.cli knowledge report",
+  "provenance_note": "ALL findings below derive from REFERENCE_FIXTURE files. No result here is hardware-confirmed unless the evidence log contains CAPTURED_FROM_DEVICE records.",
+  "fixtures": [
+    {
+      "file": "ALL EMPTY.syx",
+      "mode": "bulk",
+      "programs": 32
+    },
+    {
+      "file": "ALL INIT SAW.syx",
+      "mode": "bulk",
+      "programs": 32
+    },
+    {
+      "file": "ALL INIT SUPERSAW.syx",
+      "mode": "bulk",
+      "programs": 32
+    },
+    {
+      "file": "Synthmania-EDM-Soundset-JT-4000.syx",
+      "mode": "bulk",
+      "programs": 32
+    }
+  ],
+  "parameters": [
+    {
+      "key": "osc1_wave",
+      "label": "OSC1 Wave",
+      "sysex_offset": 0,
+      "cc": 24,
+      "kind": "enum",
+      "source": [
+        "parameter_registry",
+        "cross_bank:ALL EMPTY.syx",
+        "cross_bank:ALL INIT SAW.syx",
+        "cross_bank:ALL INIT SUPERSAW.syx",
+        "cross_bank:Synthmania-EDM-Soundset-JT-4000.syx"
+      ],
+      "confidence": "fixture_observed",
+      "hardware_confirmed": false,
+      "observed_values": [
+        "0x00",
+        "0x02",
+        "0x03",
+        "0x04",
+        "0x05",
+        "0x06",
+        "0x07"
+      ],
+      "notes": ""
+    },
+    {
+      "key": "osc2_wave",
+      "label": "OSC2 Wave",
+      "sysex_offset": 1,
+      "cc": 25,
+      "kind": "enum",
+      "source": [
+        "parameter_registry",
+        "cross_bank:ALL EMPTY.syx",
+        "cross_bank:ALL INIT SAW.syx",
+        "cross_bank:ALL INIT SUPERSAW.syx",
+        "cross_bank:Synthmania-EDM-Soundset-JT-4000.syx"
+      ],
+      "confidence": "fixture_observed",
+      "hardware_confirmed": false,
+      "observed_values": [
+        "0x00",
+        "0x01",
+        "0x02",
+        "0x03",
+        "0x04"
+      ],
+      "notes": ""
+    },
+    {
+      "key": "osc1_pwm_fm",
+      "label": "OSC1 PWM / Detune / FM",
+      "sysex_offset": 2,
+      "cc": 113,
+      "kind": "continuous",
+      "source": [
+        "parameter_registry",
+        "cross_bank:ALL EMPTY.syx",
+        "cross_bank:ALL INIT SAW.syx",
+        "cross_bank:ALL INIT SUPERSAW.syx",
+        "cross_bank:Synthmania-EDM-Soundset-JT-4000.syx"
+      ],
+      "confidence": "fixture_observed",
+      "hardware_confirmed": false,
+      "observed_values": [
+        "0x00",
+        "0x01",
+        "0x0A",
+        "0x11",
+        "0x13",
+        "0x19",
+        "0x1D",
+        "0x20",
+        "0x2F",
+        "0x32",
+        "0x34",
+        "0x38",
+        "0x3C",
+        "0x40",
+        "0x43",
+        "0x47",
+        "0x4E",
+        "0x4F",
+        "0x52",
+        "0x54",
+        "0x56",
+        "0x5B"
+      ],
+      "notes": ""
+    },
+    {
+      "key": "osc2_pwm",
+      "label": "OSC2 PWM",
+      "sysex_offset": 3,
+      "cc": 114,
+      "kind": "continuous",
+      "source": [
+        "parameter_registry",
+        "cross_bank:ALL EMPTY.syx",
+        "cross_bank:ALL INIT SAW.syx",
+        "cross_bank:ALL INIT SUPERSAW.syx",
+        "cross_bank:Synthmania-EDM-Soundset-JT-4000.syx"
+      ],
+      "confidence": "fixture_observed",
+      "hardware_confirmed": false,
+      "observed_values": [
+        "0x00",
+        "0x05",
+        "0x07",
+        "0x0A",
+        "0x13",
+        "0x14",
+        "0x1C",
+        "0x2A",
+        "0x2B",
+        "0x30",
+        "0x33",
+        "0x37",
+        "0x39",
+        "0x49",
+        "0x4C"
+      ],
+      "notes": ""
+    },
+    {
+      "key": "osc1_coarse",
+      "label": "OSC1 Coarse",
+      "sysex_offset": 4,
+      "cc": 115,
+      "kind": "continuous",
+      "source": [
+        "parameter_registry",
+        "cross_bank:ALL EMPTY.syx",
+        "cross_bank:ALL INIT SAW.syx",
+        "cross_bank:ALL INIT SUPERSAW.syx",
+        "cross_bank:Synthmania-EDM-Soundset-JT-4000.syx"
+      ],
+      "confidence": "fixture_observed",
+      "hardware_confirmed": false,
+      "observed_values": [
+        "0x00",
+        "0x01",
+        "0x04",
+        "0x05",
+        "0x07",
+        "0x09",
+        "0x0C",
+        "0x18"
+      ],
+      "notes": ""
+    },
+    {
+      "key": "osc1_fine",
+      "label": "OSC1 Fine",
+      "sysex_offset": 5,
+      "cc": 111,
+      "kind": "continuous",
+      "source": [
+        "parameter_registry",
+        "cross_bank:ALL EMPTY.syx",
+        "cross_bank:ALL INIT SAW.syx",
+        "cross_bank:ALL INIT SUPERSAW.syx",
+        "cross_bank:Synthmania-EDM-Soundset-JT-4000.syx"
+      ],
+      "confidence": "fixture_observed",
+      "hardware_confirmed": false,
+      "observed_values": [
+        "0x00",
+        "0x02",
+        "0x06",
+        "0x09",
+        "0x0A",
+        "0x0B",
+        "0x0C",
+        "0x0D",
+        "0x0F",
+        "0x12",
+        "0x13",
+        "0x16",
+        "0x22",
+        "0x25",
+        "0x27",
+        "0x39"
+      ],
+      "notes": ""
+    },
+    {
+      "key": "osc2_coarse",
+      "label": "OSC2 Coarse",
+      "sysex_offset": 6,
+      "cc": 116,
+      "kind": "continuous",
+      "source": [
+        "parameter_registry",
+        "cross_bank:ALL EMPTY.syx",
+        "cross_bank:ALL INIT SAW.syx",
+        "cross_bank:ALL INIT SUPERSAW.syx",
+        "cross_bank:Synthmania-EDM-Soundset-JT-4000.syx"
+      ],
+      "confidence": "fixture_observed",
+      "hardware_confirmed": false,
+      "observed_values": [
+        "0x00",
+        "0x05",
+        "0x0A",
+        "0x0C",
+        "0x11",
+        "0x15",
+        "0x18"
+      ],
+      "notes": ""
+    },
+    {
+      "key": "osc2_fine",
+      "label": "OSC2 Fine",
+      "sysex_offset": 7,
+      "cc": 112,
+      "kind": "continuous",
+      "source": [
+        "parameter_registry",
+        "cross_bank:ALL EMPTY.syx",
+        "cross_bank:ALL INIT SAW.syx",
+        "cross_bank:ALL INIT SUPERSAW.syx",
+        "cross_bank:Synthmania-EDM-Soundset-JT-4000.syx"
+      ],
+      "confidence": "fixture_observed",
+      "hardware_confirmed": false,
+      "observed_values": [
+        "0x00",
+        "0x01",
+        "0x02",
+        "0x03",
+        "0x05",
+        "0x08",
+        "0x0A",
+        "0x0D",
+        "0x14",
+        "0x16",
+        "0x17",
+        "0x19"
+      ],
+      "notes": ""
+    },
+    {
+      "key": "osc_balance",
+      "label": "OSC Balance",
+      "sysex_offset": 8,
+      "cc": 29,
+      "kind": "continuous",
+      "source": [
+        "parameter_registry",
+        "cross_bank:ALL EMPTY.syx",
+        "cross_bank:ALL INIT SAW.syx",
+        "cross_bank:ALL INIT SUPERSAW.syx",
+        "cross_bank:Synthmania-EDM-Soundset-JT-4000.syx"
+      ],
+      "confidence": "fixture_observed",
+      "hardware_confirmed": false,
+      "observed_values": [
+        "0x40",
+        "0x5B",
+        "0x5F",
+        "0x60",
+        "0x61",
+        "0x67",
+        "0x6B",
+        "0x74",
+        "0x77"
+      ],
+      "notes": ""
+    },
+    {
+      "key": "filter_cutoff",
+      "label": "Filter Frequency",
+      "sysex_offset": 12,
+      "cc": 74,
+      "kind": "continuous",
+      "source": [
+        "parameter_registry",
+        "cross_bank:ALL EMPTY.syx",
+        "cross_bank:ALL INIT SAW.syx",
+        "cross_bank:ALL INIT SUPERSAW.syx",
+        "cross_bank:Synthmania-EDM-Soundset-JT-4000.syx"
+      ],
+      "confidence": "fixture_observed",
+      "hardware_confirmed": false,
+      "observed_values": [
+        "0x00",
+        "0x05",
+        "0x08",
+        "0x09",
+        "0x0E",
+        "0x0F",
+        "0x17",
+        "0x19",
+        "0x1A",
+        "0x1D",
+        "0x1F",
+        "0x23",
+        "0x25",
+        "0x27",
+        "0x2A",
+        "0x2D",
+        "0x34",
+        "0x37",
+        "0x38",
+        "0x3E",
+        "0x42",
+        "0x43",
+        "0x44",
+        "0x47",
+        "0x50",
+        "0x63"
+      ],
+      "notes": ""
+    },
+    {
+      "key": "filter_resonance",
+      "label": "Filter Resonance",
+      "sysex_offset": 13,
+      "cc": 71,
+      "kind": "continuous",
+      "source": [
+        "parameter_registry",
+        "cross_bank:ALL EMPTY.syx",
+        "cross_bank:ALL INIT SAW.syx",
+        "cross_bank:ALL INIT SUPERSAW.syx",
+        "cross_bank:Synthmania-EDM-Soundset-JT-4000.syx"
+      ],
+      "confidence": "fixture_observed",
+      "hardware_confirmed": false,
+      "observed_values": [
+        "0x00",
+        "0x0E",
+        "0x10",
+        "0x12",
+        "0x18",
+        "0x1A",
+        "0x2A",
+        "0x2F",
+        "0x33",
+        "0x38",
+        "0x3D",
+        "0x40",
+        "0x42",
+        "0x43",
+        "0x44",
+        "0x45",
+        "0x4A",
+        "0x55",
+        "0x5A",
+        "0x5C",
+        "0x60",
+        "0x62",
+        "0x63"
+      ],
+      "notes": ""
+    },
+    {
+      "key": "vcf_attack",
+      "label": "VCF Attack",
+      "sysex_offset": 14,
+      "cc": 85,
+      "kind": "continuous",
+      "source": [
+        "parameter_registry",
+        "cross_bank:ALL EMPTY.syx",
+        "cross_bank:ALL INIT SAW.syx",
+        "cross_bank:ALL INIT SUPERSAW.syx",
+        "cross_bank:Synthmania-EDM-Soundset-JT-4000.syx"
+      ],
+      "confidence": "fixture_observed",
+      "hardware_confirmed": false,
+      "observed_values": [
+        "0x00",
+        "0x0A",
+        "0x10",
+        "0x11",
+        "0x16",
+        "0x1B",
+        "0x1C",
+        "0x1F",
+        "0x20",
+        "0x25",
+        "0x29",
+        "0x34",
+        "0x3A",
+        "0x3B",
+        "0x3F",
+        "0x43",
+        "0x4A",
+        "0x53",
+        "0x54",
+        "0x60"
+      ],
+      "notes": ""
+    },
+    {
+      "key": "vcf_decay",
+      "label": "VCF Decay",
+      "sysex_offset": 15,
+      "cc": 86,
+      "kind": "continuous",
+      "source": [
+        "parameter_registry",
+        "cross_bank:ALL EMPTY.syx",
+        "cross_bank:ALL INIT SAW.syx",
+        "cross_bank:ALL INIT SUPERSAW.syx",
+        "cross_bank:Synthmania-EDM-Soundset-JT-4000.syx"
+      ],
+      "confidence": "fixture_observed",
+      "hardware_confirmed": false,
+      "observed_values": [
+        "0x00",
+        "0x08",
+        "0x09",
+        "0x0A",
+        "0x11",
+        "0x12",
+        "0x18",
+        "0x19",
+        "0x1A",
+        "0x20",
+        "0x21",
+        "0x24",
+        "0x26",
+        "0x2A",
+        "0x2D",
+        "0x2F",
+        "0x32",
+        "0x34",
+        "0x3B",
+        "0x43",
+        "0x57",
+        "0x63"
+      ],
+      "notes": ""
+    },
+    {
+      "key": "vcf_sustain",
+      "label": "VCF Sustain",
+      "sysex_offset": 16,
+      "cc": 87,
+      "kind": "continuous",
+      "source": [
+        "parameter_registry",
+        "cross_bank:ALL EMPTY.syx",
+        "cross_bank:ALL INIT SAW.syx",
+        "cross_bank:ALL INIT SUPERSAW.syx",
+        "cross_bank:Synthmania-EDM-Soundset-JT-4000.syx"
+      ],
+      "confidence": "fixture_observed",
+      "hardware_confirmed": false,
+      "observed_values": [
+        "0x00",
+        "0x01",
+        "0x02",
+        "0x04",
+        "0x05",
+        "0x07",
+        "0x09",
+        "0x16",
+        "0x18",
+        "0x1A",
+        "0x1B",
+        "0x1C",
+        "0x21",
+        "0x29",
+        "0x2A",
+        "0x4A",
+        "0x63"
+      ],
+      "notes": ""
+    },
+    {
+      "key": "vcf_release",
+      "label": "VCF Release",
+      "sysex_offset": 17,
+      "cc": 88,
+      "kind": "continuous",
+      "source": [
+        "parameter_registry",
+        "cross_bank:ALL EMPTY.syx",
+        "cross_bank:ALL INIT SAW.syx",
+        "cross_bank:ALL INIT SUPERSAW.syx",
+        "cross_bank:Synthmania-EDM-Soundset-JT-4000.syx"
+      ],
+      "confidence": "fixture_observed",
+      "hardware_confirmed": false,
+      "observed_values": [
+        "0x00",
+        "0x02",
+        "0x08",
+        "0x0B",
+        "0x0C",
+        "0x10",
+        "0x13",
+        "0x15",
+        "0x1A",
+        "0x1E",
+        "0x1F",
+        "0x25",
+        "0x28",
+        "0x29",
+        "0x2A",
+        "0x2C",
+        "0x32",
+        "0x39",
+        "0x3B",
+        "0x3E",
+        "0x42",
+        "0x43",
+        "0x44",
+        "0x45",
+        "0x46",
+        "0x4E",
+        "0x63"
+      ],
+      "notes": ""
+    },
+    {
+      "key": "vca_attack",
+      "label": "VCA Attack",
+      "sysex_offset": 18,
+      "cc": 81,
+      "kind": "continuous",
+      "source": [
+        "parameter_registry",
+        "cross_bank:ALL EMPTY.syx",
+        "cross_bank:ALL INIT SAW.syx",
+        "cross_bank:ALL INIT SUPERSAW.syx",
+        "cross_bank:Synthmania-EDM-Soundset-JT-4000.syx"
+      ],
+      "confidence": "fixture_observed",
+      "hardware_confirmed": false,
+      "observed_values": [
+        "0x00",
+        "0x08",
+        "0x0A",
+        "0x0B",
+        "0x10",
+        "0x12",
+        "0x16",
+        "0x19",
+        "0x1B",
+        "0x1D",
+        "0x24",
+        "0x26",
+        "0x27",
+        "0x2A",
+        "0x31",
+        "0x32",
+        "0x43",
+        "0x48"
+      ],
+      "notes": ""
+    },
+    {
+      "key": "vca_decay",
+      "label": "VCA Decay",
+      "sysex_offset": 19,
+      "cc": 82,
+      "kind": "continuous",
+      "source": [
+        "parameter_registry",
+        "cross_bank:ALL EMPTY.syx",
+        "cross_bank:ALL INIT SAW.syx",
+        "cross_bank:ALL INIT SUPERSAW.syx",
+        "cross_bank:Synthmania-EDM-Soundset-JT-4000.syx"
+      ],
+      "confidence": "fixture_observed",
+      "hardware_confirmed": false,
+      "observed_values": [
+        "0x00",
+        "0x10",
+        "0x1D",
+        "0x22",
+        "0x23",
+        "0x25",
+        "0x29",
+        "0x2A",
+        "0x30",
+        "0x32",
+        "0x35",
+        "0x3E",
+        "0x3F",
+        "0x42",
+        "0x43",
+        "0x46",
+        "0x48",
+        "0x49",
+        "0x4C",
+        "0x63"
+      ],
+      "notes": ""
+    },
+    {
+      "key": "vca_sustain",
+      "label": "VCA Sustain",
+      "sysex_offset": 20,
+      "cc": 83,
+      "kind": "continuous",
+      "source": [
+        "parameter_registry",
+        "cross_bank:ALL EMPTY.syx",
+        "cross_bank:ALL INIT SAW.syx",
+        "cross_bank:ALL INIT SUPERSAW.syx",
+        "cross_bank:Synthmania-EDM-Soundset-JT-4000.syx"
+      ],
+      "confidence": "fixture_observed",
+      "hardware_confirmed": false,
+      "observed_values": [
+        "0x00",
+        "0x07",
+        "0x0E",
+        "0x11",
+        "0x13",
+        "0x1D",
+        "0x22",
+        "0x25",
+        "0x2B",
+        "0x30",
+        "0x31",
+        "0x38",
+        "0x3C",
+        "0x45",
+        "0x4D",
+        "0x53",
+        "0x57",
+        "0x58",
+        "0x5A",
+        "0x5C",
+        "0x63"
+      ],
+      "notes": ""
+    },
+    {
+      "key": "vca_release",
+      "label": "VCA Release",
+      "sysex_offset": 21,
+      "cc": 84,
+      "kind": "continuous",
+      "source": [
+        "parameter_registry",
+        "cross_bank:ALL EMPTY.syx",
+        "cross_bank:ALL INIT SAW.syx",
+        "cross_bank:ALL INIT SUPERSAW.syx",
+        "cross_bank:Synthmania-EDM-Soundset-JT-4000.syx"
+      ],
+      "confidence": "fixture_observed",
+      "hardware_confirmed": false,
+      "observed_values": [
+        "0x00",
+        "0x0E",
+        "0x12",
+        "0x15",
+        "0x16",
+        "0x24",
+        "0x25",
+        "0x26",
+        "0x27",
+        "0x29",
+        "0x2A",
+        "0x2B",
+        "0x2C",
+        "0x2D",
+        "0x2E",
+        "0x33",
+        "0x36",
+        "0x3B",
+        "0x43",
+        "0x44",
+        "0x4C"
+      ],
+      "notes": ""
+    },
+    {
+      "key": "filter_env_amount",
+      "label": "VCF Amount",
+      "sysex_offset": 22,
+      "cc": 47,
+      "kind": "continuous",
+      "source": [
+        "parameter_registry",
+        "cross_bank:ALL EMPTY.syx",
+        "cross_bank:ALL INIT SAW.syx",
+        "cross_bank:ALL INIT SUPERSAW.syx",
+        "cross_bank:Synthmania-EDM-Soundset-JT-4000.syx"
+      ],
+      "confidence": "fixture_observed",
+      "hardware_confirmed": false,
+      "observed_values": [
+        "0x00",
+        "0x04",
+        "0x05",
+        "0x06",
+        "0x09",
+        "0x0E",
+        "0x0F",
+        "0x10",
+        "0x13",
+        "0x15",
+        "0x18",
+        "0x1B",
+        "0x1C",
+        "0x20",
+        "0x27",
+        "0x2A",
+        "0x2C",
+        "0x2D",
+        "0x32",
+        "0x34",
+        "0x36",
+        "0x40",
+        "0x46",
+        "0x48",
+        "0x49",
+        "0x59",
+        "0x5C",
+        "0x63"
+      ],
+      "notes": ""
+    },
+    {
+      "key": "ring_mod_toggle",
+      "label": "Ring Mod On/Off",
+      "sysex_offset": 43,
+      "cc": 96,
+      "kind": "enum",
+      "source": [
+        "parameter_registry",
+        "cross_bank:ALL EMPTY.syx",
+        "cross_bank:ALL INIT SAW.syx",
+        "cross_bank:ALL INIT SUPERSAW.syx",
+        "cross_bank:Synthmania-EDM-Soundset-JT-4000.syx"
+      ],
+      "confidence": "fixture_observed",
+      "hardware_confirmed": false,
+      "observed_values": [
+        "0x00",
+        "0x01"
+      ],
+      "notes": ""
+    },
+    {
+      "key": "ring_mod_amount",
+      "label": "Ring Mod Amount",
+      "sysex_offset": 44,
+      "cc": 95,
+      "kind": "continuous",
+      "source": [
+        "parameter_registry",
+        "cross_bank:ALL EMPTY.syx",
+        "cross_bank:ALL INIT SAW.syx",
+        "cross_bank:ALL INIT SUPERSAW.syx",
+        "cross_bank:Synthmania-EDM-Soundset-JT-4000.syx"
+      ],
+      "confidence": "fixture_observed",
+      "hardware_confirmed": false,
+      "observed_values": [
+        "0x00",
+        "0x0F",
+        "0x16",
+        "0x1E",
+        "0x23",
+        "0x2C",
+        "0x3E",
+        "0x47",
+        "0x53",
+        "0x63"
+      ],
+      "notes": ""
+    },
+    {
+      "key": "portamento_mode",
+      "label": "Portamento Mode",
+      "sysex_offset": 45,
+      "cc": null,
+      "kind": "enum",
+      "source": [
+        "parameter_registry",
+        "cross_bank:ALL EMPTY.syx",
+        "cross_bank:ALL INIT SAW.syx",
+        "cross_bank:ALL INIT SUPERSAW.syx",
+        "cross_bank:Synthmania-EDM-Soundset-JT-4000.syx"
+      ],
+      "confidence": "static_mapping",
+      "hardware_confirmed": false,
+      "observed_values": [
+        "0x00"
+      ],
+      "notes": ""
+    },
+    {
+      "key": "portamento_amount",
+      "label": "Portamento Amount",
+      "sysex_offset": 46,
+      "cc": null,
+      "kind": "continuous",
+      "source": [
+        "parameter_registry",
+        "cross_bank:ALL EMPTY.syx",
+        "cross_bank:ALL INIT SAW.syx",
+        "cross_bank:ALL INIT SUPERSAW.syx",
+        "cross_bank:Synthmania-EDM-Soundset-JT-4000.syx"
+      ],
+      "confidence": "fixture_observed",
+      "hardware_confirmed": false,
+      "observed_values": [
+        "0x00",
+        "0x03",
+        "0x04"
+      ],
+      "notes": ""
+    },
+    {
+      "key": "lfo1_wave",
+      "label": "LFO1 Wave",
+      "sysex_offset": 47,
+      "cc": 54,
+      "kind": "enum",
+      "source": [
+        "parameter_registry",
+        "cross_bank:ALL EMPTY.syx",
+        "cross_bank:ALL INIT SAW.syx",
+        "cross_bank:ALL INIT SUPERSAW.syx",
+        "cross_bank:Synthmania-EDM-Soundset-JT-4000.syx"
+      ],
+      "confidence": "fixture_observed",
+      "hardware_confirmed": false,
+      "observed_values": [
+        "0x00",
+        "0x01",
+        "0x02"
+      ],
+      "notes": ""
+    },
+    {
+      "key": "lfo2_wave",
+      "label": "LFO2 Wave",
+      "sysex_offset": 48,
+      "cc": 55,
+      "kind": "enum",
+      "source": [
+        "parameter_registry",
+        "cross_bank:ALL EMPTY.syx",
+        "cross_bank:ALL INIT SAW.syx",
+        "cross_bank:ALL INIT SUPERSAW.syx",
+        "cross_bank:Synthmania-EDM-Soundset-JT-4000.syx"
+      ],
+      "confidence": "fixture_observed",
+      "hardware_confirmed": false,
+      "observed_values": [
+        "0x00",
+        "0x02"
+      ],
+      "notes": ""
+    },
+    {
+      "key": "lfo1_rate",
+      "label": "LFO1 Speed",
+      "sysex_offset": 49,
+      "cc": 72,
+      "kind": "continuous",
+      "source": [
+        "parameter_registry",
+        "cross_bank:ALL EMPTY.syx",
+        "cross_bank:ALL INIT SAW.syx",
+        "cross_bank:ALL INIT SUPERSAW.syx",
+        "cross_bank:Synthmania-EDM-Soundset-JT-4000.syx"
+      ],
+      "confidence": "fixture_observed",
+      "hardware_confirmed": false,
+      "observed_values": [
+        "0x00",
+        "0x02",
+        "0x03",
+        "0x04",
+        "0x16",
+        "0x17",
+        "0x1F",
+        "0x23",
+        "0x25",
+        "0x28",
+        "0x33",
+        "0x63"
+      ],
+      "notes": ""
+    },
+    {
+      "key": "lfo1_amount",
+      "label": "LFO1 Amount",
+      "sysex_offset": 50,
+      "cc": 70,
+      "kind": "continuous",
+      "source": [
+        "parameter_registry",
+        "cross_bank:ALL EMPTY.syx",
+        "cross_bank:ALL INIT SAW.syx",
+        "cross_bank:ALL INIT SUPERSAW.syx",
+        "cross_bank:Synthmania-EDM-Soundset-JT-4000.syx"
+      ],
+      "confidence": "fixture_observed",
+      "hardware_confirmed": false,
+      "observed_values": [
+        "0x00",
+        "0x01",
+        "0x05",
+        "0x06",
+        "0x07",
+        "0x0B",
+        "0x0E",
+        "0x11",
+        "0x13",
+        "0x1F",
+        "0x24",
+        "0x25",
+        "0x28",
+        "0x43",
+        "0x4C",
+        "0x63"
+      ],
+      "notes": ""
+    },
+    {
+      "key": "lfo2_rate",
+      "label": "LFO2 Speed",
+      "sysex_offset": 51,
+      "cc": 73,
+      "kind": "continuous",
+      "source": [
+        "parameter_registry",
+        "cross_bank:ALL EMPTY.syx",
+        "cross_bank:ALL INIT SAW.syx",
+        "cross_bank:ALL INIT SUPERSAW.syx",
+        "cross_bank:Synthmania-EDM-Soundset-JT-4000.syx"
+      ],
+      "confidence": "fixture_observed",
+      "hardware_confirmed": false,
+      "observed_values": [
+        "0x00",
+        "0x01",
+        "0x0A",
+        "0x0C",
+        "0x16",
+        "0x1F",
+        "0x20",
+        "0x63"
+      ],
+      "notes": ""
+    },
+    {
+      "key": "lfo2_amount",
+      "label": "LFO2 Amount",
+      "sysex_offset": 52,
+      "cc": 28,
+      "kind": "continuous",
+      "source": [
+        "parameter_registry",
+        "cross_bank:ALL EMPTY.syx",
+        "cross_bank:ALL INIT SAW.syx",
+        "cross_bank:ALL INIT SUPERSAW.syx",
+        "cross_bank:Synthmania-EDM-Soundset-JT-4000.syx"
+      ],
+      "confidence": "fixture_observed",
+      "hardware_confirmed": false,
+      "observed_values": [
+        "0x00",
+        "0x08",
+        "0x0A",
+        "0x0C",
+        "0x0D",
+        "0x11",
+        "0x12",
+        "0x15",
+        "0x16",
+        "0x19",
+        "0x1C",
+        "0x21",
+        "0x22",
+        "0x2F",
+        "0x47",
+        "0x50"
+      ],
+      "notes": ""
+    },
+    {
+      "key": "lfo1_destination",
+      "label": "LFO1 Destination",
+      "sysex_offset": 53,
+      "cc": 56,
+      "kind": "enum",
+      "source": [
+        "parameter_registry",
+        "cross_bank:ALL EMPTY.syx",
+        "cross_bank:ALL INIT SAW.syx",
+        "cross_bank:ALL INIT SUPERSAW.syx",
+        "cross_bank:Synthmania-EDM-Soundset-JT-4000.syx"
+      ],
+      "confidence": "fixture_observed",
+      "hardware_confirmed": false,
+      "observed_values": [
+        "0x00",
+        "0x01"
+      ],
+      "notes": ""
+    }
+  ],
+  "name_field": {
+    "offsets": "0x37..0x3F",
+    "confidence": "fixture_observed",
+    "study": {
+      "name_offsets": "0x37..0x3F (9 bytes)",
+      "programs_analyzed": 128,
+      "distinct_names": 35,
+      "max_used_length": 9,
+      "padding_0x00_programs": 0,
+      "padding_0x20_programs": 85,
+      "mixed_trailing_programs": 0,
+      "non_ascii_bytes_observed": [],
+      "control_bytes_observed": [],
+      "all_bytes_7bit": true,
+      "empty_name_programs": 0,
+      "conclusion": "9-byte fixed field inside program record; padding style varies between fixtures (0x00 vs 0x20) — exact device padding rule needs hardware verification"
+    }
+  },
+  "unknown_offsets": [
+    {
+      "offset": 9,
+      "field": "Byte 0x09",
+      "status": "FIXTURE_CONSTANT",
+      "unique_values": [
+        "0x00"
+      ],
+      "confidence": "FIXTURE_CONSTANT",
+      "notes": "identical in every local fixture program; this does NOT prove unused/reserved"
+    },
+    {
+      "offset": 10,
+      "field": "Byte 0x0A",
+      "status": "FIXTURE_CONSTANT",
+      "unique_values": [
+        "0x00"
+      ],
+      "confidence": "FIXTURE_CONSTANT",
+      "notes": "identical in every local fixture program; this does NOT prove unused/reserved"
+    },
+    {
+      "offset": 11,
+      "field": "Byte 0x0B",
+      "status": "FIXTURE_CONSTANT",
+      "unique_values": [
+        "0x00"
+      ],
+      "confidence": "FIXTURE_CONSTANT",
+      "notes": "identical in every local fixture program; this does NOT prove unused/reserved"
+    },
+    {
+      "offset": 23,
+      "field": "Byte 0x17",
+      "status": "FIXTURE_CONSTANT",
+      "unique_values": [
+        "0x00"
+      ],
+      "confidence": "FIXTURE_CONSTANT",
+      "notes": "identical in every local fixture program; this does NOT prove unused/reserved"
+    },
+    {
+      "offset": 24,
+      "field": "Byte 0x18",
+      "status": "FIXTURE_CONSTANT",
+      "unique_values": [
+        "0x00"
+      ],
+      "confidence": "FIXTURE_CONSTANT",
+      "notes": "identical in every local fixture program; this does NOT prove unused/reserved"
+    },
+    {
+      "offset": 25,
+      "field": "Byte 0x19",
+      "status": "FIXTURE_CONSTANT",
+      "unique_values": [
+        "0x00"
+      ],
+      "confidence": "FIXTURE_CONSTANT",
+      "notes": "identical in every local fixture program; this does NOT prove unused/reserved"
+    },
+    {
+      "offset": 26,
+      "field": "Byte 0x1A",
+      "status": "FIXTURE_CONSTANT",
+      "unique_values": [
+        "0x00"
+      ],
+      "confidence": "FIXTURE_CONSTANT",
+      "notes": "identical in every local fixture program; this does NOT prove unused/reserved"
+    },
+    {
+      "offset": 27,
+      "field": "Byte 0x1B",
+      "status": "FIXTURE_CONSTANT",
+      "unique_values": [
+        "0x00"
+      ],
+      "confidence": "FIXTURE_CONSTANT",
+      "notes": "identical in every local fixture program; this does NOT prove unused/reserved"
+    },
+    {
+      "offset": 28,
+      "field": "Byte 0x1C",
+      "status": "FIXTURE_CONSTANT",
+      "unique_values": [
+        "0x00"
+      ],
+      "confidence": "FIXTURE_CONSTANT",
+      "notes": "identical in every local fixture program; this does NOT prove unused/reserved"
+    },
+    {
+      "offset": 29,
+      "field": "Byte 0x1D",
+      "status": "FIXTURE_CONSTANT",
+      "unique_values": [
+        "0x00"
+      ],
+      "confidence": "FIXTURE_CONSTANT",
+      "notes": "identical in every local fixture program; this does NOT prove unused/reserved"
+    },
+    {
+      "offset": 30,
+      "field": "Byte 0x1E",
+      "status": "FIXTURE_CONSTANT",
+      "unique_values": [
+        "0x00"
+      ],
+      "confidence": "FIXTURE_CONSTANT",
+      "notes": "identical in every local fixture program; this does NOT prove unused/reserved"
+    },
+    {
+      "offset": 31,
+      "field": "Byte 0x1F",
+      "status": "FIXTURE_CONSTANT",
+      "unique_values": [
+        "0x00"
+      ],
+      "confidence": "FIXTURE_CONSTANT",
+      "notes": "identical in every local fixture program; this does NOT prove unused/reserved"
+    },
+    {
+      "offset": 32,
+      "field": "Byte 0x20",
+      "status": "FIXTURE_CONSTANT",
+      "unique_values": [
+        "0x00"
+      ],
+      "confidence": "FIXTURE_CONSTANT",
+      "notes": "identical in every local fixture program; this does NOT prove unused/reserved"
+    },
+    {
+      "offset": 33,
+      "field": "Byte 0x21",
+      "status": "FIXTURE_CONSTANT",
+      "unique_values": [
+        "0x00"
+      ],
+      "confidence": "FIXTURE_CONSTANT",
+      "notes": "identical in every local fixture program; this does NOT prove unused/reserved"
+    },
+    {
+      "offset": 34,
+      "field": "Byte 0x22",
+      "status": "FIXTURE_CONSTANT",
+      "unique_values": [
+        "0x00"
+      ],
+      "confidence": "FIXTURE_CONSTANT",
+      "notes": "identical in every local fixture program; this does NOT prove unused/reserved"
+    },
+    {
+      "offset": 35,
+      "field": "Byte 0x23",
+      "status": "FIXTURE_CONSTANT",
+      "unique_values": [
+        "0x00"
+      ],
+      "confidence": "FIXTURE_CONSTANT",
+      "notes": "identical in every local fixture program; this does NOT prove unused/reserved"
+    },
+    {
+      "offset": 36,
+      "field": "Byte 0x24",
+      "status": "FIXTURE_CONSTANT",
+      "unique_values": [
+        "0x00"
+      ],
+      "confidence": "FIXTURE_CONSTANT",
+      "notes": "identical in every local fixture program; this does NOT prove unused/reserved"
+    },
+    {
+      "offset": 37,
+      "field": "Byte 0x25",
+      "status": "FIXTURE_CONSTANT",
+      "unique_values": [
+        "0x00"
+      ],
+      "confidence": "FIXTURE_CONSTANT",
+      "notes": "identical in every local fixture program; this does NOT prove unused/reserved"
+    },
+    {
+      "offset": 38,
+      "field": "Byte 0x26",
+      "status": "FIXTURE_CONSTANT",
+      "unique_values": [
+        "0x00"
+      ],
+      "confidence": "FIXTURE_CONSTANT",
+      "notes": "identical in every local fixture program; this does NOT prove unused/reserved"
+    },
+    {
+      "offset": 39,
+      "field": "Byte 0x27",
+      "status": "FIXTURE_CONSTANT",
+      "unique_values": [
+        "0x00"
+      ],
+      "confidence": "FIXTURE_CONSTANT",
+      "notes": "identical in every local fixture program; this does NOT prove unused/reserved"
+    },
+    {
+      "offset": 40,
+      "field": "Byte 0x28",
+      "status": "FIXTURE_CONSTANT",
+      "unique_values": [
+        "0x00"
+      ],
+      "confidence": "FIXTURE_CONSTANT",
+      "notes": "identical in every local fixture program; this does NOT prove unused/reserved"
+    },
+    {
+      "offset": 41,
+      "field": "Byte 0x29",
+      "status": "FIXTURE_CONSTANT",
+      "unique_values": [
+        "0x00"
+      ],
+      "confidence": "FIXTURE_CONSTANT",
+      "notes": "identical in every local fixture program; this does NOT prove unused/reserved"
+    },
+    {
+      "offset": 42,
+      "field": "Byte 0x2A",
+      "status": "FIXTURE_CONSTANT",
+      "unique_values": [
+        "0x00"
+      ],
+      "confidence": "FIXTURE_CONSTANT",
+      "notes": "identical in every local fixture program; this does NOT prove unused/reserved"
+    },
+    {
+      "offset": 54,
+      "field": "Byte 0x36",
+      "status": "FIXTURE_CONSTANT",
+      "unique_values": [
+        "0x00"
+      ],
+      "confidence": "FIXTURE_CONSTANT",
+      "notes": "identical in every local fixture program; this does NOT prove unused/reserved"
+    }
+  ]
+}
