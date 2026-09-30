@@ -394,3 +394,50 @@ def test_gui_module_does_not_import_midi():
     r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     assert r.stdout.strip() == "False"
+
+
+# ------------------------------------------------- P1.10 UX polish: waveforms
+def test_shape_for_known_labels():
+    """Pure presentation mapping: registry display label -> shape kind."""
+    from jt4000m.waveforms import shape_for
+    assert shape_for("SAW") == "saw"
+    assert shape_for("SUPER SAW") == "supersaw"
+    assert shape_for("OFF") == "off"
+    # Unknown values must NOT get an invented shape (evidence policy).
+    assert shape_for("Unknown (0x07)") is None
+
+
+@gui_test
+def test_wave_tiles_follow_selection(app):
+    """Wave tiles are driven by the model read API, not raw bytes."""
+    app.load_path(FIX / "ALL INIT SAW.syx")           # OSC1/OSC2 = SAW
+    assert app._osc_tiles["osc1_wave"].kind == "saw"
+    app.select_program(1)
+    app.editor.commit()
+    app.editor.rename("ZZ")                            # some other patch? no-op rename
+    # Switch to ALL EMPTY bank content via reload of a different fixture
+    app.load_path(FIX / "Synthmania-EDM-Soundset-JT-4000.syx")
+    kinds = {app._osc_tiles[k].kind for k in ("osc1_wave", "osc2_wave")}
+    assert all(k is None or isinstance(k, str) for k in kinds)
+    # A patch with an unknown wave value must render placeholder, never a lie
+    found_unknown = False
+    for idx in range(1, 33):
+        app.select_program(idx)
+        if app._osc_tiles["osc1_wave"].kind is None and \
+                app.editor.get_patch(idx).get_parameter("osc1_wave").raw not in (0,):
+            found_unknown = True
+            break
+    # Synthmania contains FUNMYLEAD/CLAP with wave 0x07 => placeholder expected
+    assert found_unknown, "unknown enum value should map to no established shape"
+
+
+@gui_test
+def test_keyboard_navigation_selects_through_model(app):
+    """Arrow navigation routes selection through EditorModel.select_patch."""
+    app.load_path(FIX / "Synthmania-EDM-Soundset-JT-4000.syx")
+    assert app.selected_index == 1
+    app.listbox.selection_clear(0, "end")
+    app.listbox.selection_set(4)                       # cursor on slot 5
+    app._sync_selection_from_cursor()
+    assert app.selected_index == 5
+    assert app.editor.selected == 5                    # model state, not GUI copy
