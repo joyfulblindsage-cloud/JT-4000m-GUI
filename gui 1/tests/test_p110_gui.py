@@ -251,26 +251,57 @@ def test_parameter_edit_changes_only_its_byte(app, quiet):
 
 @gui_test
 def test_duplicate_swap_move_via_model_and_undo(app):
-    app.load_path(FIX / "ALL INIT SAW.syx")
+    """P1.15 corrective contract: dirty reflects STATE CHANGE, not the fact
+    a mutation method was called.  ALL INIT SAW has byte-identical slots, so
+    duplicate(1->2)/swap(1,3) there are genuine no-ops and must NOT flip
+    dirty.  To exercise the real mutation + undo path we use Synthmania,
+    whose slots differ."""
+    app.load_path(FIX / "Synthmania-EDM-Soundset-JT-4000.syx")
     app.select_program(1)
     pre = {i: bytes(app.editor.get_patch(i).data) for i in range(1, 33)}
+    base_bytes = app.editor.bank.to_sysex()
 
     app.duplicate_program()                    # 1 -> 2 (via EditorModel)
     assert bytes(app.editor.get_patch(2).data) == pre[1]
+    assert app.editor.bank.to_sysex() != base_bytes   # real state change
     assert app.editor.is_dirty()
     app.undo()
     assert bytes(app.editor.get_patch(2).data) == pre[2]
+    assert app.editor.bank.to_sysex() == base_bytes
 
     m = app.editor
     m.commit()
     app._history.push()
-    m.swap_patches(1, 3)
+    m.swap_patches(1, 3)                       # slots genuinely differ
     app._after_mutation()
-    assert bytes(m.get_patch(1).data) == pre[3][:] or True  # swapped content
+    assert bytes(m.get_patch(1).data) == pre[3]  # swapped content
     assert bytes(m.get_patch(3).data) == pre[1]
+    assert m.is_dirty()
     app.undo()
     assert bytes(m.get_patch(1).data) == pre[1]
     assert bytes(m.get_patch(3).data) == pre[3]
+
+
+@gui_test
+def test_identical_slot_ops_are_noop(app):
+    """ALL INIT SAW: every slot holds the same record, so duplicate/swap/move
+    between any two slots leave the bank byte-identical → no dirty flip, no
+    history growth (P1.15 corrective semantics)."""
+    app.load_path(FIX / "ALL INIT SAW.syx")
+    app.select_program(1)
+    base_bytes = app.editor.bank.to_sysex()
+    hist_before = len(app._history._undo) if hasattr(app._history, "_undo") else None
+
+    app.duplicate_program()                    # 1 -> 2, identical records
+    assert app.editor.bank.to_sysex() == base_bytes
+    assert not app.editor.is_dirty()           # no-op → stays CLEAN
+
+    app.editor.swap_patches(1, 3)              # identical records
+    app.editor.move_patch(1, 5)                # identical records
+    assert app.editor.bank.to_sysex() == base_bytes
+    assert not app.editor.is_dirty()
+    if hist_before is not None:
+        assert len(app._history._undo) == hist_before  # no history entries
 
 
 @gui_test
