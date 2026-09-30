@@ -21,3 +21,8 @@ packages = ["jt4000m"]
 # pytest marks to fixtures, which newer pytest rejects at startup).
 # Disable it so `python -m pytest` works without extra flags.
 addopts = "-p no:libtmux"
+markers = [
+    "syx_safety: SysEx format-safety contracts (name boundary 55..63, byte-54 isolation, unknown-byte preservation, round-trip identity, checksum ownership, no-op byte identity). Run with: pytest -m syx_safety",
+    "gui_xvfb: tests that require a display (Tkinter GUI); skipped headless unless DISPLAY is available",
+    "hardware: tests requiring a physical JT-4000M; skipped unless JT4000M_HARDWARE_TEST=1",
+]

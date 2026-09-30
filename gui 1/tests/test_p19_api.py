@@ -332,9 +332,26 @@ class TestDirtyState:
         assert not m.is_dirty()
         m.rename("X")
         assert m.is_dirty()
+        # P1.15 corrective contract: dirty reflects STATE CHANGE, not the
+        # fact a mutation method was called. ALL INIT SAW has byte-identical
+        # slots, so dup(1,30)/swap(1,2)/move(1,3) are genuine no-ops here and
+        # must NOT flip dirty (verified byte-for-byte via to_sysex()).
+        base_bytes = m.bank.to_sysex()
         m.duplicate_patch(1, 30); m.swap_patches(1, 2); m.move_patch(1, 3)
-        assert m.is_dirty()
-        # bank ops alone don't dirty when nothing changes? swap always counts:
+        assert m.bank.to_sysex() == base_bytes      # no-op => identical bytes
+        assert m.is_dirty()                         # rename still holds dirty
+        # The same operations on Synthmania (slots differ) ARE real
+        # mutations and must flip dirty + change bytes.
+        ms = model(SYNTH)
+        sbase = ms.bank.to_sysex()
+        ms.swap_patches(1, 2)
+        assert ms.is_dirty() and ms.bank.to_sysex() != sbase
+        ms = model(SYNTH)
+        ms.move_patch(1, 5)
+        assert ms.is_dirty()
+        ms = model(SYNTH)
+        ms.duplicate_patch(1, 9)
+        assert ms.is_dirty()
         m2 = model(ALL_SAW)
         m2.merge(model(SYNTH), mode="skip")   # 0 merged
         assert not m2.is_dirty()              # legit outcome, not an error
