@@ -23,6 +23,7 @@ from .editor_model import EditorHistory, EditorModel
 from .model import BY_KEY, PARAMETERS, display_value, enum_options
 from .patch import Bank, JTProgram, program_to_single
 from .syx import SysExFile, field_name, parse_file, semantic_value
+from .waveforms import WaveTile
 
 # Parameter groups rendered in this order in the editor grid.
 SECTION_ORDER = ["OSCILLATORS", "FILTER", "VCF ENVELOPE", "VCA ENVELOPE", "LFO", "MODULATION"]
@@ -163,7 +164,14 @@ class Editor(tk.Tk):
         self.listbox.pack(fill="both", expand=True)
         self.listbox.bind("<<ListboxSelect>>", self._on_select)
         self.listbox.bind("<Double-Button-1>", lambda _e: self.duplicate_program())
-        ttk.Label(left, text="Click to open · double-click to duplicate into next slot.",
+        # P1.10 UX polish: keyboard navigation of the patch list.  Arrow keys
+        # move the model selection (through EditorModel.select_patch — never a
+        # direct bank touch); Return focuses the name entry; Ctrl+D duplicates.
+        for _key in ("<Up>", "<Down>", "<Prior>", "<Next>", "<Home>", "<End>"):
+            self.listbox.bind(_key, self._on_key_nav)
+        self.listbox.bind("<Return>", lambda _e: self.name_entry.focus_set())
+        self.listbox.bind("<Control-d>", lambda _e: self.duplicate_program())
+        ttk.Label(left, text="↑↓ navigate · Enter rename · Ctrl+D / dbl-click duplicate.",
                   style="Muted.TLabel").pack(anchor="w", pady=(4, 0))
 
         # ---- center: preset editor ------------------------------------
@@ -227,6 +235,8 @@ class Editor(tk.Tk):
             title = tk.Label(box, text=section, bg="#292a2d", fg="#f1f1f1",
                               font=("TkDefaultFont", 10, "bold"))
             title.pack(anchor="w", padx=10, pady=(8, 4))
+            if section == "OSCILLATORS":
+                self._build_wave_strip(box)      # P1.10 UX polish: live preview
             inner = tk.Frame(box, bg="#292a2d")
             inner.pack(fill="both", expand=True, padx=8, pady=(0, 8))
             for spec in PARAMETERS:
@@ -247,6 +257,58 @@ class Editor(tk.Tk):
                 row.pack(fill="x")
                 tk.Label(row, text=f"{spec.label}: CC {spec.cc}", bg="#292a2d",
                          fg="#9aa0a6", anchor="w").pack(side="left")
+
+    def _build_wave_strip(self, box) -> None:
+        """Animated OSC1/OSC2 waveform previews (presentation only).
+
+        The tiles are driven by registry DISPLAY strings via
+        jt4000m.waveforms — the GUI never reads raw bytes here.  Unknown
+        enum values render an honest "no established shape" placeholder.
+        """
+        strip = tk.Frame(box, bg="#292a2d")
+        strip.pack(fill="x", padx=10, pady=(2, 2))
+        self.wave_canvas = tk.Canvas(strip, width=316, height=48, bg="#292a2d",
+                                     highlightthickness=0)
+        self.wave_canvas.pack(side="left")
+        self.wave_phase_var = tk.StringVar(value="")
+        tk.Label(box, textvariable=self.wave_phase_var, bg="#292a2d", fg="#5f6368",
+                 font=("TkDefaultFont", 7)).pack(anchor="e", padx=10)
+        self._osc_tiles: dict[str, WaveTile] = {}
+        x = 2
+        for key, caption in (("osc1_wave", "OSC1"), ("osc2_wave", "OSC2")):
+            tile = WaveTile(self.wave_canvas, self._update_wave_phase,
+                            width=150, height=44)
+            self.wave_canvas.create_text(x + 4, 40, text=caption, anchor="w",
+                                         fill="#9aa0a6", font=("TkDefaultFont", 7, "bold"))
+            self._osc_tiles[key] = tile
+            x += 158
+
+    def _refresh_wave_tiles(self) -> None:
+        """Push current registry display values into the wave tiles."""
+        if not getattr(self, "_osc_tiles", None) or self.bank is None \
+                or self.selected_index is None:
+            return
+        patch = self.editor.get_patch(self.selected_index)   # model read API
+        for key, tile in self._osc_tiles.items():
+            try:
+                disp = patch.get_parameter(key).display
+            except Exception:
+                disp = ""
+            tile.set_wave(disp)
+            tile.draw()
+
+    def _update_wave_phase(self) -> None:
+        try:
+            if self.wave_phase_var.get() == "phase ●":
+                self.wave_phase_var.set("phase ○")
+            else:
+                self.wave_phase_var.set("phase ●")
+        except tk.TclError:
+            pass
+
+    def _start_animation(self) -> None:
+        for tile in getattr(self, "_osc_tiles", {}).values():
+            tile.start()
 
     def _parameter_row(self, parent, spec) -> None:
         row = tk.Frame(parent, bg="#292a2d")
@@ -528,6 +590,26 @@ class Editor(tk.Tk):
         if sel[0] < len(visible):
             self.select_program(visible[sel[0]].index)
 
+    def _on_key_nav(self, event) -> str | None:
+        """Arrow/Page/Home/End navigation in the patch list.
+
+        Lets the Listbox perform its own cursor movement first (returning
+        "break" only when we handle it ourselves), then routes the new
+        position through the same model selection path as mouse clicks.
+        """
+        self.listbox.after_idle(self._sync_selection_from_cursor)
+        return None
+
+    def _sync_selection_from_cursor(self) -> None:
+        sel = self.listbox.curselection()
+        if not sel or self.bank is None:
+            return
+        visible = self._visible_programs()
+        if sel[0] < len(visible):
+            idx = visible[sel[0]].index
+            if idx != self.selected_index:
+                self.select_program(idx)
+
     def select_program(self, index: int) -> None:
         if self.bank is None or not 1 <= index <= 32:
             return
@@ -573,6 +655,7 @@ class Editor(tk.Tk):
         self.name_entry.configure(state="normal" if enabled else "disabled")
         self.apply_name_btn.configure(state="normal" if enabled else "disabled")
         self._syncing = False
+        self._refresh_wave_tiles()
 
     def _combo_text(self, key: str, raw: int) -> str:
         return dict(enum_options(key)).get(raw, "")
@@ -602,37 +685,18 @@ class Editor(tk.Tk):
     def _after_mutation(self) -> None:
         """P1.10 single synchronization point: model -> GUI projection.
 
-        EditorModel/EditorHistory are the ONLY source of truth. This method
-        never mutates anything: it re-reads the (immutable) bank mirror from
-        the model and refreshes every dependent widget — patch list, name,
-        parameter widgets, dirty indicator, undo/redo availability and the
-        read-only developer/diagnostic views.
-
-        Exception: if the GUI mirror `self.bank` was replaced directly with a
-        *different* Bank instance (a diagnostic/test injection at the domain
-        layer), we adopt that instance into the model instead of discarding
-        it — the model remains the single source of truth afterwards.
+        EditorModel/EditorHistory are the ONLY source of truth.  This method
+        NEVER writes into the model: `self.bank` is a pure read-only mirror
+        refreshed from `editor.bank` after every mutation.  (The old "adopt
+        injected mirror" branch was removed: because copy-on-write produces a
+        NEW Bank object on every commit, `is not` alone could not tell a test
+        injection apart from a stale mirror, and adopting the stale mirror
+        rolled the model back, silently discarding the just-applied edit.)
         """
         try:
             model_bank = self.editor.bank       # raises if nothing loaded
         except RuntimeError:
             model_bank = None
-        if (self.bank is not None and model_bank is not None
-                and self.bank is not model_bank):
-            # The mirror differs from the model.  Normally that means the
-            # GUI/test replaced `app.bank` with a diagnostic Bank instance
-            # (injection) — adopt it into the model so the model stays the
-            # single source of truth afterwards.  But when the mirror is a
-            # STALE reference to an older model bank (immutable copy-on-write
-            # banks are superseded by every commit), adopting it would roll
-            # the model back and silently discard the just-applied edit.
-            # Detect staleness via serialization identity instead.
-            stale = self.bank.to_sysex() == model_bank.to_sysex()
-            if not stale:
-                self.editor._bank = self.bank   # adopt injected mirror
-                self.editor._working = None
-                self.editor._dirty = self.editor._session_modified()
-                model_bank = self.bank
         if model_bank is not None:
             self.bank = model_bank              # refresh mirror from model
         self.refresh_list()
@@ -889,6 +953,17 @@ class Editor(tk.Tk):
             self.raw_tree.insert("", "end", values=(f"0x{off:02X}", f"{val:02X}", val, name))
 
     # ---------------------------------------------------------------- misc
+    def destroy(self) -> None:
+        """Stop every animation timer before tearing down the Tk app.
+
+        Without this, WaveTile.after() callbacks keep firing against a
+        destroyed interpreter and hang test sessions that create/destroy
+        many Editor instances.
+        """
+        for tile in getattr(self, "_osc_tiles", {}).values():
+            tile.stop()
+        super().destroy()
+
     def quit_or_ask(self) -> None:
         if self.bank is not None and self.modified_var.get():
             if not messagebox.askyesno("Unsaved changes", "Discard unsaved changes and quit?"):
@@ -901,4 +976,5 @@ def main(argv: list[str] | None = None) -> None:
     args = list(argv or [])
     if args:  # optional: open a bank straight from the command line
         app.load_path(args[0])
+    app._start_animation()
     app.mainloop()
