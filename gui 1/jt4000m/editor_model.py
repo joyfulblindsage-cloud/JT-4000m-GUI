@@ -797,11 +797,19 @@ class EditorModel:
         """Swap two slots. Raw records move byte-for-byte; only indices are
         renumbered. Program count stays exactly 32.
 
-        No-op contract: swap(x, x) does nothing."""
+        No-op contract (P1.15 corrective): a swap that leaves the bank
+        byte-identical — swap(x, x) OR swapping two slots that already hold
+        identical records (common in ALL INIT SAW.syx) — changes nothing and
+        must NOT discard an uncommitted working copy or flip dirty.  The
+        decision is made on the RESULTING BANK STATE, not merely on index
+        equality."""
         self._require_loaded()
         if a == b:
             return                                      # no-op
-        self._bank = self._bank.swap(a, b)
+        candidate = self._bank.swap(a, b)
+        if bytes(candidate.to_sysex()) == bytes(self._bank.to_sysex()):
+            return                                      # state unchanged → no-op
+        self._bank = candidate
         self._working = None
         self._dirty = self._session_modified()
 
@@ -809,11 +817,17 @@ class EditorModel:
         """Shift the record at `source` to `destination` (Bank.move
         semantics); every other raw record is preserved byte-for-byte.
 
-        No-op contract: move(x, x) does nothing."""
+        No-op contract (P1.15 corrective): move(x, x) does nothing; a move
+        whose resulting bank is byte-identical to the current bank (e.g. all
+        slots hold the same record) is also a genuine no-op and must not
+        discard the pending working copy."""
         self._require_loaded()
         if source == destination:
             return                                      # no-op
-        self._bank = self._bank.move(source, destination)
+        candidate = self._bank.move(source, destination)
+        if bytes(candidate.to_sysex()) == bytes(self._bank.to_sysex()):
+            return                                      # state unchanged → no-op
+        self._bank = candidate
         self._working = None
         self._dirty = self._session_modified()
 
