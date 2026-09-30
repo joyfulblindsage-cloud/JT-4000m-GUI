@@ -641,12 +641,10 @@ class Editor(tk.Tk):
             if spec.kind == "enum" and hasattr(self, f"combo_{spec.key}"):
                 combo = getattr(self, f"combo_{spec.key}")
                 labels = [name for _v, name in enum_options(spec.key)]
-                text = self._combo_text(spec.key, raw)
-                # A raw value with no confirmed label (e.g. loaded from a
-                # third-party bank) must not snap to a wrong option and must
-                # not raise: ttk.Combobox.current(-1) is invalid, so we set
-                # the text directly. The numeric label next to the control
-                # still shows "Unknown (0xNN)".
+                # The authoritative display comes from the registry decoder
+                # (display_value): unknown raw values render as
+                # "Unknown (0xNN)" — never snapped to a wrong option.
+                text = self._formatted(spec.key, raw)
                 if text in labels:
                     combo.set(text)
                 else:
@@ -753,7 +751,20 @@ class Editor(tk.Tk):
     def _combo_apply(self, key: str, combo) -> None:
         if self._syncing:
             return
-        value = enum_options(key)[combo.current()][0]
+        # Map the selected TEXT back to its registry value (never trust a
+        # positional index): an "Unknown (0xNN)" placeholder must not be
+        # treated as an edit request.
+        by_label = {label: value for value, label in enum_options(key)}
+        text = combo.get()
+        if text in by_label:
+            value = by_label[text]
+        else:
+            try:  # placeholder form "Unknown (0xNN)" — raw is already current
+                value = int(text.split("(0x", 1)[1].rstrip(")"), 16)
+            except (IndexError, ValueError):
+                return
+        if value == self.vars[key].get():
+            return                          # no-op contract
         self.vars[key].set(value)
         self.apply_parameter(key)
 

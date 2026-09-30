@@ -607,6 +607,18 @@ class EditorModel:
     def selected(self) -> int:
         return self._selected
 
+    @property
+    def loaded(self) -> bool:
+        """P1.15 boundary: public 'is a bank loaded?' predicate so the GUI
+        never needs to inspect ``editor._bank`` (P1.11 rule)."""
+        return self._bank is not None
+
+    def get_patch_name(self, index: int) -> str:
+        """P1.15 boundary: read one slot's name without materialising a
+        full PatchState and without touching private state."""
+        self._require_loaded()
+        return self.bank.get(index).name
+
     def select(self, index: int) -> PatchState:
         if not 1 <= index <= 32:
             raise PatchIndexError("Program index must be 1..32.")
@@ -747,42 +759,60 @@ class EditorModel:
     def duplicate_patch(self, source: int, destination: int) -> PatchState:
         """Copy program record `source` into slot `destination`.
         Byte-preserving; both slots stay occupied (there is no empty-slot
-        concept — see EMPTY SLOT SEMANTICS rule at module top)."""
+        concept — see EMPTY SLOT SEMANTICS rule at module top).
+
+        No-op contract (P1.12 §9): copying a slot onto itself, or onto a
+        slot that already holds byte-identical data, changes nothing."""
         self._require_loaded()
         if not (1 <= source <= 32 and 1 <= destination <= 32):
             raise PatchIndexError("Slot index must be 1..32.")
+        if bytes(self._bank.get(source).data) == bytes(self._bank.get(destination).data):
+            return self.get_patch(destination)          # no-op
         self._bank = self._bank.copy_program(source, destination)
         self._working = None
-        self._dirty = True
+        self._dirty = self._session_modified()
         return self.get_patch(destination)
 
     def swap_patches(self, a: int, b: int) -> None:
         """Swap two slots. Raw records move byte-for-byte; only indices are
-        renumbered. Program count stays exactly 32."""
+        renumbered. Program count stays exactly 32.
+
+        No-op contract: swap(x, x) does nothing."""
         self._require_loaded()
+        if a == b:
+            return                                      # no-op
         self._bank = self._bank.swap(a, b)
         self._working = None
-        self._dirty = True
+        self._dirty = self._session_modified()
 
     def move_patch(self, source: int, destination: int) -> None:
         """Shift the record at `source` to `destination` (Bank.move
-        semantics); every other raw record is preserved byte-for-byte."""
+        semantics); every other raw record is preserved byte-for-byte.
+
+        No-op contract: move(x, x) does nothing."""
         self._require_loaded()
+        if source == destination:
+            return                                      # no-op
         self._bank = self._bank.move(source, destination)
         self._working = None
-        self._dirty = True
+        self._dirty = self._session_modified()
 
     def replace_patch(self, destination: int, patch) -> PatchState:
         """Replace one slot with another patch's record (byte-for-byte).
-        Accepts PatchState or JTProgram."""
+        Accepts PatchState or JTProgram.
+
+        No-op contract: replacing a slot with identical bytes changes
+        nothing and does not flip dirty."""
         self._require_loaded()
         data = getattr(patch, "data", None)
         if data is None:
             raise TypeError("replace_patch expects PatchState or JTProgram")
-        self._bank = self._bank.replace(destination,
-                                       JTProgram(destination, bytes(data)))
+        new_prog = JTProgram(destination, bytes(data))
+        if bytes(new_prog.data) == bytes(self._bank.get(destination).data):
+            return self.get_patch(destination)          # no-op
+        self._bank = self._bank.replace(destination, new_prog)
         self._working = None
-        self._dirty = True
+        self._dirty = self._session_modified()
         return self.get_patch(destination)
 
     def rename_patch(self, index: int, name: str) -> PatchState:
@@ -798,7 +828,7 @@ class EditorModel:
         if self._bank.get(index).name == name[:9]:
             return self.get_patch(index)
         self._bank = self._bank.set_name(index, name)
-        self._dirty = True
+        self._dirty = self._session_modified()
         return self.get_patch(index)
 
     def reset_patch_parameter(self, index: int, key: str) -> bool:
@@ -816,7 +846,11 @@ class EditorModel:
         parameter was already at its default (no-op contract)."""
         self._require_loaded()
         spec = BY_KEY[key]                      # raises UnknownParameterError
-        if not spec.editable or spec.offset is None:
+        # Editability/writability come from the EDITOR-layer definition
+        # (registry metadata + writable_parameters()), NOT from a nonexistent
+        # ParameterSpec attribute — see ParameterDefinition.editable/.writable.
+        d = definition_for(key)
+        if not d.editable or d.offset is None or not d.writable:
             raise ParameterNotEditableError(
                 f"{key} is not editable through the editor API")
         prog = self._bank.get(index)            # raises on bad index
