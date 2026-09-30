@@ -649,6 +649,27 @@ class EditorModel:
     def set_parameter(self, key: str, value: int) -> PatchState:
         return self.edit_parameter(key, value)
 
+    def set_slot_parameter(self, index: int, key: str, value: int) -> PatchState:
+        """P1.15: immediate byte-preserving slot mutation through the same
+        validated model helpers as every other edit (single-byte change,
+        unknown bytes preserved).  Unlike ``set_parameter`` this does NOT
+        create an uncommitted working copy — it writes into the bank right
+        away, which is what per-slot operations from the GUI need so that a
+        history snapshot taken BEFORE the call can undo it exactly.
+
+        No-op contract: if the slot already holds the value, nothing changes
+        and no session mutation occurs (dirty flag untouched)."""
+        self._require_loaded()
+        spec = BY_KEY[key]                      # raises UnknownParameterError
+        prog = self._bank.get(index)            # raises on bad index
+        if prog.get_parameter(key) == value:
+            return self.get_patch(index)
+        new_prog = prog.set_parameter(key, value)
+        self._bank = self._bank.replace(index, new_prog)
+        self._working = None
+        self._dirty = self._session_modified()
+        return self.get_patch(index)
+
     def rename(self, name: str) -> PatchState:
         return self.edit_name(name)
 
@@ -769,32 +790,42 @@ class EditorModel:
         0x37..0x3F / offsets 55..63 (domain-level guarantee; byte 54 is
         structural and never written). Uses the existing Bank.set_name
         (same helper as PatchLibrary), so the 9-byte field semantics
-        (truncate >9, space padding) are identical everywhere."""
+        (truncate >9, space padding) are identical everywhere.
+
+        No-op contract (P1.15): if the effective 9-byte name is already the
+        requested one, nothing changes and no session mutation occurs."""
         self._require_loaded()
+        if self._bank.get(index).name == name[:9]:
+            return self.get_patch(index)
         self._bank = self._bank.set_name(index, name)
         self._dirty = True
         return self.get_patch(index)
 
-    def reset_patch_parameter(self, index: int, key: str) -> PatchState:
+    def reset_patch_parameter(self, index: int, key: str) -> bool:
         """Reset one slot's parameter to its documented registry default —
         without changing the selection and WITHOUT touching the uncommitted
         working copy of another slot.
 
         Same history/dirty semantics as rename_patch(): immediate domain
-        mutation through the existing model helpers, session becomes
-        MODIFIED. The GUI never writes raw bytes itself; this exists so a
-        per-parameter 'reset to default' button is a single public-API call.
-        """
+        mutation through the existing model helpers; the session becomes
+        MODIFIED only if the bank really differs from the baseline. The GUI
+        never writes raw bytes itself; this exists so a per-parameter
+        'reset to default' button is a single public-API call.
+
+        Returns True when the byte value actually changed, False when the
+        parameter was already at its default (no-op contract)."""
         self._require_loaded()
         spec = BY_KEY[key]                      # raises UnknownParameterError
         if not spec.editable or spec.offset is None:
             raise ParameterNotEditableError(
                 f"{key} is not editable through the editor API")
         prog = self._bank.get(index)            # raises on bad index
+        if prog.get_parameter(key) == spec.default:
+            return False                        # already default → no-op
         new_prog = prog.set_parameter(key, spec.default)
         self._bank = self._bank.replace(index, new_prog)
-        self._dirty = True
-        return self.get_patch(index)
+        self._dirty = self._session_modified()
+        return True
 
     def registry_status(self) -> dict:
         """Report-only registry audit (P1.8 validate_registry). NEVER
@@ -898,6 +929,28 @@ class EditorModel:
                                        source_path=self._path)
 
     def edit_parameter(self, key: str, value: int) -> PatchState:
+        new = self.current_patch().set_parameter(key, value)
+        # P1.15 no-op contract: setting the SAME value must not flip dirty
+        # (validation above still raises for unknown/out-of-range values).
+        if bytes(new.data) != bytes(self.current_patch().data):
+            self._working = new
+            self._dirty = True
+        return new
+
+    def edit_parameters(self, updates: Mapping[str, int]) -> PatchState:
+        new = self.current_patch().set_parameters(updates)
+        if bytes(new.data) != bytes(self.current_patch().data):
+            self._working = new
+            self._dirty = True
+        return new
+
+    def edit_name(self, name: str) -> PatchState:
+        new = self.current_patch().set_name(name)
+        # Same effective 9-byte name → no session mutation, no dirty flip.
+        if bytes(new.data) != bytes(self.current_patch().data):
+            self._working = new
+            self._dirty = True
+        return new
         self._working = self.current_patch().set_parameter(key, value)
         self._dirty = self._session_modified()
         return self._working
@@ -1089,11 +1142,40 @@ class EditorHistory:
         self._redo: list[BankSnapshot] = []
 
     def push(self) -> None:
-        """Call immediately before a mutation; records current state."""
-        self._undo.append(self._model.snapshot())
+        """Call immediately before a mutation; records current state.
+
+        P1.15 no-op contract: pushing a snapshot identical to the one on top
+        of the undo stack would create an undo step that changes nothing
+        (and could flip dirty state spuriously).  Consecutive identical
+        snapshots are therefore coalesced — the stack depth stays the same
+        and the redo stack is left untouched.
+        """
+        snap = self._model.snapshot()
+        if self._undo and self._snapshots_equal(self._undo[-1], snap):
+            return
+        self._undo.append(snap)
         if len(self._undo) > self._limit:
             self._undo.pop(0)
         self._redo.clear()
+
+    @staticmethod
+    def _snapshots_equal(a: "BankSnapshot", b: "BankSnapshot") -> bool:
+        """Cheap structural equality WITHOUT any serialization side effects.
+
+        The domain model is copy-on-write, so unchanged programs are shared
+        objects; comparing the program tuples element-wise is enough (plus
+        selection/working-copy identity checks)."""
+        if a.selected != b.selected:
+            return False
+        aw, bw = a.working, b.working
+        if (aw is None) != (bw is None):
+            return False
+        if aw is not None and bytes(aw.data) != bytes(bw.data):
+            return False
+        if len(a.bank.programs) != len(b.bank.programs):
+            return False
+        return all(pa.data == pb.data for pa, pb in
+                   zip(a.bank.programs, b.bank.programs))
 
     @property
     def can_undo(self) -> bool:
@@ -1124,6 +1206,17 @@ class EditorHistory:
     def clear(self) -> None:
         self._undo.clear()
         self._redo.clear()
+
+    # ---- P1.15 read-only inspection (projection support, no mutation) ----
+    @property
+    def depth_undo(self) -> int:
+        """Current undo-stack depth (read-only; used by behavioral tests and
+        the status projection — the GUI never manipulates stacks itself)."""
+        return len(self._undo)
+
+    @property
+    def depth_redo(self) -> int:
+        return len(self._redo)
 
     # ---- dirty semantics (P1.10 §6; single source of truth = model) ------
     def sync_dirty(self) -> bool:
