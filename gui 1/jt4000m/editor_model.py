@@ -677,8 +677,16 @@ class EditorModel:
         if prog.get_parameter(key) == value:
             return self.get_patch(index)
         new_prog = prog.set_parameter(key, value)
+        # P1.15 corrective fix: fold any pending working copy of THIS slot
+        # into the bank before mutating (same pattern as duplicate/swap/move/
+        # replace/rename_patch).  A bare `self._working = None` here would
+        # silently DISCARD uncommitted edits — e.g. a rename made through the
+        # GUI and then overwritten by a per-slot parameter change.
+        if self._working is not None and self._working.index == index:
+            self.commit()
+        else:
+            self._working = None
         self._bank = self._bank.replace(index, new_prog)
-        self._working = None
         self._dirty = self._session_modified()
         return self.get_patch(index)
 
@@ -768,8 +776,20 @@ class EditorModel:
             raise PatchIndexError("Slot index must be 1..32.")
         if bytes(self._bank.get(source).data) == bytes(self._bank.get(destination).data):
             return self.get_patch(destination)          # no-op
+        # P1.15 corrective fix: fold a pending working copy of the SOURCE
+        # slot first — otherwise duplicating the currently edited patch
+        # would copy the STALE committed record and silently discard the
+        # user's uncommitted edit (state-change semantics apply to the
+        # state the USER sees, not only to the committed bank).
+        if self._working is not None and self._working.index == source:
+            self.commit()
+        elif bytes(self.current_patch().data) == bytes(self._bank.get(destination).data):
+            # destination equals the on-screen (working) patch → duplicating
+            # it onto itself is a genuine no-op for the visible state.
+            return self.get_patch(destination)
+        else:
+            self._working = None
         self._bank = self._bank.copy_program(source, destination)
-        self._working = None
         self._dirty = self._session_modified()
         return self.get_patch(destination)
 
@@ -828,6 +848,13 @@ class EditorModel:
         if self._bank.get(index).name == name[:9]:
             return self.get_patch(index)
         self._bank = self._bank.set_name(index, name)
+        # P1.15 corrective fix: if the renamed slot is the one currently
+        # held as an uncommitted working copy, fold the rename into that
+        # copy — otherwise a pending parameter edit would silently shadow
+        # (and eventually discard) the new name.  Dirty stays MODIFIED:
+        # the session state really did change (rename succeeded).
+        if self._working is not None and self._working.index == index:
+            self._working = self.current_patch().set_name(name)
         self._dirty = self._session_modified()
         return self.get_patch(index)
 

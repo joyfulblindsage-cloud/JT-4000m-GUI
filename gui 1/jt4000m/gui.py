@@ -736,12 +736,19 @@ class Editor(tk.Tk):
             return
         try:
             self._history.push()                # record pre-mutation snapshot
-            if self.editor._bank is None:
+            if not self.editor.loaded:
                 raise RuntimeError("No bank loaded.")
-            self.editor.commit()                # fold any pending working copy
-            self.editor.select_patch(self.selected_index)
-            self.editor.set_parameter(key, raw)
-            self.editor.commit()                # write into the bank via model
+            # P1.15 corrective fix: a single immediate slot mutation instead
+            # of set_parameter()+commit().  The old two-step path routed the
+            # edit through the working-copy layer, whose no-op guard compares
+            # against the COMMITTED slot — so editing the selected slot back
+            # to its original value (e.g. undo restores X, user re-sets X)
+            # created an uncommitted working copy identical to the slot and
+            # spuriously flipped dirty.  set_slot_parameter validates the
+            # same registry contract, touches exactly one byte, preserves
+            # unknown bytes, and applies the no-op guard to the VISIBLE
+            # state (current_patch), which is what dirty must reflect.
+            self.editor.set_slot_parameter(self.selected_index, key, raw)
         except Exception as exc:
             messagebox.showerror("Parameter", str(exc))
             self._history.undo()                # revert to pre-mutation state
@@ -787,10 +794,15 @@ class Editor(tk.Tk):
             return
         try:
             self._history.push()
-            self.editor.commit()                # fold pending working copy
-            self.editor.select_patch(self.selected_index)
-            self.editor.rename(self.name_var.get())
-            self.editor.commit()
+            if not self.editor.loaded:
+                raise RuntimeError("No bank loaded.")
+            # P1.15 corrective fix: rename_patch(index, name) writes through
+            # the same Bank.set_name helper as every other rename path
+            # (9-byte truncation, space padding, offsets 55..63 only — all
+            # guarded by syx_safety contracts).  Unlike select_patch()+rename()
+            # it does NOT drop a pending working copy of another slot and has
+            # its own no-op guard on the effective 9-byte name.
+            self.editor.rename_patch(self.selected_index, self.name_var.get())
         except Exception as exc:
             messagebox.showerror("Patch name", str(exc))
             self._history.undo()
@@ -904,9 +916,13 @@ class Editor(tk.Tk):
         target = self.selected_index % 32 + 1
         self._history.push()
         try:
-            if self.editor._bank is None:
+            if not self.editor.loaded:
                 raise RuntimeError("No bank loaded.")
-            self.editor.commit()
+            # P1.15 corrective fix: duplicate_patch now folds a pending
+            # working copy of the SOURCE slot itself (single mutation), so
+            # the pre-fold here is unnecessary and — worse — destructive:
+            # duplicating onto the currently selected edited slot must be a
+            # visible-state no-op, not a silent commit.
             self.editor.duplicate_patch(self.selected_index, target)
         except Exception as exc:
             self._history.undo()
@@ -925,12 +941,14 @@ class Editor(tk.Tk):
             messagebox.showerror("Reset", str(exc))
             return
         self._history.push()
-        if self.editor._bank is not None:
-            self.editor.commit()                # drop uncommitted edits
-            self.editor.revert()
+        if self.editor.loaded:
+            # P1.15 corrective fix: replace_patch folds a pending working
+            # copy itself; the manual commit()+revert() pair here silently
+            # DISCARDED uncommitted edits whenever reset ran on a different
+            # slot than the edited one (state-loss bug).
             self.editor.replace_patch(self.selected_index, original)
         else:
-            self.bank = self.bank.replace(self.selected_index, original)
+            raise RuntimeError("No bank loaded.")
         self._after_mutation()
         self.status_var.set(f"Reset P{self.selected_index:02d} from {self.path.name}.")
 
