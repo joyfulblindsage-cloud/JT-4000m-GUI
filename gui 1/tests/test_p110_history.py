@@ -206,6 +206,20 @@ class TestWorkingCopySnapshot:
 
 
 class TestDirtySemantics:
+    def test_noop_edits_do_not_mark_session_modified(self):
+        m = model(ALL_SAW)
+        original = m.get_patch(1)
+
+        m.set_parameter("osc1_wave", original.get_raw("osc1_wave"))
+        assert not m.is_dirty()
+        m.commit()
+        assert not m.is_dirty()
+
+        m.rename(original.name)
+        assert not m.is_dirty()
+        m.commit()
+        assert not m.is_dirty()
+
     def test_load_clean_edit_modified_save_clean(self, tmp_path):
         out = tmp_path / "copy.syx"
         out.write_bytes(Path(ALL_SAW).read_bytes())
