@@ -930,26 +930,34 @@ class EditorModel:
 
     def edit_parameter(self, key: str, value: int) -> PatchState:
         new = self.current_patch().set_parameter(key, value)
-        # P1.15 no-op contract: setting the SAME value must not flip dirty
-        # (validation above still raises for unknown/out-of-range values).
-        if bytes(new.data) != bytes(self.current_patch().data):
-            self._working = new
-            self._dirty = True
+        # P1.15/P1.12 no-op contract: setting the SAME value must not create
+        # a working copy and must not flip dirty (validation above still
+        # raises for unknown/out-of-range values).
+        if bytes(new.data) == bytes(self.current_patch().data):
+            return new
+        # main's unconditional assignment is kept, but dirty is RECOMPUTED
+        # via _session_modified() (P1.10 baseline semantics) instead of a
+        # hard `True`, so the two branches stay consistent with commit()/
+        # revert()/undo()/redo().
+        self._working = new
+        self._dirty = self._session_modified()
         return new
 
     def edit_parameters(self, updates: Mapping[str, int]) -> PatchState:
         new = self.current_patch().set_parameters(updates)
-        if bytes(new.data) != bytes(self.current_patch().data):
-            self._working = new
-            self._dirty = True
+        if bytes(new.data) == bytes(self.current_patch().data):
+            return new
+        self._working = new
+        self._dirty = self._session_modified()
         return new
 
     def edit_name(self, name: str) -> PatchState:
         new = self.current_patch().set_name(name)
         # Same effective 9-byte name → no session mutation, no dirty flip.
-        if bytes(new.data) != bytes(self.current_patch().data):
-            self._working = new
-            self._dirty = True
+        if bytes(new.data) == bytes(self.current_patch().data):
+            return new
+        self._working = new
+        self._dirty = self._session_modified()
         return new
 
     def commit(self) -> Bank:
