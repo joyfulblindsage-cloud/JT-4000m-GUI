@@ -951,6 +951,19 @@ class EditorModel:
             self._working = new
             self._dirty = True
         return new
+        self._working = self.current_patch().set_parameter(key, value)
+        self._dirty = self._session_modified()
+        return self._working
+
+    def edit_parameters(self, updates: Mapping[str, int]) -> PatchState:
+        self._working = self.current_patch().set_parameters(updates)
+        self._dirty = self._session_modified()
+        return self._working
+
+    def edit_name(self, name: str) -> PatchState:
+        self._working = self.current_patch().set_name(name)
+        self._dirty = self._session_modified()
+        return self._working
 
     def commit(self) -> Bank:
         """Write the working patch back into the bank (still in memory)."""

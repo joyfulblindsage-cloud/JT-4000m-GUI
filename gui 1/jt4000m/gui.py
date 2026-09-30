@@ -364,6 +364,10 @@ class Editor(tk.Tk):
         if self.bank is None or self.selected_index is None:
             return
         spec = BY_KEY[key]
+        if self.editor.get_patch(self.selected_index).get_raw(key) == spec.default:
+            self.status_var.set(
+                f"P{self.selected_index:02d}  {spec.label} is already at its default.")
+            return
         try:
             self._history.push()
             # P1.10: mutation goes through EditorModel (bank ops are
@@ -727,6 +731,11 @@ class Editor(tk.Tk):
         raw = int(self.vars[key].get())
         if spec.kind == "boolean":
             raw = 127 if raw else 0
+        if self.editor.get_patch(self.selected_index).get_raw(key) == raw:
+            self._sync_widgets_from_model()
+            self.status_var.set(
+                f"P{self.selected_index:02d}  {spec.label} is unchanged.")
+            return
         try:
             self._history.push()                # record pre-mutation snapshot
             if self.editor._bank is None:
@@ -759,6 +768,11 @@ class Editor(tk.Tk):
 
     def apply_name(self) -> None:
         if self.bank is None or self.selected_index is None:
+            return
+        current = self.editor.get_patch(self.selected_index).program
+        if current.set_name(self.name_var.get()).data == current.data:
+            self._sync_widgets_from_model()
+            self.status_var.set(f"P{self.selected_index:02d} name is unchanged.")
             return
         try:
             self._history.push()
