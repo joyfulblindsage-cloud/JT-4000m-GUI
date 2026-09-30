@@ -157,7 +157,9 @@ def test_rename_undo_redo(app):
     original = app.editor.get_patch(1).name
     app.name_var.set("SLOT SEVEN")
     app.apply_name()
-    assert app.editor.get_patch(1).name == "SLOT SEVEN"   # 10 chars -> 9
+    # 10 chars truncate to the exact 9-byte field capacity (documented
+    # contract, see model.set_name / test_p19_api / test_p110_history)
+    assert app.editor.get_patch(1).name == "SLOT SEVE"
     app.undo()
     assert app.editor.get_patch(1).name == original
     assert not app.editor.is_dirty()
