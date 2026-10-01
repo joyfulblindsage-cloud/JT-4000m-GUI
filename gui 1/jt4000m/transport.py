@@ -243,8 +243,6 @@ class MidiTransport:
                 if msg:
                     delta, data = msg
                     raw = bytes(data)
-                    ts = time.time() - (time.monotonic() - (deadline - timeout)) \
-                        + delta  # monotonic base + device timestamp offset
                     ts = time.time()
                     if on_message:
                         on_message(ts, raw)
