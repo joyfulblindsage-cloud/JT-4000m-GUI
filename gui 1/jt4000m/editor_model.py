@@ -654,6 +654,14 @@ class EditorModel:
     def is_dirty(self) -> bool:
         return self._dirty
 
+    def mark_dirty(self, value: bool) -> None:
+        """P1.23 public dirty-projection hook (used by EditorHistory after a
+        restore).  This replaces the old direct private-attribute write from
+        inside EditorHistory.undo()/redo() — a P1.11 boundary violation.
+        Deliberately NOT named ``set_dirty`` so it can never be confused with
+        a user edit: no history push, no notification, byte state untouched."""
+        self._dirty = bool(value)
+
     def get_parameter(self, key: str) -> ParameterValue:
         """Read a parameter of the CURRENT patch (public contract)."""
         return self.current_patch().get_parameter(key)
@@ -982,17 +990,30 @@ class EditorModel:
     # ---- snapshot / restore (minimal; NO undo framework here) ------------
     def snapshot(self) -> "BankSnapshot":
         return BankSnapshot(self._bank, self._selected, self._path,
-                            self._provenance, working=self._working)
+                            self._provenance, working=self._working,
+                            was_clean=not self._dirty)
 
-    def restore(self, snap: "BankSnapshot") -> None:
+    def restore(self, snap: "BankSnapshot", *, recompute_dirty: bool = True) -> None:
         """Restore a snapshot. Provenance comes back exactly as stored —
-        restoring NEVER promotes REFERENCE_FIXTURE."""
+        restoring NEVER promotes REFERENCE_FIXTURE.
+
+        P1.23 fix: ``recompute_dirty=False`` keeps the CURRENT dirty flag.
+        EditorHistory.undo()/redo() need this because their own undo/redo
+        stacks contain no baseline reference: once the user saves (or loads)
+        mid-history, an older snapshot may differ from the NEW baseline, and
+        blindly marking dirty would report MODIFIED for a state that equals
+        the saved file.  Recomputing here instead would require exposing
+        private baseline state to the history wrapper, which violates the
+        P1.11 boundary.  The load/save entry points below keep the default
+        (conservative) behaviour.
+        """
         self._bank = snap.bank
         self._selected = snap.selected
         self._path = snap.path
         self._provenance = snap.provenance
         self._working = snap.working
-        self._dirty = True
+        if recompute_dirty:
+            self._dirty = True
 
     # ---- editing ---------------------------------------------------------
     def current_patch(self) -> PatchState:
@@ -1198,12 +1219,17 @@ class BankSnapshot:
     """Immutable restore point for an EditorModel session (bank + selection
     + path + provenance + uncommitted working patch). Deliberately minimal —
     PatchLibrary keeps owning undo/redo history; this exists for before/after
-    workflows and as the substrate for a thin editor-level history wrapper."""
+    workflows and as the substrate for a thin editor-level history wrapper.
+
+    P1.23: ``was_clean`` records whether the session was CLEAN at capture
+    time, so EditorHistory can recompute dirty semantics after a restore
+    without touching EditorModel private state."""
     bank: Bank
     selected: int
     path: Path | None
     provenance: str
     working: "PatchState | None" = None
+    was_clean: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -1271,19 +1297,36 @@ class EditorHistory:
     def undo(self) -> bool:
         if not self._undo:
             return False
-        self._redo.append(self._model.snapshot())
-        self._model.restore(self._undo.pop())
-        # restore() conservatively marks dirty; re-derive from the baseline
-        # so undo-ing back to the exact loaded state reports CLEAN (§6).
-        self._model._dirty = self._model._session_modified()
+        current = self._model.snapshot()
+        was_dirty_before_undo = self._model.is_dirty()
+        self._redo.append(current)
+        # P1.23 fix: restore WITHOUT touching the dirty flag, then recompute
+        # it via public API only (the old code wrote the private `_dirty`
+        # attribute directly — a P1.11 boundary violation).
+        target = self._undo.pop()
+        self._model.restore(target, recompute_dirty=False)
+        if self._snapshots_equal(target, current):
+            # Coalesced no-op step: dirty semantics are unchanged.
+            self._model.mark_dirty(was_dirty_before_undo)
+        else:
+            # Restoring into a state that was CLEAN when captured (i.e. the
+            # snapshot itself equalled the load/save baseline at push time)
+            # must report CLEAN; any other restore is a real session change.
+            self._model.mark_dirty(not target.was_clean)
         return True
 
     def redo(self) -> bool:
         if not self._redo:
             return False
-        self._undo.append(self._model.snapshot())
-        self._model.restore(self._redo.pop())
-        self._model._dirty = self._model._session_modified()
+        current = self._model.snapshot()
+        was_dirty_before_redo = self._model.is_dirty()
+        self._undo.append(current)
+        target = self._redo.pop()
+        self._model.restore(target, recompute_dirty=False)
+        if self._snapshots_equal(target, current):
+            self._model.mark_dirty(was_dirty_before_redo)
+        else:
+            self._model.mark_dirty(not target.was_clean)
         return True
 
     def clear(self) -> None:
