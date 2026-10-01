@@ -117,7 +117,7 @@ class Bank:
         if not 1 <= index <= 32:
             raise IndexError("Program index must be 1..32.")
         if program.index != index:
-            program = JTProgram(index, program.data, program.source_offset)
+            program = JTProgram(index, program.data, program.source_offset, program.reserved)
         items = list(self.programs)
         items[index - 1] = program
         return Bank(tuple(items), source_header=self.source_header)
@@ -146,8 +146,8 @@ class Bank:
         """
         pa, pb = self.get(a), self.get(b)
         items = list(self.programs)
-        items[a - 1] = JTProgram(a, pb.data, pb.source_offset)
-        items[b - 1] = JTProgram(b, pa.data, pa.source_offset)
+        items[a - 1] = JTProgram(a, pb.data, pb.source_offset, pb.reserved)
+        items[b - 1] = JTProgram(b, pa.data, pa.source_offset, pa.reserved)
         return Bank(tuple(items), source_header=self.source_header)
 
     def move(self, source: int, target: int) -> "Bank":
@@ -164,7 +164,7 @@ class Bank:
         items.insert(target - 1, moved)
         # Re-number indices so the Bank invariant (indices 1..32 in order)
         # holds; raw data bytes are untouched.
-        renumbered = tuple(JTProgram(i + 1, p.data, p.source_offset)
+        renumbered = tuple(JTProgram(i + 1, p.data, p.source_offset, p.reserved)
                            for i, p in enumerate(items))
         return Bank(renumbered, source_header=self.source_header)
 
