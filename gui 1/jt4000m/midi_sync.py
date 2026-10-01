@@ -8,7 +8,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .midi import cc_to_parameter, parameter_to_cc
+from .midi import (cc_to_parameter, parameter_to_cc, parse_program_change,
+                   program_change_to_slot)
 from .model import BY_KEY
 from .transport import MidiTransport, PortInfo, TransportReport
 
@@ -19,6 +20,21 @@ class MidiParameterUpdate:
 
     key: str
     value: int
+    channel: int
+
+
+@dataclass(frozen=True)
+class MidiProgramSelect:
+    """P1.22: one decoded Program Change mapped to an editor slot.
+
+    This is SELECTION ONLY.  It carries no patch data, creates no history
+    entry and never marks the session dirty.  The PC->slot mapping is the
+    documented offline convention (PC 0..31 -> slot 1..32) and remains
+    UNVERIFIED against physical hardware.
+    """
+
+    slot: int
+    program: int
     channel: int
 
 
@@ -62,3 +78,21 @@ class MidiSyncBridge:
             return None
         key, value = decoded
         return MidiParameterUpdate(key, value, channel)
+
+    def decode_program_change(self, data: bytes) -> MidiProgramSelect | None:
+        """P1.22: decode one incoming Program Change into a slot selection.
+
+        Returns None — never raises — for anything that is not a
+        well-formed 0xCn packet on the bridge's channel, and for PC values
+        outside the documented 0..31 range (no invented 32..127 mapping).
+        The result is SELECTION ONLY; callers must apply it via
+        EditorModel.select_patch(), which does not touch history/dirty/bank.
+        """
+        change = parse_program_change(data)
+        if change is None or change.channel != self.channel:
+            return None
+        slot = program_change_to_slot(change.program)
+        if slot is None:
+            return None
+        return MidiProgramSelect(slot=slot, program=change.program,
+                                 channel=change.channel)
