@@ -662,6 +662,16 @@ class EditorModel:
         a user edit: no history push, no notification, byte state untouched."""
         self._dirty = bool(value)
 
+    def recalculate_dirty(self) -> bool:
+        """Recompute dirty state from the model's own baseline and working copy.
+        
+        Public projection API for history/UI adapters. This keeps callers out
+        of EditorModel's private state while preserving the existing baseline
+        semantics.
+        """
+        self._dirty = self._session_modified()
+        return self._dirty
+
     def get_parameter(self, key: str) -> ParameterValue:
         """Read a parameter of the CURRENT patch (public contract)."""
         return self.current_patch().get_parameter(key)
@@ -1055,20 +1065,6 @@ class EditorModel:
         self._working = new
         self._dirty = self._session_modified()
         return new
-        self._working = self.current_patch().set_parameter(key, value)
-        self._dirty = self._session_modified()
-        return self._working
-
-    def edit_parameters(self, updates: Mapping[str, int]) -> PatchState:
-        self._working = self.current_patch().set_parameters(updates)
-        self._dirty = self._session_modified()
-        return self._working
-
-    def edit_name(self, name: str) -> PatchState:
-        self._working = self.current_patch().set_name(name)
-        self._dirty = self._session_modified()
-        return self._working
-
     def commit(self) -> Bank:
         """Write the working patch back into the bank (still in memory)."""
         if self._working is None:
@@ -1351,8 +1347,7 @@ class EditorHistory:
         Call after mutations that were performed directly on the domain
         layer (e.g. EditorModel.bank.replace(...) via a GUI helper) so the
         GUI never needs its own dirty tracking.  Returns the new state."""
-        self._model._dirty = self._model._session_modified()
-        return self._model._dirty
+        return self._model.recalculate_dirty()
 
 
 # ---------------------------------------------------------------------------
