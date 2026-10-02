@@ -79,6 +79,26 @@ class MidiSyncBridge:
         key, value = decoded
         return MidiParameterUpdate(key, value, channel)
 
+    def send_program_change(self, slot: int) -> TransportReport:
+        """P1.25: transmit one Program Change selecting editor `slot` (1..32).
+
+        Selection-only TX: it never touches EditorModel state, history or
+        dirty flags — the model stays MIDI-free (same boundary discipline as
+        ``send_parameter`` above).  The PC value comes from the existing
+        documented offline convention ``slot_to_program_change`` (slot 1..32
+        -> PC 0..31); invalid slots raise ValueError before any transmission.
+        The returned TransportReport is TX-level only: ``device_response``
+        stays NOT VERIFIED — transport success NEVER proves the synth
+        changed program.
+        """
+        from .midi import slot_to_program_change
+
+        program = slot_to_program_change(slot)   # validates slot 1..32 first
+        if self.output is None:
+            raise RuntimeError("No MIDI output is selected.")
+        return self.transport.send_program_change(self.output, self.channel,
+                                                  program)
+
     def decode_program_change(self, data: bytes) -> MidiProgramSelect | None:
         """P1.22: decode one incoming Program Change into a slot selection.
 
