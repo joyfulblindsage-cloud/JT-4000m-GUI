@@ -207,6 +207,32 @@ class MidiTransport:
             ok, err = False, str(e)
         return TransportReport("sysex", port, bytes(data), ok, err)
 
+    def send_program_change(self, port: PortInfo, channel: int,
+                            program: int) -> TransportReport:
+        """P1.25: TX one Program Change through the SAME backend dispatch as
+        ``send_cc`` (winmm short message / rtmidi-shaped backend).
+
+        Encoding/validation reuse the existing ``midi.ProgramChange`` — no new
+        abstraction.  Like every send*() here, the report is TX-level only:
+        api_ok means the MIDI API accepted the bytes, device_response stays
+        NOT VERIFIED.
+        """
+        from .midi import make_program_change
+        msg = make_program_change(channel, program)  # validates ranges
+        data = msg.bytes
+        ok, err = True, ""
+        try:
+            if self.backend_name == "winmm":
+                self._be.send_short(port.index, data)
+            elif self.backend_name == "rtmidi":
+                self.open_output(port).send_message(list(data))
+            else:
+                ok = False
+                err = self.note or "no MIDI backend available"
+        except Exception as e:
+            ok, err = False, str(e)
+        return TransportReport("program_change", port, data, ok, err)
+
     # ---------------------------------------------------------------- receive
     def receive(self, timeout: float = 10.0,
                 on_message: Callable[[float, bytes], None] | None = None
