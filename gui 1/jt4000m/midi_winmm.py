@@ -7,7 +7,17 @@ if os.name != 'nt':
 winmm=ctypes.WinDLL('winmm')
 UINT=wintypes.UINT; DWORD=wintypes.DWORD; DWORD_PTR=wintypes.WPARAM
 HMIDIOUT=wintypes.HANDLE; HMIDIIN=wintypes.HANDLE
-CALLBACK_FUNCTION=0x00030000; MIM_LONGDATA=0x0003; MIM_ERROR=0x0002; MIM_LONGERROR=0x0004; MHDR_DONE=1
+CALLBACK_FUNCTION=0x00030000
+
+MIM_OPEN = 0x3C1
+MIM_CLOSE = 0x3C2
+MIM_DATA = 0x3C3
+MIM_LONGDATA = 0x3C4
+MIM_ERROR = 0x3C5
+MIM_LONGERROR = 0x3C6
+MIM_MOREDATA = 0x3CC
+
+MHDR_DONE = 1
 MAXPNAMELEN=32
 class MIDIOUTCAPS(ctypes.Structure):
     _fields_=[('wMid',wintypes.WORD),('wPid',wintypes.WORD),('vDriverVersion',wintypes.UINT),('szPname',wintypes.WCHAR*MAXPNAMELEN),('wTechnology',wintypes.WORD),('wVoices',wintypes.WORD),('wNotes',wintypes.WORD),('wChannelMask',wintypes.WORD),('dwSupport',wintypes.DWORD)]
