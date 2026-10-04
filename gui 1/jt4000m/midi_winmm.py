@@ -75,24 +75,58 @@ def send_sysex(index,data):
 def receive_sysex(index,timeout=10,buffer_size=4096):
     q=queue.Queue()
     @MIDIINPROC
-    def cb(_h,msg,_i,param,_t):
-        if msg==MIM_LONGDATA:
-            hdr=ctypes.cast(param,ctypes.POINTER(MIDIHDR)).contents; q.put(bytes(hdr.lpData[i] for i in range(hdr.dwBytesRecorded)))
-        elif msg in (MIM_ERROR,MIM_LONGERROR): q.put(RuntimeError(f'MIDI input error 0x{msg:04X}'))
-    buf=(ctypes.c_ubyte*buffer_size)(); hdr=MIDIHDR(ctypes.cast(buf,ctypes.POINTER(ctypes.c_ubyte)),buffer_size,0,0,0,None,0); h=HMIDIIN(); prepared=False
-    check(winmm.midiInOpen(ctypes.byref(h),index,cb,0,CALLBACK_FUNCTION),'midiInOpen')
-    try:
-        check(winmm.midiInPrepareHeader(h,ctypes.byref(hdr),ctypes.sizeof(hdr)),'midiInPrepareHeader'); prepared=True
-        check(winmm.midiInAddBuffer(h,ctypes.byref(hdr),ctypes.sizeof(hdr)),'midiInAddBuffer'); check(winmm.midiInStart(h),'midiInStart')
-        deadline=time.monotonic()+timeout
-        while time.monotonic()<deadline:
-            try: item=q.get(timeout=.05)
-            except queue.Empty: continue
-            if isinstance(item,Exception): raise item
-            if item.startswith(b'\xF0') and item.endswith(b'\xF7'): return item
-        raise TimeoutError(f'No SysEx received within {timeout:.1f}s')
-    finally:
-        try: winmm.midiInStop(h); winmm.midiInReset(h)
-        finally:
-            if prepared: winmm.midiInUnprepareHeader(h,ctypes.byref(hdr),ctypes.sizeof(hdr))
-            winmm.midiInClose(h)
+def cb(_h, msg, _i, param, _t):
+    if msg == MIM_DATA:
+        raw = bytes([
+            param & 0xFF,
+            (param >> 8) & 0xFF,
+            (param >> 16) & 0xFF,
+        ])
+        print(f"RAW MIM_DATA: {' '.join(f'{b:02X}' for b in raw)}", flush=True)
+
+    elif msg == MIM_LONGDATA:
+        hdr = ctypes.cast(
+            param,
+            ctypes.POINTER(MIDIHDR)
+        ).contents
+
+        data = bytes(
+            hdr.lpData[i]
+            for i in range(hdr.dwBytesRecorded)
+        )
+
+        print(
+            f"RAW MIM_LONGDATA: {len(data)} bytes",
+            flush=True
+        )
+        print(
+            " ".join(f"{b:02X}" for b in data[:64]),
+            "..." if len(data) > 64 else "",
+            flush=True
+        )
+
+        q.put(data)
+
+    elif msg == MIM_ERROR:
+        print(
+            f"RAW MIM_ERROR: 0x{msg:04X}",
+            flush=True
+        )
+        q.put(RuntimeError(
+            f"MIDI input error 0x{msg:04X}"
+        ))
+
+    elif msg == MIM_LONGERROR:
+        print(
+            f"RAW MIM_LONGERROR: 0x{msg:04X}",
+            flush=True
+        )
+        q.put(RuntimeError(
+            f"MIDI long input error 0x{msg:04X}"
+        ))
+
+    else:
+        print(
+            f"RAW MIDI EVENT: 0x{msg:04X}",
+            flush=True
+        )
