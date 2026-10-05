@@ -3,13 +3,19 @@
 This module never touches MIDI/hardware. It only reads and writes local .syx
 files through jt4000m.syx / jt4000m.patch.
 
-Layout:
-    left   — bank preset list (32 slots) + search filter
-    center — grouped parameter controls for the selected program
-    right  — developer panel (raw byte table / compare / bank analysis)
+P1.26 layout (shell from P1.25a):
+    SYNTH     — music workspace: OSC 1/2 blocks, MIX/RING, FILTER with the
+                response graph, VCF/VCA envelopes with ADSR graphs, LFO 1/2
+                blocks and MODULATION / PORTAMENTO at the bottom.  No browser,
+                no raw bytes, no developer controls live here anymore.
+    PRESETS   — full bank/preset browser (list + search + rename bar).
+    RESEARCH  — developer tooling (Raw Program / Compare / Analyze Banks).
+    header    — brand + tab switcher + Modified/MIDI status (unchanged API).
+    navigator — permanent bottom ◀ Pxx PATCH NAME ▶ (logic unchanged).
 
 Model flow: every control edit produces a new immutable ``Bank``; the GUI is
 synced back from the model, so model changes update the GUI and vice versa.
+The migration is presentation-only: same widgets, same vars, same methods.
 """
 from __future__ import annotations
 
@@ -24,9 +30,26 @@ from .model import BY_KEY, PARAMETERS, display_value, enum_options
 from .patch import Bank, JTProgram, program_to_single
 from .syx import SysExFile, field_name, parse_file, semantic_value
 from .waveforms import WaveTile
+from .widgets import EnvelopeView, FilterView
 
-# Parameter groups rendered in this order in the editor grid.
-SECTION_ORDER = ["OSCILLATORS", "FILTER", "VCF ENVELOPE", "VCA ENVELOPE", "LFO", "MODULATION"]
+# Sections rendered inside the SYNTH workspace, in musical order.
+SYNTH_SECTION_ORDER = ["OSCILLATORS", "FILTER", "VCF ENVELOPE",
+                       "VCA ENVELOPE", "LFO", "MODULATION"]
+# Kept as an alias so external references keep working (presentation only).
+SECTION_ORDER = SYNTH_SECTION_ORDER
+
+# P1.26: labels shown on the SYNTH workspace are musical names.  The registry
+# definition itself is NOT changed — only the GUI label mapping.
+SYNTH_LABEL_OVERRIDES = {
+    "osc1_pwm_fm": "OSC1 PWM",
+    "modulation": "Modulation",
+    "portamento_time": "Portamento Time",
+}
+
+
+def _synth_label(spec) -> str:
+    """Musical label for the SYNTH workspace (registry stays untouched)."""
+    return SYNTH_LABEL_OVERRIDES.get(spec.key, spec.label)
 
 # Offset 0x2C changes together with Ring Mod on/off in existing banks.
 # Correlation only — NOT a confirmed parameter. Needs hardware verification.
@@ -34,7 +57,8 @@ RING_MOD_CANDIDATE_OFFSET = 0x2C
 
 
 def _row_label(spec, developer: bool) -> str:
-    label = spec.label
+    # P1.26: SYNTH shows musical names; the registry label stays untouched.
+    label = _synth_label(spec)
     if spec.orientation == "centered":
         label += f" [{display_value(spec.key, 64)}]"
     if developer and spec.offset is not None:
@@ -63,6 +87,7 @@ class Editor(tk.Tk):
         self._clipboard: JTProgram | None = None
         self._loading_bank = False
         self._syncing = False                    # guard: model->widget->event loop
+        self._dragging_env = False               # P1.26: envelope-graph drag session
 
         self.vars: dict[str, tk.IntVar] = {}
         self.value_vars: dict[str, tk.StringVar] = {}
@@ -190,29 +215,174 @@ class Editor(tk.Tk):
         ttk.Button(nav, text="▶", width=3,
                    command=lambda: self._nav_step(1)).pack(side="left", padx=4, pady=6)
 
-        # ---- legacy editor content -> temporary SYNTH container ---------
-        body = ttk.Panedwindow(self.tab_frames["SYNTH"], orient="horizontal")
-        body.pack(fill="both", expand=True, padx=8, pady=(4, 8))
+        # ============ P1.26 — workspace migration =======================
+        # SYNTH    : music controls only (OSC / MIX-RING / FILTER / ENV / LFO
+        #            / MOD-PORTAMENTO).  No browser, raw bytes or dev tools.
+        # PRESETS  : full bank/preset browser + rename bar (moved from SYNTH).
+        # RESEARCH : developer tooling (Raw Program / Compare / Analyze Banks).
+        # All widgets keep their exact object names and behavior; only their
+        # parent containers changed.  The status strip lives on the shell so
+        # it stays visible regardless of the active tab.
+        self._build_synth_tab(self.tab_frames["SYNTH"])
+        self._build_presets_tab(self.tab_frames["PRESETS"])
+        self._build_research_tab(self.tab_frames["RESEARCH"])
 
-        # Legacy header row (subtitle + Developer view toggle) kept inside
-        # the SYNTH workspace so existing behavior/controls are preserved.
-        legacy_header = tk.Frame(self.tab_frames["SYNTH"], bg="#151619", height=30)
-        legacy_header.pack(fill="x")
-        legacy_header.pack_propagate(False)
-        tk.Label(legacy_header, text="OFFLINE PRESET EDITOR — no MIDI required",
-                 bg="#151619", fg="#8f949b",
-                 font=("TkDefaultFont", 9, "bold")).pack(side="left", padx=16)
-        ttk.Checkbutton(legacy_header, text="Developer view", variable=self.developer_var,
-                        command=self._update_developer).pack(side="right", padx=10)
+        status = tk.Frame(self, bg="#151619")
+        status.pack(fill="x", side="bottom")
+        tk.Label(status, textvariable=self.status_var, bg="#151619", fg="#c8ccd0",
+                 anchor="w").pack(fill="x", padx=8, pady=3)
+
+    # ------------------------------------------------------ P1.26: SYNTH tab
+    def _synth_box(self, parent, title: str, row: int, col: int,
+                   columnspan: int = 1):
+        box = tk.Frame(parent, bg="#292a2d", highlightthickness=1,
+                       highlightbackground="#3b3d40")
+        box.grid(row=row, column=col, columnspan=columnspan,
+                 sticky="nsew", padx=5, pady=5)
+        tk.Label(box, text=title, bg="#292a2d", fg="#f1f1f1",
+                 font=("TkDefaultFont", 10, "bold")).pack(anchor="w", padx=10, pady=(8, 4))
+        inner = tk.Frame(box, bg="#292a2d")
+        inner.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+        return box, inner
+
+    def _build_synth_tab(self, frame) -> None:
+        canvas = tk.Canvas(frame, bg="#202124", highlightthickness=0)
+        scrollbar = ttk.Scrollbar(frame, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        self.canvas = canvas
+        self.controls = ttk.Frame(canvas, style="TFrame")
+        self.canvas_window = canvas.create_window((0, 0), window=self.controls, anchor="nw")
+        self.controls.bind("<Configure>", lambda _e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.bind("<Configure>", lambda e: canvas.itemconfigure(self.canvas_window, width=e.width))
+        for col in range(4):
+            self.controls.grid_columnconfigure(col, weight=1)
+
+        self.section_labels: dict[str, tk.Label] = {}
+        self.reset_buttons: dict[str, tuple[tk.Button, tk.Label]] = {}
+
+        specs = {s.key: s for s in PARAMETERS}
+        # Phase indicator backing the animated tiles (created before WaveTiles
+        # so their animation callbacks never hit a missing attribute).
+        self.wave_phase_var = tk.StringVar(value="")
+
+        # ---- OSC 1 / OSC 2 blocks (waveform preview + PWM + tuning) -----
+        _, osc1 = self._synth_box(self.controls, "OSC 1", 0, 0, columnspan=2)
+        self._build_wave_tile_row(osc1, "osc1_wave", "OSC1 Wave")
+        for key in ("osc1_pwm_fm", "osc1_coarse", "osc1_fine"):
+            self._parameter_row(osc1, specs[key])
+        _, osc2 = self._synth_box(self.controls, "OSC 2", 0, 2, columnspan=2)
+        self._build_wave_tile_row(osc2, "osc2_wave", "OSC2 Wave")
+        for key in ("osc2_pwm", "osc2_coarse", "osc2_fine"):
+            self._parameter_row(osc2, specs[key])
+
+        # ---- MIX / RING --------------------------------------------------
+        _, mix = self._synth_box(self.controls, "MIX / RING", 1, 0, columnspan=4)
+        for key in ("osc_balance", "ring_mod_toggle", "ring_mod_amount"):
+            self._parameter_row(mix, specs[key])
+
+        # ---- FILTER (response graph right next to cutoff/resonance) ------
+        _, filt = self._synth_box(self.controls, "FILTER", 2, 0, columnspan=2)
+        self.filter_view = FilterView(filt, width=170, height=56)
+        self.filter_view.pack(anchor="w", pady=(0, 6))
+        for key in ("filter_cutoff", "filter_resonance", "filter_env_amount"):
+            self._parameter_row(filt, specs[key])
+
+        # ---- VCF ENVELOPE (graph above the sliders, interactive drag) ----
+        _, vcf = self._synth_box(self.controls, "VCF ENVELOPE", 2, 2, columnspan=2)
+        self.vcf_env_view = EnvelopeView(vcf, title="VCF EG", width=170, height=64,
+                                         on_segment=lambda k, n: self._env_drag("vcf", k, n))
+        self.vcf_env_view.pack(anchor="w", pady=(0, 6))
+        for key in ("vcf_attack", "vcf_decay", "vcf_sustain", "vcf_release",
+                    "filter_env_amount"):
+            self._parameter_row(vcf, specs[key])
+
+        # ---- VCA ENVELOPE -------------------------------------------------
+        _, vca = self._synth_box(self.controls, "VCA ENVELOPE", 3, 0, columnspan=2)
+        self.vca_env_view = EnvelopeView(vca, title="VCA EG", width=170, height=64,
+                                         on_segment=lambda k, n: self._env_drag("vca", k, n))
+        self.vca_env_view.pack(anchor="w", pady=(0, 6))
+        for key in ("vca_attack", "vca_decay", "vca_sustain", "vca_release"):
+            self._parameter_row(vca, specs[key])
+
+        # ---- LFO 1 / LFO 2 blocks ----------------------------------------
+        _, lfo1 = self._synth_box(self.controls, "LFO 1", 3, 2, columnspan=2)
+        self.lfo1_canvas = tk.Canvas(lfo1, width=150, height=44, bg="#292a2d",
+                                     highlightthickness=0)
+        self.lfo1_canvas.pack(anchor="w", pady=(0, 2))
+        self.lfo1_tile = WaveTile(self.lfo1_canvas, lambda: None, width=150, height=44)
+        self.lfo1_tile.draw()
+        for key in ("lfo1_wave", "lfo1_destination", "lfo1_rate", "lfo1_amount"):
+            self._parameter_row(lfo1, specs[key])
+        _, lfo2 = self._synth_box(self.controls, "LFO 2", 4, 0, columnspan=2)
+        self.lfo2_canvas = tk.Canvas(lfo2, width=150, height=44, bg="#292a2d",
+                                     highlightthickness=0)
+        self.lfo2_canvas.pack(anchor="w", pady=(0, 2))
+        self.lfo2_tile = WaveTile(self.lfo2_canvas, lambda: None, width=150, height=44)
+        self.lfo2_tile.draw()
+        for key in ("lfo2_wave", "lfo2_rate", "lfo2_amount"):
+            self._parameter_row(lfo2, specs[key])
+        tk.Label(lfo2, text="LFO2 destination: values not established",
+                 bg="#292a2d", fg="#9aa0a6").pack(anchor="w", pady=(2, 0))
+
+        # ---- MODULATION / PORTAMENTO (bottom) -----------------------------
+        _, mod = self._synth_box(self.controls, "MODULATION / PORTAMENTO", 4, 2, columnspan=2)
+        for key in ("portamento_mode", "portamento_amount"):
+            self._parameter_row(mod, specs[key])
+        # CC-only parameters: real MIDI CC numbers are documented externally,
+        # but their SysEx offsets are not yet established.  On SYNTH they use
+        # musical names (no "CC ONLY" wording); mapping/registry untouched.
+        for spec in PARAMETERS:
+            if spec.offset is None:
+                row = tk.Frame(mod, bg="#292a2d")
+                row.pack(fill="x", pady=2)
+                lbl = tk.Label(row, text=f"{_synth_label(spec)}: CC {spec.cc}",
+                               bg="#292a2d", fg="#9aa0a6", anchor="w")
+                lbl.pack(side="left")
+                self.section_labels[spec.key] = lbl
+
+    def _build_wave_tile_row(self, parent, key: str, caption: str) -> None:
+        """Per-OSC waveform preview tile (reuses the existing WaveTile)."""
+        row = tk.Frame(parent, bg="#292a2d")
+        row.pack(fill="x", pady=(0, 4))
+        canvas = tk.Canvas(row, width=150, height=44, bg="#292a2d",
+                           highlightthickness=0)
+        canvas.pack(side="left")
+        tile = WaveTile(canvas, self._update_wave_phase, width=150, height=44)
+        canvas.create_text(4, 40, text=caption, anchor="w", fill="#9aa0a6",
+                           font=("TkDefaultFont", 7, "bold"))
+        if not hasattr(self, "_osc_tiles"):
+            self._osc_tiles: dict[str, WaveTile] = {}
+        self._osc_tiles[key] = tile
+
+    def _env_drag(self, prefix: str, seg_key: str, norm: float) -> None:
+        """Envelope-graph drag -> the SAME parameter path as the sliders."""
+        param_key = f"{prefix}_{seg_key}"
+        spec = BY_KEY.get(param_key)
+        if spec is None or param_key not in self.vars:
+            return
+        self.vars[param_key].set(int(round(norm * 127)))
+        self._value_preview(param_key)
+        if not self._dragging_env:
+            self._dragging_env = True
+            try:
+                self._history.push()
+            except Exception:
+                self._dragging_env = False
+                raise
+
+    # ---------------------------------------------------- P1.26: PRESETS tab
+    def _build_presets_tab(self, frame) -> None:
+        body = ttk.Panedwindow(frame, orient="horizontal")
+        body.pack(fill="both", expand=True, padx=8, pady=(4, 8))
 
         left = ttk.Frame(body, style="Panel.TFrame", padding=8)
         center = ttk.Frame(body, style="Panel.TFrame", padding=8)
-        right = ttk.Frame(body, style="Panel.TFrame", padding=8)
         body.add(left, weight=2)
-        body.add(center, weight=6)
-        body.add(right, weight=4)
+        body.add(center, weight=1)
 
-        # ---- left: bank list -------------------------------------------
+        # ---- bank list (exact same widget/method wiring as before) -------
         head = ttk.Frame(left, style="Panel.TFrame")
         head.pack(fill="x")
         ttk.Label(head, text="BANK / PRESETS", style="Panel.TLabel",
@@ -239,7 +409,7 @@ class Editor(tk.Tk):
         ttk.Label(left, text="↑↓ navigate · Enter rename · Ctrl+D / dbl-click duplicate.",
                   style="Muted.TLabel").pack(anchor="w", pady=(4, 0))
 
-        # ---- center: preset editor ------------------------------------
+        # ---- preset info + rename bar (unchanged API) --------------------
         bar = tk.Frame(center, bg="#292a2d")
         bar.pack(fill="x", pady=(0, 6))
         ttk.Label(bar, text="PRESET", style="Panel.TLabel").pack(side="left")
@@ -251,27 +421,23 @@ class Editor(tk.Tk):
         self.slot_label = tk.Label(bar, textvariable=self.slot_var, bg="#292a2d", fg="#9aa0a6",
                                    font=("TkDefaultFont", 11, "bold"))
         self.slot_label.pack(side="right", padx=8)
+        ttk.Label(center, text="Edit sounds in the SYNTH tab.\n"
+                               "Navigator ◀ ▶ works from every tab.",
+                  style="Muted.TLabel", justify="left").pack(anchor="w", pady=8)
 
-        canvas = tk.Canvas(center, bg="#202124", highlightthickness=0)
-        scrollbar = ttk.Scrollbar(center, orient="vertical", command=canvas.yview)
-        canvas.configure(yscrollcommand=scrollbar.set)
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
-        self.canvas = canvas
-        self.controls = ttk.Frame(canvas, style="TFrame")
-        self.canvas_window = canvas.create_window((0, 0), window=self.controls, anchor="nw")
-        self.controls.bind("<Configure>", lambda _e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.bind("<Configure>", lambda e: canvas.itemconfigure(self.canvas_window, width=e.width))
-        for col in range(2):
-            self.controls.grid_columnconfigure(col, weight=1)
+    # --------------------------------------------------- P1.26: RESEARCH tab
+    def _build_research_tab(self, frame) -> None:
+        top = tk.Frame(frame, bg="#151619", height=30)
+        top.pack(fill="x")
+        top.pack_propagate(False)
+        tk.Label(top, text="RESEARCH — offline analysis tools",
+                 bg="#151619", fg="#8f949b",
+                 font=("TkDefaultFont", 9, "bold")).pack(side="left", padx=16)
+        ttk.Checkbutton(top, text="Developer view", variable=self.developer_var,
+                        command=self._update_developer).pack(side="right", padx=10)
 
-        self.section_labels: dict[str, tk.Label] = {}
-        self.reset_buttons: dict[str, tuple[tk.Button, tk.Label]] = {}
-        self._build_sections()
-
-        # ---- right: developer panel ------------------------------------
-        nb = ttk.Notebook(right)
-        nb.pack(fill="both", expand=True)
+        nb = ttk.Notebook(frame)
+        nb.pack(fill="both", expand=True, padx=8, pady=(4, 8))
         self.dev_tab = ttk.Frame(nb, style="Panel.TFrame")
         self.cmp_tab = ttk.Frame(nb, style="Panel.TFrame")
         self.an_tab = ttk.Frame(nb, style="Panel.TFrame")
@@ -281,11 +447,6 @@ class Editor(tk.Tk):
         self._build_raw_tab()
         self._build_compare_tab()
         self._build_analysis_tab()
-
-        status = tk.Frame(self.tab_frames["SYNTH"], bg="#151619")
-        status.pack(fill="x", side="bottom")
-        tk.Label(status, textvariable=self.status_var, bg="#151619", fg="#c8ccd0",
-                 anchor="w").pack(fill="x", padx=8, pady=3)
 
     # ------------------------------------------------- P1.25a shell helpers
     def _switch_tab(self) -> None:
@@ -317,80 +478,33 @@ class Editor(tk.Tk):
             self.nav_slot_var.set("P--")
             self.nav_name_var.set("—")
 
-    # ------------------------------------------------------------ sections UI
-    def _build_sections(self) -> None:
-        layout = {"OSCILLATORS": (0, 0), "FILTER": (0, 1), "VCF ENVELOPE": (1, 0),
-                  "VCA ENVELOPE": (1, 1), "LFO": (2, 0), "MODULATION": (2, 1)}
-        for section in SECTION_ORDER:
-            r, c = layout[section]
-            box = tk.Frame(self.controls, bg="#292a2d", highlightthickness=1,
-                           highlightbackground="#3b3d40")
-            box.grid(row=r, column=c, sticky="nsew", padx=5, pady=5)
-            self.controls.grid_rowconfigure(r, weight=1)
-            title = tk.Label(box, text=section, bg="#292a2d", fg="#f1f1f1",
-                              font=("TkDefaultFont", 10, "bold"))
-            title.pack(anchor="w", padx=10, pady=(8, 4))
-            if section == "OSCILLATORS":
-                self._build_wave_strip(box)      # P1.10 UX polish: live preview
-            inner = tk.Frame(box, bg="#292a2d")
-            inner.pack(fill="both", expand=True, padx=8, pady=(0, 8))
-            for spec in PARAMETERS:
-                if spec.section == section and spec.offset is not None:
-                    self._parameter_row(inner, spec)
-        # CC-only parameters are documented but have no SysEx offset yet.
-        unmapped = [s for s in PARAMETERS if s.offset is None]
-        if unmapped:
-            box = tk.Frame(self.controls, bg="#292a2d", highlightthickness=1,
-                           highlightbackground="#3b3d40")
-            box.grid(row=3, column=0, columnspan=2, sticky="nsew", padx=5, pady=5)
-            tk.Label(box, text="CC ONLY — SysEx offset not established (read-only)",
-                     bg="#292a2d", fg="#f1f1f1", font=("TkDefaultFont", 10, "bold")).pack(anchor="w", padx=10, pady=(8, 4))
-            inner = tk.Frame(box, bg="#292a2d")
-            inner.pack(fill="x", padx=8, pady=(0, 8))
-            for spec in unmapped:
-                row = tk.Frame(inner, bg="#292a2d")
-                row.pack(fill="x")
-                tk.Label(row, text=f"{spec.label}: CC {spec.cc}", bg="#292a2d",
-                         fg="#9aa0a6", anchor="w").pack(side="left")
-
-    def _build_wave_strip(self, box) -> None:
-        """Animated OSC1/OSC2 waveform previews (presentation only).
-
-        The tiles are driven by registry DISPLAY strings via
-        jt4000m.waveforms — the GUI never reads raw bytes here.  Unknown
-        enum values render an honest "no established shape" placeholder.
-        """
-        strip = tk.Frame(box, bg="#292a2d")
-        strip.pack(fill="x", padx=10, pady=(2, 2))
-        self.wave_canvas = tk.Canvas(strip, width=316, height=48, bg="#292a2d",
-                                     highlightthickness=0)
-        self.wave_canvas.pack(side="left")
-        self.wave_phase_var = tk.StringVar(value="")
-        tk.Label(box, textvariable=self.wave_phase_var, bg="#292a2d", fg="#5f6368",
-                 font=("TkDefaultFont", 7)).pack(anchor="e", padx=10)
-        self._osc_tiles: dict[str, WaveTile] = {}
-        x = 2
-        for key, caption in (("osc1_wave", "OSC1"), ("osc2_wave", "OSC2")):
-            tile = WaveTile(self.wave_canvas, self._update_wave_phase,
-                            width=150, height=44)
-            self.wave_canvas.create_text(x + 4, 40, text=caption, anchor="w",
-                                         fill="#9aa0a6", font=("TkDefaultFont", 7, "bold"))
-            self._osc_tiles[key] = tile
-            x += 158
-
+    # --------------------------------------------------- waveform previews
     def _refresh_wave_tiles(self) -> None:
-        """Push current registry display values into the wave tiles."""
-        if not getattr(self, "_osc_tiles", None) or self.bank is None \
-                or self.selected_index is None:
+        """Push current registry display values into the wave tiles.
+
+        P1.26: OSC 1/OSC 2 tiles plus the new LFO 1/LFO 2 preview tiles —
+        all driven by registry DISPLAY strings via jt4000m.waveforms; the
+        GUI never reads raw bytes here.  Unknown enum values render an
+        honest "no established shape" placeholder.
+        """
+        if self.bank is None or self.selected_index is None:
             return
         patch = self.editor.get_patch(self.selected_index)   # model read API
-        for key, tile in self._osc_tiles.items():
+
+        def _display(key: str) -> str:
             try:
-                disp = patch.get_parameter(key).display
+                return patch.get_parameter(key).display
             except Exception:
-                disp = ""
-            tile.set_wave(disp)
+                return ""
+
+        for key, tile in getattr(self, "_osc_tiles", {}).items():
+            tile.set_wave(_display(key))
             tile.draw()
+        for key, tile in (("lfo1_wave", getattr(self, "lfo1_tile", None)),
+                          ("lfo2_wave", getattr(self, "lfo2_tile", None))):
+            if tile is not None:
+                tile.set_wave(_display(key))
+                tile.draw()
 
     def _update_wave_phase(self) -> None:
         try:
@@ -402,8 +516,13 @@ class Editor(tk.Tk):
             pass
 
     def _start_animation(self) -> None:
-        for tile in getattr(self, "_osc_tiles", {}).values():
+        for tile in list(getattr(self, "_osc_tiles", {}).values()):
             tile.start()
+        # P1.26: LFO preview tiles animate through the same WaveTile engine.
+        for tile in (getattr(self, "lfo1_tile", None),
+                     getattr(self, "lfo2_tile", None)):
+            if tile is not None:
+                tile.start()
 
     def _parameter_row(self, parent, spec) -> None:
         row = tk.Frame(parent, bg="#292a2d")
@@ -461,7 +580,7 @@ class Editor(tk.Tk):
         spec = BY_KEY[key]
         if self.editor.get_patch(self.selected_index).get_raw(key) == spec.default:
             self.status_var.set(
-                f"P{self.selected_index:02d}  {spec.label} is already at its default.")
+                f"P{self.selected_index:02d}  {_synth_label(spec)} is already at its default.")
             return
         try:
             self._history.push()
@@ -475,7 +594,7 @@ class Editor(tk.Tk):
             self._after_mutation()
             return
         self._after_mutation()
-        self.status_var.set(f"P{self.selected_index:02d}  {spec.label} reset to "
+        self.status_var.set(f"P{self.selected_index:02d}  {_synth_label(spec)} reset to "
                             f"default {display_value(key, spec.default)}")
 
     # ------------------------------------------------------------- raw table
@@ -755,6 +874,30 @@ class Editor(tk.Tk):
         self.apply_name_btn.configure(state="normal" if enabled else "disabled")
         self._syncing = False
         self._refresh_wave_tiles()
+        self._refresh_visualizations()
+
+    def _refresh_visualizations(self) -> None:
+        """P1.26: push current model values into the filter/envelope graphs.
+
+        Pure presentation sync through the existing widget APIs — no new
+        visualization engine, no raw-byte access.
+        """
+        if self.bank is None or self.selected_index is None:
+            return
+        patch = self.editor.get_patch(self.selected_index)   # model read API
+        try:
+            self.filter_view.set_values(patch.get_raw("filter_cutoff"),
+                                        patch.get_raw("filter_resonance"))
+            self.vcf_env_view.set_values(patch.get_raw("vcf_attack"),
+                                         patch.get_raw("vcf_decay"),
+                                         patch.get_raw("vcf_sustain"),
+                                         patch.get_raw("vcf_release"))
+            self.vca_env_view.set_values(patch.get_raw("vca_attack"),
+                                         patch.get_raw("vca_decay"),
+                                         patch.get_raw("vca_sustain"),
+                                         patch.get_raw("vca_release"))
+        except (AttributeError, KeyError):
+            pass    # widgets not built yet (early construction/tests)
 
     def _combo_text(self, key: str, raw: int) -> str:
         return dict(enum_options(key)).get(raw, "")
@@ -829,7 +972,7 @@ class Editor(tk.Tk):
         if self.editor.get_patch(self.selected_index).get_raw(key) == raw:
             self._sync_widgets_from_model()
             self.status_var.set(
-                f"P{self.selected_index:02d}  {spec.label} is unchanged.")
+                f"P{self.selected_index:02d}  {_synth_label(spec)} is unchanged.")
             return
         try:
             self._history.push()                # record pre-mutation snapshot
@@ -853,13 +996,23 @@ class Editor(tk.Tk):
             return
         self._after_mutation()
         self.value_vars[key].set(self._formatted(key, raw))
-        self.status_var.set(f"P{self.selected_index:02d}  {spec.label} = {display_value(key, raw)}"
-                            f"  [raw {raw}, offset 0x{spec.offset:02X}]")
+        # P1.26: the SYNTH status line is musical — no raw/offset details.
+        self.status_var.set(f"P{self.selected_index:02d}  "
+                            f"{_synth_label(spec)} = {display_value(key, raw)}")
 
     def _value_preview(self, key: str) -> None:
         if self._syncing:
             return
         self.value_vars[key].set(self._formatted(key, int(self.vars[key].get())))
+
+    def _env_release(self, _event=None) -> None:
+        """Envelope-graph drag end -> commit through the normal parameter path."""
+        if not self._dragging_env:
+            return
+        self._dragging_env = False
+        for key in list(self.vars):
+            if key.startswith(("vcf_", "vca_")):
+                self.apply_parameter(key)
 
     def _combo_apply(self, key: str, combo) -> None:
         if self._syncing:
@@ -1100,8 +1253,11 @@ class Editor(tk.Tk):
         destroyed interpreter and hang test sessions that create/destroy
         many Editor instances.
         """
-        for tile in getattr(self, "_osc_tiles", {}).values():
+        for tile in list(getattr(self, "_osc_tiles", {}).values()):
             tile.stop()
+        for tile in (getattr(self, "lfo1_tile", None), getattr(self, "lfo2_tile", None)):
+            if tile is not None:
+                tile.stop()
         super().destroy()
 
     def quit_or_ask(self) -> None:
