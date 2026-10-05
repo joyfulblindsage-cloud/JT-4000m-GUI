@@ -126,6 +126,11 @@ class Editor(tk.Tk):
         style.configure("Treeview", background="#17181a", fieldbackground="#17181a",
                         foreground="#e8e8e8", rowheight=20)
         style.configure("Treeview.Heading", background="#3b3d40", foreground="#f0f0f0")
+        # P1.26 final polish: unified flat tab buttons (visual hierarchy).
+        style.configure("Tab.TButton", padding=(16, 7), relief="flat")
+        style.map("Tab.TButton",
+                  background=[("active", "#35373b"), ("pressed", "#3b3d40")],
+                  foreground=[("!disabled", "#c8ccd0")])
 
     # ------------------------------------------------------------------- build
     def _build(self) -> None:
@@ -210,8 +215,10 @@ class Editor(tk.Tk):
                    command=lambda: self._nav_step(-1)).pack(side="left", padx=(10, 4), pady=6)
         tk.Label(nav, textvariable=self.nav_slot_var, bg="#151619", fg="#4c6ef5",
                  font=("TkDefaultFont", 12, "bold")).pack(side="left", padx=4)
+        # P1.26 polish: fixed-width name label keeps the bar stable while
+        # patch names change (no jitter of the ▶ button).
         tk.Label(nav, textvariable=self.nav_name_var, bg="#151619", fg="#f1f1f1",
-                 font=("TkDefaultFont", 12, "bold")).pack(side="left", padx=6)
+                 font=("TkDefaultFont", 12, "bold"), width=20, anchor="w").pack(side="left", padx=6)
         ttk.Button(nav, text="▶", width=3,
                    command=lambda: self._nav_step(1)).pack(side="left", padx=4, pady=6)
 
@@ -235,14 +242,20 @@ class Editor(tk.Tk):
     # ------------------------------------------------------ P1.26: SYNTH tab
     def _synth_box(self, parent, title: str, row: int, col: int,
                    columnspan: int = 1):
+        """One visual section box (consistent padding + header hierarchy)."""
         box = tk.Frame(parent, bg="#292a2d", highlightthickness=1,
                        highlightbackground="#3b3d40")
         box.grid(row=row, column=col, columnspan=columnspan,
                  sticky="nsew", padx=5, pady=5)
-        tk.Label(box, text=title, bg="#292a2d", fg="#f1f1f1",
-                 font=("TkDefaultFont", 10, "bold")).pack(anchor="w", padx=10, pady=(8, 4))
+        head = tk.Frame(box, bg="#292a2d")
+        head.pack(fill="x", padx=10, pady=(8, 2))
+        tk.Label(head, text=title, bg="#292a2d", fg="#f1f1f1",
+                 font=("TkDefaultFont", 10, "bold")).pack(side="left")
+        # P1.26 polish: thin accent underline under every section title —
+        # clear visual hierarchy without new widgets or behavior.
+        tk.Frame(head, bg="#4c6ef5", height=2).pack(side="left", pady=(0, 2))
         inner = tk.Frame(box, bg="#292a2d")
-        inner.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+        inner.pack(fill="both", expand=True, padx=10, pady=(4, 8))
         return box, inner
 
     def _build_synth_tab(self, frame) -> None:
@@ -255,9 +268,14 @@ class Editor(tk.Tk):
         self.controls = ttk.Frame(canvas, style="TFrame")
         self.canvas_window = canvas.create_window((0, 0), window=self.controls, anchor="nw")
         self.controls.bind("<Configure>", lambda _e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.bind("<Configure>", lambda e: canvas.itemconfigure(self.canvas_window, width=e.width))
+        # P1.26 polish: the workspace fills the visible width when the window
+        # is wide enough, and keeps a readable minimum (horizontal scroll)
+        # when it is not — no stretched-out empty gutters on resize.
+        self._controls_min_width = 1000
+        canvas.bind("<Configure>", self._on_synth_resize)
         for col in range(4):
             self.controls.grid_columnconfigure(col, weight=1)
+            self.controls.grid_rowconfigure(col, weight=1)
 
         self.section_labels: dict[str, tk.Label] = {}
         self.reset_buttons: dict[str, tuple[tk.Button, tk.Label]] = {}
@@ -278,48 +296,60 @@ class Editor(tk.Tk):
             self._parameter_row(osc2, specs[key])
 
         # ---- MIX / RING --------------------------------------------------
+        # P1.26 polish: compact strip — the mix controls share two columns
+        # instead of a tall full-width box with dead vertical space.
         _, mix = self._synth_box(self.controls, "MIX / RING", 1, 0, columnspan=4)
-        for key in ("osc_balance", "ring_mod_toggle", "ring_mod_amount"):
-            self._parameter_row(mix, specs[key])
+        mix_rows = tk.Frame(mix, bg="#292a2d")
+        mix_rows.pack(fill="x")
+        mix_rows.grid_columnconfigure(0, weight=1)
+        mix_rows.grid_columnconfigure(1, weight=1)
+        for i, key in enumerate(("osc_balance", "ring_mod_toggle")):
+            self._parameter_row(mix_rows, specs[key], grid=True, row=0, col=i)
+        self._parameter_row(mix_rows, specs["ring_mod_amount"], grid=True, row=1, col=0)
 
         # ---- FILTER (response graph right next to cutoff/resonance) ------
         _, filt = self._synth_box(self.controls, "FILTER", 2, 0, columnspan=2)
-        self.filter_view = FilterView(filt, width=170, height=56)
-        self.filter_view.pack(anchor="w", pady=(0, 6))
+        self.filter_view = FilterView(filt, width=230, height=72)
+        self.filter_view.pack(anchor="center", pady=(0, 8))
         for key in ("filter_cutoff", "filter_resonance", "filter_env_amount"):
             self._parameter_row(filt, specs[key])
 
         # ---- VCF ENVELOPE (graph above the sliders, interactive drag) ----
         _, vcf = self._synth_box(self.controls, "VCF ENVELOPE", 2, 2, columnspan=2)
-        self.vcf_env_view = EnvelopeView(vcf, title="VCF EG", width=170, height=64,
+        self.vcf_env_view = EnvelopeView(vcf, title="VCF EG", width=230, height=72,
                                          on_segment=lambda k, n: self._env_drag("vcf", k, n))
-        self.vcf_env_view.pack(anchor="w", pady=(0, 6))
-        for key in ("vcf_attack", "vcf_decay", "vcf_sustain", "vcf_release",
-                    "filter_env_amount"):
+        self.vcf_env_view.pack(anchor="center", pady=(0, 8))
+        # P1.26 polish: commit drags on release (existing parameter path).
+        self._bind_env_release(self.vcf_env_view)
+        # P1.26 polish: filter env amount belongs to FILTER; no duplicate row
+        # here anymore (the control still exists once, in the FILTER box).
+        for key in ("vcf_attack", "vcf_decay", "vcf_sustain", "vcf_release"):
             self._parameter_row(vcf, specs[key])
 
         # ---- VCA ENVELOPE -------------------------------------------------
         _, vca = self._synth_box(self.controls, "VCA ENVELOPE", 3, 0, columnspan=2)
-        self.vca_env_view = EnvelopeView(vca, title="VCA EG", width=170, height=64,
+        self.vca_env_view = EnvelopeView(vca, title="VCA EG", width=230, height=72,
                                          on_segment=lambda k, n: self._env_drag("vca", k, n))
-        self.vca_env_view.pack(anchor="w", pady=(0, 6))
+        self.vca_env_view.pack(anchor="center", pady=(0, 8))
+        # P1.26 polish: commit drags on release (existing parameter path).
+        self._bind_env_release(self.vca_env_view)
         for key in ("vca_attack", "vca_decay", "vca_sustain", "vca_release"):
             self._parameter_row(vca, specs[key])
 
         # ---- LFO 1 / LFO 2 blocks ----------------------------------------
         _, lfo1 = self._synth_box(self.controls, "LFO 1", 3, 2, columnspan=2)
-        self.lfo1_canvas = tk.Canvas(lfo1, width=150, height=44, bg="#292a2d",
-                                     highlightthickness=0)
-        self.lfo1_canvas.pack(anchor="w", pady=(0, 2))
-        self.lfo1_tile = WaveTile(self.lfo1_canvas, lambda: None, width=150, height=44)
+        self.lfo1_canvas = tk.Canvas(lfo1, width=200, height=44, bg="#17181a",
+                                     highlightthickness=1, highlightbackground="#3b3d40")
+        self.lfo1_canvas.pack(anchor="center", pady=(0, 6))
+        self.lfo1_tile = WaveTile(self.lfo1_canvas, lambda: None, width=200, height=44)
         self.lfo1_tile.draw()
         for key in ("lfo1_wave", "lfo1_destination", "lfo1_rate", "lfo1_amount"):
             self._parameter_row(lfo1, specs[key])
         _, lfo2 = self._synth_box(self.controls, "LFO 2", 4, 0, columnspan=2)
-        self.lfo2_canvas = tk.Canvas(lfo2, width=150, height=44, bg="#292a2d",
-                                     highlightthickness=0)
-        self.lfo2_canvas.pack(anchor="w", pady=(0, 2))
-        self.lfo2_tile = WaveTile(self.lfo2_canvas, lambda: None, width=150, height=44)
+        self.lfo2_canvas = tk.Canvas(lfo2, width=200, height=44, bg="#17181a",
+                                     highlightthickness=1, highlightbackground="#3b3d40")
+        self.lfo2_canvas.pack(anchor="center", pady=(0, 6))
+        self.lfo2_tile = WaveTile(self.lfo2_canvas, lambda: None, width=200, height=44)
         self.lfo2_tile.draw()
         for key in ("lfo2_wave", "lfo2_rate", "lfo2_amount"):
             self._parameter_row(lfo2, specs[key])
@@ -342,12 +372,26 @@ class Editor(tk.Tk):
                 lbl.pack(side="left")
                 self.section_labels[spec.key] = lbl
 
+    def _on_synth_resize(self, event) -> None:
+        """P1.26 polish: SYNTH workspace width on resize.
+
+        Fill the visible canvas width when it is wide enough; otherwise keep
+        a readable minimum width (the canvas scrolls horizontally instead of
+        squashing rows or leaving stretched dead gutters).
+        """
+        width = max(event.width, getattr(self, "_controls_min_width", 1000))
+        self.canvas.itemconfigure(self.canvas_window, width=width)
+        # Horizontal scroll region follows the same rule as the vertical one.
+        self.canvas.configure(xscrollincrement=0)
+
     def _build_wave_tile_row(self, parent, key: str, caption: str) -> None:
         """Per-OSC waveform preview tile (reuses the existing WaveTile)."""
         row = tk.Frame(parent, bg="#292a2d")
         row.pack(fill="x", pady=(0, 4))
-        canvas = tk.Canvas(row, width=150, height=44, bg="#292a2d",
-                           highlightthickness=0)
+        # P1.26 polish: darker inset well + thin border make the preview read
+        # as a display, clearly separated from the sliders below it.
+        canvas = tk.Canvas(row, width=150, height=44, bg="#17181a",
+                           highlightthickness=1, highlightbackground="#3b3d40")
         canvas.pack(side="left")
         tile = WaveTile(canvas, self._update_wave_phase, width=150, height=44)
         canvas.create_text(4, 40, text=caption, anchor="w", fill="#9aa0a6",
@@ -371,6 +415,12 @@ class Editor(tk.Tk):
             except Exception:
                 self._dragging_env = False
                 raise
+
+    def _bind_env_release(self, view) -> None:
+        """P1.26 polish: commit envelope drags on button release through the
+        existing parameter path (same behavior as slider release).  The
+        widget class itself is untouched — only an extra binding here."""
+        view.bind("<ButtonRelease-1>", self._env_release, add="+")
 
     # ---------------------------------------------------- P1.26: PRESETS tab
     def _build_presets_tab(self, frame) -> None:
@@ -524,11 +574,21 @@ class Editor(tk.Tk):
             if tile is not None:
                 tile.start()
 
-    def _parameter_row(self, parent, spec) -> None:
-        row = tk.Frame(parent, bg="#292a2d")
-        row.pack(fill="x", pady=3)
-        label = tk.Label(row, text=_row_label(spec, self.developer_var.get()), bg="#292a2d",
-                         fg="#bfc3c8", width=26, anchor="w")
+    def _parameter_row(self, parent, spec, *, grid: bool = False,
+                       row: int = 0, col: int = 0) -> None:
+        """One parameter line: label | control(s) | value | reset.
+
+        P1.26 polish: fixed label width and consistent vertical rhythm keep
+        every section aligned; `grid=True` lets compact strips (MIX / RING)
+        place several rows side by side instead of stacking dead space.
+        """
+        line = tk.Frame(parent, bg="#292a2d")
+        if grid:
+            line.grid(row=row, column=col, sticky="ew", padx=(0, 10), pady=3)
+        else:
+            line.pack(fill="x", pady=3)
+        label = tk.Label(line, text=_row_label(spec, self.developer_var.get()), bg="#292a2d",
+                         fg="#bfc3c8", width=22, anchor="w")
         label.pack(side="left")
         self.section_labels[spec.key] = label
         # Initial value = documented default; it is overwritten from the model
@@ -541,7 +601,7 @@ class Editor(tk.Tk):
         if spec.kind == "enum":
             options = enum_options(spec.key)
             if options:
-                combo = ttk.Combobox(row, state="readonly", width=16,
+                combo = ttk.Combobox(line, state="readonly", width=16,
                                      values=[name for _v, name in options])
                 combo.pack(side="right")
                 setattr(self, f"combo_{spec.key}", combo)
@@ -550,24 +610,24 @@ class Editor(tk.Tk):
             else:
                 # No confirmed enum table exists yet (hardware TODO): show the
                 # raw value read-only instead of inventing editable options.
-                tk.Label(row, text="values not established", bg="#292a2d",
+                tk.Label(line, text="values not established", bg="#292a2d",
                          fg="#9aa0a6").pack(side="right")
         elif spec.kind == "boolean":
-            check = ttk.Checkbutton(row, text="ON", variable=var,
+            check = ttk.Checkbutton(line, text="ON", variable=var,
                                     command=lambda key=spec.key: self.apply_parameter(key))
             check.pack(side="right")
         else:
-            scale = tk.Scale(row, from_=spec.minimum, to=spec.maximum, orient="horizontal",
+            scale = tk.Scale(line, from_=spec.minimum, to=spec.maximum, orient="horizontal",
                              variable=var, showvalue=False, resolution=1, bg="#292a2d",
                              fg="#d8d8d8", troughcolor="#111214", highlightthickness=0, bd=0,
-                             length=150,
+                             sliderrelief="flat", length=170,
                              command=lambda _v, key=spec.key: self._value_preview(key))
             scale.pack(side="left", fill="x", expand=True, padx=5)
             scale.bind("<ButtonRelease-1>", lambda _e, key=spec.key: self.apply_parameter(key))
-        val_lbl = tk.Label(row, textvariable=value, bg="#292a2d", fg="#f1f1f1", width=11,
+        val_lbl = tk.Label(line, textvariable=value, bg="#292a2d", fg="#f1f1f1", width=11,
                            anchor="e")
         val_lbl.pack(side="right", padx=(4, 0))
-        reset = tk.Button(row, text="D", width=2, relief="flat", bg="#292a2d", fg="#9aa0a6",
+        reset = tk.Button(line, text="D", width=2, relief="flat", bg="#292a2d", fg="#9aa0a6",
                           highlightthickness=0, bd=0,
                           command=lambda key=spec.key: self.reset_one(key))
         reset.pack(side="right", padx=(2, 0))
