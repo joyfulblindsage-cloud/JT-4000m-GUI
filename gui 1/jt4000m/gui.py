@@ -72,6 +72,13 @@ class Editor(tk.Tk):
         self.status_var = tk.StringVar(value="Open a JT-4000M bulk .syx file (File ▸ Open Bank)")
         self.developer_var = tk.BooleanVar(value=False)
 
+        # P1.25a — new GUI shell state (tabs + preset navigator).
+        # Purely presentational: no model/MIDI logic lives here.
+        self.current_tab = tk.StringVar(value="SYNTH")   # SYNTH opens by default
+        self.nav_slot_var = tk.StringVar(value="P--")
+        self.nav_name_var = tk.StringVar(value="—")
+        self.midi_status_var = tk.StringVar(value="MIDI: offline")
+
         self._style()
         self._build()
 
@@ -125,20 +132,78 @@ class Editor(tk.Tk):
         self.bind("<Control-z>", lambda _e: self.undo())
         self.bind("<Control-y>", lambda _e: self.redo())
 
-        header = tk.Frame(self, bg="#151619", height=56)
-        header.pack(fill="x")
-        header.pack_propagate(False)
-        tk.Label(header, text="JT-4000M", bg="#151619", fg="#f2f2f2",
+        # ================= P1.25a — new GUI shell (Tkinter only) ==========
+        # Layout:  header (brand + tab switcher + modified/MIDI status)
+        #          workspace container (SYNTH | PRESETS | RESEARCH)
+        #          permanent bottom preset navigator (◀ Pxx NAME ▶)
+        # The existing editor UI is reparented into the SYNTH workspace
+        # unchanged; PRESETS/RESEARCH are empty containers for later steps.
+        shell_header = tk.Frame(self, bg="#151619", height=56)
+        shell_header.pack(fill="x")
+        shell_header.pack_propagate(False)
+        tk.Label(shell_header, text="JT-4000M", bg="#151619", fg="#f2f2f2",
                  font=("TkDefaultFont", 16, "bold")).pack(side="left", padx=16)
-        tk.Label(header, text="OFFLINE PRESET EDITOR — no MIDI required", bg="#151619", fg="#8f949b",
-                 font=("TkDefaultFont", 9, "bold")).pack(side="left")
-        ttk.Checkbutton(header, text="Developer view", variable=self.developer_var,
-                        command=self._update_developer).pack(side="right", padx=10)
-        tk.Label(header, textvariable=self.modified_var, bg="#151619",
-                 fg="#ffb74d", font=("TkDefaultFont", 10, "bold")).pack(side="right", padx=8)
 
-        body = ttk.Panedwindow(self, orient="horizontal")
+        # Existing Modified/dirty status label (projection of the model).
+        tk.Label(shell_header, textvariable=self.modified_var, bg="#151619",
+                 fg="#ffb74d", font=("TkDefaultFont", 10, "bold")).pack(side="right", padx=8)
+        # MIDI status: honest placeholder until a transport is wired in the
+        # current GUI architecture (this app never touches MIDI yet).
+        tk.Label(shell_header, textvariable=self.midi_status_var, bg="#151619",
+                 fg="#8f949b", font=("TkDefaultFont", 9, "bold")).pack(side="right", padx=8)
+
+        # Central tab switcher: three radio buttons sharing one StringVar.
+        switcher = tk.Frame(shell_header, bg="#151619")
+        switcher.pack(side="left", expand=True)
+        self.tab_buttons: dict[str, tk.Radiobutton] = {}
+        for tab_name in ("SYNTH", "PRESETS", "RESEARCH"):
+            btn = tk.Radiobutton(switcher, text=tab_name, value=tab_name,
+                                 variable=self.current_tab, bg="#151619",
+                                 fg="#c8ccd0", selectcolor="#4c6ef5",
+                                 activebackground="#151619", activeforeground="#ffffff",
+                                 relief="flat", indicatoron=False, padx=14,
+                                 command=self._switch_tab)
+            btn.pack(side="left")
+            self.tab_buttons[tab_name] = btn
+
+        # Workspace container: exactly one child visible at a time.
+        self.workspace = tk.Frame(self, bg="#202124")
+        self.workspace.pack(fill="both", expand=True)
+        self.tab_frames: dict[str, tk.Frame] = {}
+        for tab_name in ("SYNTH", "PRESETS", "RESEARCH"):
+            frame = tk.Frame(self.workspace, bg="#202124")
+            self.tab_frames[tab_name] = frame
+        # SYNTH opens by default.
+        self.tab_frames["SYNTH"].place(relx=0.0, rely=0.0, relwidth=1.0, relheight=1.0)
+
+        # ---- permanent bottom panel: preset navigator ------------------
+        nav = tk.Frame(self, bg="#151619", height=44)
+        nav.pack(fill="x", side="bottom")
+        nav.pack_propagate(False)
+        tk.Frame(nav, bg="#3a3b3e", height=1).pack(fill="x")
+        ttk.Button(nav, text="◀", width=3,
+                   command=lambda: self._nav_step(-1)).pack(side="left", padx=(10, 4), pady=6)
+        tk.Label(nav, textvariable=self.nav_slot_var, bg="#151619", fg="#4c6ef5",
+                 font=("TkDefaultFont", 12, "bold")).pack(side="left", padx=4)
+        tk.Label(nav, textvariable=self.nav_name_var, bg="#151619", fg="#f1f1f1",
+                 font=("TkDefaultFont", 12, "bold")).pack(side="left", padx=6)
+        ttk.Button(nav, text="▶", width=3,
+                   command=lambda: self._nav_step(1)).pack(side="left", padx=4, pady=6)
+
+        # ---- legacy editor content -> temporary SYNTH container ---------
+        body = ttk.Panedwindow(self.tab_frames["SYNTH"], orient="horizontal")
         body.pack(fill="both", expand=True, padx=8, pady=(4, 8))
+
+        # Legacy header row (subtitle + Developer view toggle) kept inside
+        # the SYNTH workspace so existing behavior/controls are preserved.
+        legacy_header = tk.Frame(self.tab_frames["SYNTH"], bg="#151619", height=30)
+        legacy_header.pack(fill="x")
+        legacy_header.pack_propagate(False)
+        tk.Label(legacy_header, text="OFFLINE PRESET EDITOR — no MIDI required",
+                 bg="#151619", fg="#8f949b",
+                 font=("TkDefaultFont", 9, "bold")).pack(side="left", padx=16)
+        ttk.Checkbutton(legacy_header, text="Developer view", variable=self.developer_var,
+                        command=self._update_developer).pack(side="right", padx=10)
 
         left = ttk.Frame(body, style="Panel.TFrame", padding=8)
         center = ttk.Frame(body, style="Panel.TFrame", padding=8)
@@ -217,10 +282,40 @@ class Editor(tk.Tk):
         self._build_compare_tab()
         self._build_analysis_tab()
 
-        status = tk.Frame(self, bg="#151619")
+        status = tk.Frame(self.tab_frames["SYNTH"], bg="#151619")
         status.pack(fill="x", side="bottom")
         tk.Label(status, textvariable=self.status_var, bg="#151619", fg="#c8ccd0",
                  anchor="w").pack(fill="x", padx=8, pady=3)
+
+    # ------------------------------------------------- P1.25a shell helpers
+    def _switch_tab(self) -> None:
+        """Show exactly one workspace tab (SYNTH | PRESETS | RESEARCH)."""
+        for name, frame in self.tab_frames.items():
+            if name == self.current_tab.get():
+                frame.place(relx=0.0, rely=0.0, relwidth=1.0, relheight=1.0)
+            else:
+                frame.place_forget()    # unmap; child widgets/state are kept
+
+    def _nav_step(self, delta: int) -> None:
+        """Preset navigator ◀/▶ — routes through the same model selection
+        path as the bank list (EditorModel.select_patch via
+        select_program); no direct bank/MIDI access."""
+        if self.bank is None:
+            return
+        current = self.selected_index or 0
+        target = max(1, min(32, (current if current else (1 if delta > 0 else 32)) + delta))
+        if target != current:
+            self.select_program(target)
+
+    def _update_nav(self) -> None:
+        """Project the current model selection into the bottom navigator."""
+        if self.bank is not None and self.selected_index is not None:
+            patch = self.editor.get_patch(self.selected_index)
+            self.nav_slot_var.set(f"P{self.selected_index:02d}")
+            self.nav_name_var.set(patch.name)
+        else:
+            self.nav_slot_var.set("P--")
+            self.nav_name_var.set("—")
 
     # ------------------------------------------------------------ sections UI
     def _build_sections(self) -> None:
@@ -636,6 +731,8 @@ class Editor(tk.Tk):
         p = patch.program
         self.slot_var.set(f"P{p.index:02d}")
         self.name_var.set(patch.name)
+        # P1.25a: keep the permanent bottom navigator in sync with selection.
+        self._update_nav()
         for spec in PARAMETERS:
             if spec.offset is None or spec.key not in self.vars:
                 continue
