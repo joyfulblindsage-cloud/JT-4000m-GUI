@@ -173,6 +173,20 @@ class Editor(tk.Tk):
         self.bind("<Control-z>", lambda _e: self.undo())
         self.bind("<Control-y>", lambda _e: self.redo())
 
+        # P1.28 §7/§8 — global Left/Right preset navigation.  Bound on the
+        # toplevel (widget-level class bindings fire FIRST and always return
+        # None, so focus-following editing controls keep their native arrow
+        # behavior untouched): Entry/Combobox (entry child) handle arrows in
+        # their own binding tables; Listbox has its own arrow handler plus a
+        # local <Left>/<Right> alias bound in _build_presets_tab — both stop
+        # propagation with "break", so the global navigator never fights a
+        # focused list.  For every other widget (tabs, frames, buttons,
+        # scale label areas) the event bubbles up to this toplevel binding
+        # and routes through the SAME path as the ◀/▶ buttons (_nav_step ->
+        # select_program -> EditorModel).
+        self.bind("<Left>", self._on_global_arrow_nav)
+        self.bind("<Right>", self._on_global_arrow_nav)
+
         # ================= P1.25a — new GUI shell (Tkinter only) ==========
         # Layout:  header (brand + tab switcher + modified/MIDI status)
         #          workspace container (SYNTH | PRESETS | RESEARCH)
@@ -745,7 +759,7 @@ class Editor(tk.Tk):
         if self._midi_poll_after_id is not None:
             return
         def _tick():
-            self._midi_poll_once()
+            self._poll_midi_once()
             self._midi_poll_after_id = self.after(interval_ms, _tick)
         self._midi_poll_after_id = self.after(interval_ms, _tick)
 
@@ -780,18 +794,99 @@ class Editor(tk.Tk):
 
         `max_packets` bounds one pump pass so a flooding device can never
         starve the event loop (P1.27 §18 'no MIDI flood' safety).
+
+        P1.28: every packet first goes through the EXISTING Program Change
+        decoder; a valid PC becomes a selection-only slot change, everything
+        else keeps flowing into the unchanged P1.27 CC path.  No new decoder,
+        no second RX pipeline.
         """
         bridge = self._midi_bridge
         if bridge is None or self._midi_input_port is None:
             return
         try:
             for index, (_ts, data) in enumerate(bridge.transport.receive(timeout=0.005)):
-                self._midi_rx_packet(data)
+                select = bridge.decode_program_change(data)
+                if select is not None:
+                    self._apply_midi_program_select(select)
+                else:
+                    self._midi_rx_packet(data)
                 if index + 1 >= max_packets:
                     break
         except Exception as exc:
             self.midi_events.append({"direction": "rx-error",
                                      "message": str(exc)})
+
+    # ------------------- P1.28 — Program Change integration (selection only)
+    def _apply_midi_program_select(self, select) -> None:
+        """Incoming Program Change -> EditorModel.select_patch -> GUI projection.
+
+        P1.28 §5: this is SELECTION, never an edit.  It does NOT commit or
+        touch patch bytes, creates no history entry, leaves dirty untouched,
+        saves nothing and sends nothing back (§6 feedback guard: the whole
+        application runs under the existing _rx_applying flag, so neither a
+        Program Change echo nor a CC echo can be produced from this path).
+        A PC that names the already-selected slot is a pure no-op (§3).
+        """
+        self.midi_events.append({"direction": "rx", "type": "program_change",
+                                 "channel": select.channel,
+                                 "program": select.program, "slot": select.slot})
+        if self.bank is None or select.slot == self.selected_index:
+            return                                # no-op: same slot selected
+        self._rx_applying = True                  # suppress any TX echo (§6)
+        try:
+            self.editor.select_patch(select.slot)  # model = source of truth
+            self.selected_index = select.slot      # GUI projection only
+            self._sync_widgets_from_model()        # SYNTH + navigator
+            self._highlight_selection()            # PRESETS list selection
+            self._update_developer()               # RESEARCH raw/section views
+        finally:
+            self._rx_applying = False
+
+    def _midi_tx_program_change(self, slot: int) -> None:
+        """User navigation -> Program Change TX through the existing bridge.
+
+        The GUI never builds MIDI bytes itself: slot->PC encoding lives in
+        midi.py/midi_sync.py.  Offline (no output port) this is silent and
+        error-free (§9); the _rx_applying guard makes RX selections echo-free
+        (§6).  Logging reuses the existing midi_events diagnostic stream
+        (§10) — no second log system, no technical data shown on SYNTH.
+        """
+        bridge = self._midi_bridge
+        if bridge is None or self._rx_applying:
+            return
+        if bridge.output is None:                 # TX-only offline: stay quiet
+            return
+        try:
+            report = bridge.send_program_change(slot)
+        except RuntimeError as exc:               # backend down: keep usable
+            self.midi_events.append({"direction": "tx-error",
+                                     "type": "program_change", "slot": slot,
+                                     "message": str(exc)})
+            return
+        self.midi_events.append({"direction": "tx", "type": "program_change",
+                                 "channel": bridge.channel, "slot": slot,
+                                 "api_ok": bool(report.api_ok)})
+
+    def _on_global_arrow_nav(self, event):
+        """Global Left/Right preset navigation (P1.28 §7/§8).
+
+        Bound on the toplevel AFTER widget-level class bindings, so it fires
+        only when the focused control did not consume the arrow itself.
+        Editing/listing controls (Entry/Combobox/Listbox/Text/Treeview) keep
+        their native behavior untouched — we simply return None and let the
+        event finish its normal dispatch.  Everywhere else (tabs, frames,
+        buttons, scales) the key drives the SAME path as the ◀/▶ buttons:
+        _nav_step -> select_program -> EditorModel -> optional PC TX.
+        """
+        w = event.widget
+        try:
+            cls = w.winfo_class()
+        except tk.TclError:
+            return None
+        if cls in ("Entry", "TEntry", "Listbox", "Treeview", "Text"):
+            return None                           # native control behavior wins
+        self._nav_step(-1 if event.keysym == "Left" else 1)
+        return "break"
 
     # ------------------------------------------------------------------ raw table
     def _build_raw_tab(self) -> None:
@@ -957,7 +1052,15 @@ class Editor(tk.Tk):
         self.search_var.set("")
         self.refresh_list()
         self._loading_bank = False
-        self.select_program(1)
+        # P1.28: the initial slot after a load is a pure projection of the
+        # model selection — NOT a user navigation (no PC TX on load, and the
+        # _history.clear() above must not be polluted by a fold snapshot).
+        # select_program() short-circuits once selected_index already equals
+        # the target, so this assignment keeps that contract intact.
+        self.selected_index = self.editor.selected
+        self._sync_widgets_from_model()
+        self._highlight_selection()
+        self._update_developer()
         self._update_modified()               # CLEAN: baseline == loaded bank
         where = "" if syx.mode == "bulk" else f" (placed in slot {syx.programs[0].index:02d})"
         chk = "OK" if syx.checksum_ok else f"BAD (expected 0x{syx.checksum_expected:02X})"
@@ -1027,15 +1130,36 @@ class Editor(tk.Tk):
     def select_program(self, index: int) -> None:
         if self.bank is None or not 1 <= index <= 32:
             return
+        # P1.28 §3 no-op: navigating to the already-selected preset does
+        # NOTHING — no history entry, no dirty change, no Program Change TX,
+        # no widget mutation (the existing no-op semantics are preserved).
+        if index == self.selected_index:
+            return
         # Fold any pending uncommitted edit into the bank BEFORE switching
         # slots, so a working copy can never be silently lost or applied to
         # another patch (P1.10 §8: selection changes go through the model).
+        had_pending_edit = getattr(self.editor, "_working", None) is not None
         self.editor.commit()
         self.editor.select_patch(index)
         self.selected_index = index
+        # P1.28 §16: navigation itself is SELECTION, not an edit — a history
+        # snapshot is pushed ONLY when an uncommitted edit actually existed
+        # (folded by the commit above), so ◀/▶ / keyboard / list clicks on a
+        # clean session create ZERO undo entries and stay clean.  The
+        # pre-switch snapshot lets Undo revert exactly that folded edit;
+        # the selection move rides inside the snapshot (undo restores both
+        # the bytes and the slot it belonged to).  History semantics of
+        # EditorHistory are unchanged — only the GUI push policy follows
+        # the "PC is never an edit" contract.
+        if had_pending_edit:
+            self._history.push()
         self._sync_widgets_from_model()
         self._highlight_selection()
         self._update_developer()
+        # P1.28 §2: user navigation mirrors the new selection to the
+        # hardware through the EXISTING bridge (slot->PC encoding lives in
+        # midi.py; offline this is silent — §9).
+        self._midi_tx_program_change(index)
 
     # ----------------------------------------------------- model -> widgets
     def _sync_widgets_from_model(self) -> None:

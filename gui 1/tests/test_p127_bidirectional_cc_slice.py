@@ -158,11 +158,27 @@ except Exception:
 gui_test = pytest.mark.skipif(not _HAS_DISPLAY, reason="no display available")
 
 
+def _root_conftest():
+    """Import the ROOT conftest (FakeMidiBackend) unambiguously.
+
+    ``import conftest`` resolves to tests/hardware/conftest.py when the full
+    suite is collected (pytest puts each test dir's conftest on sys.path), so
+    load the shared fake by path instead — deterministic under any run order.
+    """
+    import importlib.util
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1] / "conftest.py"
+    spec = importlib.util.spec_from_file_location("_jt4000m_root_conftest", root)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 @gui_test
 def test_gui_projects_rx_continuous_and_enum_updates_without_echo():
     """Representative continuous (cutoff) + enum (osc1 wave) round trip:
     CC -> EditorModel -> widgets, with zero echo TX (§9 feedback guard)."""
-    from conftest import FakeMidiBackend
+    FakeMidiBackend = _root_conftest().FakeMidiBackend
     from jt4000m.gui import Editor
     from jt4000m.transport import MidiTransport
 
@@ -200,7 +216,7 @@ def test_gui_projects_rx_continuous_and_enum_updates_without_echo():
 @gui_test
 def test_gui_user_edit_sends_cc_through_bridge_no_cc_in_gui():
     """GUI TX uses semantic keys only; the CC number comes from the Registry."""
-    from conftest import FakeMidiBackend
+    FakeMidiBackend = _root_conftest().FakeMidiBackend
     from jt4000m.gui import Editor
     from jt4000m.transport import MidiTransport
 
