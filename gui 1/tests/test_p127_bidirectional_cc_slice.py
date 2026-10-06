@@ -157,6 +157,12 @@ except Exception:
 
 gui_test = pytest.mark.skipif(not _HAS_DISPLAY, reason="no display available")
 
+# Opt into the root-conftest pump neutralizer (see conftest._deterministic_
+# midi_pump): Editor.start_midi_polling is a no-op for this whole module, so
+# rx_queue draining is driven ONLY through the deterministic _poll_midi_once()
+# hook — never by a leftover after() timer from an earlier connected app.
+midi_pump_control = True
+
 
 def _root_conftest():
     """Import the ROOT conftest (FakeMidiBackend) unambiguously.
