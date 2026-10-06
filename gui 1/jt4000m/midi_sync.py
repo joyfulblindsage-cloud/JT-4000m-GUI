@@ -62,6 +62,37 @@ class MidiSyncBridge:
         return self.transport.send_cc(self.output, message.channel,
                                       message.controller, message.value)
 
+    def apply_update(self, editor, update: MidiParameterUpdate,
+                     *, slot: int | None = None) -> bool:
+        """P1.27: apply one decoded CC update to the EXISTING EditorModel.
+
+        The EditorModel stays the single source of truth — this method only
+        routes an already-decoded, channel-matching update through the same
+        validated per-slot write path the GUI uses (``set_slot_parameter``).
+
+        Guarantees:
+        * No-op contract (P1.27 §8): if the slot already holds the incoming
+          value, ``set_slot_parameter`` mutates nothing and this returns
+          False — no history entry, no dirty flip, and callers must not send
+          anything back (§9 feedback-loop protection relies on this signal).
+        * Safe enum rejection (P1.27 §11): a raw MIDI value that is not a
+          confirmed Registry enum option raises inside the validated write;
+          we swallow it and return False — the bridge NEVER guesses a value.
+        * Selection untouched, no auto-save: like every other bridge method
+          this performs no bank I/O and never changes the selected slot.
+
+        Returns True iff a real state mutation happened.
+        """
+        target = editor.selected if slot is None else slot
+        before = editor.get_patch(target).get_raw(update.key)
+        try:
+            editor.set_slot_parameter(target, update.key, update.value)
+        except Exception:
+            # UnknownParameterError / ParameterValueError (incl. unconfirmed
+            # enum options): safe no-op, never invent a parameter value.
+            return False
+        return editor.get_patch(target).get_raw(update.key) != before
+
     def decode_incoming(self, data: bytes) -> MidiParameterUpdate | None:
         """Return a model-safe update for one matching three-byte CC packet.
 
