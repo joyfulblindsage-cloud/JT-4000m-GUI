@@ -104,6 +104,17 @@ class Editor(tk.Tk):
         self.nav_name_var = tk.StringVar(value="—")
         self.midi_status_var = tk.StringVar(value="MIDI: offline")
 
+        # P1.27 — bidirectional CC slice state.  All MIDI imports are LAZY
+        # (inside connect_midi / _poll_midi_once) so importing this module
+        # never pulls in the MIDI stack (test_p110_gui contract).  The GUI
+        # works exclusively with semantic parameter keys; every CC number
+        # lives in the Registry layer (model.BY_KEY / midi_sync bridge).
+        self._midi_bridge = None            # MidiSyncBridge | None
+        self._midi_input_port = None        # open transport input handle
+        self._rx_applying = False           # §9 feedback-loop guard
+        self.midi_events: list[dict] = []   # §15 TX/RX diagnostic log
+        self._midi_poll_after_id = None     # Tk after() id of the RX pump
+
         self._style()
         self._build()
 
@@ -656,8 +667,133 @@ class Editor(tk.Tk):
         self._after_mutation()
         self.status_var.set(f"P{self.selected_index:02d}  {_synth_label(spec)} reset to "
                             f"default {display_value(key, spec.default)}")
+        # P1.27 TX path: a real (non-no-op) edit mirrors into the hardware.
+        self._midi_tx(key, spec.default)
 
-    # ------------------------------------------------------------- raw table
+    # ==================== P1.27 — bidirectional MIDI CC slice ==============
+    # Architecture rule: the GUI only ever speaks semantic parameter keys.
+    # Key -> CC translation lives exclusively in the Registry/MIDI layer
+    # (model.BY_KEY + midi.py + MidiSyncBridge); no CC number appears here.
+    def connect_midi(self, transport, *, channel: int = 1,
+                     input_port=None, output_port=None) -> bool:
+        """Attach the EXISTING MIDI stack to this session (P1.27).
+
+        Uses the existing MidiSyncBridge / MidiTransport abstractions — no
+        second bridge, no direct mido import, no new status system.  When a
+        port name is not supplied, the JT-4000M is auto-discovered through
+        ``transport.find``.  Any failure leaves the app fully usable with
+        the honest header status "MIDI: offline" (§13): missing hardware is
+        never an application error.
+        """
+        from .midi_sync import MidiSyncBridge      # lazy: module stays MIDI-free
+
+        if output_port is None:
+            matches = transport.find("JT-4000M", "output")
+            output_port = matches[0] if matches else None
+        if input_port is None:
+            matches = transport.find("JT-4000M", "input")
+            input_port = matches[0] if matches else None
+        self._midi_bridge = MidiSyncBridge(transport, channel=channel,
+                                           output=output_port)
+        if input_port is not None:
+            try:
+                self._midi_input_port = transport.open_input(input_port)
+            except Exception as exc:               # RX unavailable, TX may work
+                self._midi_input_port = None
+                self.midi_events.append({"direction": "status",
+                                         "message": f"input open failed: {exc}"})
+        connected = self._midi_bridge.output is not None or \
+            self._midi_input_port is not None
+        if connected:
+            parts = []
+            if self._midi_bridge.output is not None:
+                parts.append("TX")
+            if self._midi_input_port is not None:
+                parts.append("RX")
+            self.midi_status_var.set(
+                f"MIDI: online ({'+'.join(parts)}, ch{channel})")
+            self.start_midi_polling()
+        else:
+            self.midi_status_var.set("MIDI: offline")
+        return connected
+
+    def _midi_tx(self, key: str, raw: int) -> None:
+        """EditorModel -> bridge -> CC -> hardware (GUI never knows CC numbers).
+
+        Silent by design when disconnected; guarded against feedback loops
+        (§9): a value that arrived FROM the hardware is never echoed back.
+        """
+        bridge = self._midi_bridge
+        if bridge is None or self._rx_applying:
+            return
+        spec = BY_KEY.get(key)
+        cc = spec.cc if spec is not None else None
+        try:
+            report = bridge.send_parameter(key, raw)
+        except RuntimeError as exc:       # no output selected / backend down
+            self.midi_events.append({"direction": "tx-error", "key": key,
+                                     "value": raw, "cc": cc,
+                                     "message": str(exc)})
+            return
+        if report is not None:            # SysEx-only keys send nothing
+            self.midi_events.append({"direction": "tx", "key": key,
+                                     "channel": bridge.channel,
+                                     "cc": cc, "value": raw})
+
+    def start_midi_polling(self, interval_ms: int = 30) -> None:
+        """Schedule the non-blocking RX pump on the existing Tk event loop."""
+        if self._midi_poll_after_id is not None:
+            return
+        def _tick():
+            self._midi_poll_once()
+            self._midi_poll_after_id = self.after(interval_ms, _tick)
+        self._midi_poll_after_id = self.after(interval_ms, _tick)
+
+    def _midi_rx_packet(self, data: bytes) -> None:
+        """One incoming packet: decode -> EditorModel -> GUI projection.
+
+        §6/§8/§9: the update mutates ONLY the EditorModel; the GUI re-reads
+        it through the standard projection path; a no-op (equal value or
+        unconfirmed enum) changes nothing at all and never echoes a CC back.
+        """
+        bridge = self._midi_bridge
+        if bridge is None:
+            return
+        update = bridge.decode_incoming(data)
+        if update is None:
+            return                        # other channels / unknown CCs ignored
+        spec = BY_KEY[update.key]
+        self._rx_applying = True          # feedback-loop guard for this mutation
+        try:
+            mutated = bridge.apply_update(self.editor, update)
+        finally:
+            self._rx_applying = False
+        self.midi_events.append({"direction": "rx", "key": update.key,
+                                 "channel": update.channel, "cc": spec.cc,
+                                 "value": update.value, "mutated": mutated})
+        if mutated:
+            self._after_mutation()        # model -> widgets, single source of truth
+
+    def _poll_midi_once(self, max_packets: int = 64) -> None:
+        """Drain pending MIDI input without blocking the UI (test hook: call
+        directly instead of relying on the Tk timer).
+
+        `max_packets` bounds one pump pass so a flooding device can never
+        starve the event loop (P1.27 §18 'no MIDI flood' safety).
+        """
+        bridge = self._midi_bridge
+        if bridge is None or self._midi_input_port is None:
+            return
+        try:
+            for index, (_ts, data) in enumerate(bridge.transport.receive(timeout=0.005)):
+                self._midi_rx_packet(data)
+                if index + 1 >= max_packets:
+                    break
+        except Exception as exc:
+            self.midi_events.append({"direction": "rx-error",
+                                     "message": str(exc)})
+
+    # ------------------------------------------------------------------ raw table
     def _build_raw_tab(self) -> None:
         cols = ("offset", "hex", "dec", "field")
         self.raw_tree = ttk.Treeview(self.dev_tab, columns=cols, show="headings", height=24)
@@ -1059,6 +1195,9 @@ class Editor(tk.Tk):
         # P1.26: the SYNTH status line is musical — no raw/offset details.
         self.status_var.set(f"P{self.selected_index:02d}  "
                             f"{_synth_label(spec)} = {display_value(key, raw)}")
+        # P1.27 TX path: the mutation already lives in the EditorModel;
+        # mirror exactly that value through the existing MIDI bridge.
+        self._midi_tx(key, raw)
 
     def _value_preview(self, key: str) -> None:
         if self._syncing:
@@ -1318,6 +1457,22 @@ class Editor(tk.Tk):
         for tile in (getattr(self, "lfo1_tile", None), getattr(self, "lfo2_tile", None)):
             if tile is not None:
                 tile.stop()
+        # P1.27: cancel the MIDI RX pump and close any open transport so a
+        # destroyed app never leaves dangling timers or MIDI ports behind.
+        if self._midi_poll_after_id is not None:
+            try:
+                self.after_cancel(self._midi_poll_after_id)
+            except Exception:
+                pass
+            self._midi_poll_after_id = None
+        bridge = self._midi_bridge
+        if bridge is not None:
+            try:
+                bridge.transport.close()
+            except Exception:
+                pass
+            self._midi_bridge = None
+            self._midi_input_port = None
         super().destroy()
 
     def quit_or_ask(self) -> None:
@@ -1332,5 +1487,14 @@ def main(argv: list[str] | None = None) -> None:
     args = list(argv or [])
     if args:  # optional: open a bank straight from the command line
         app.load_path(args[0])
+    # P1.27: opt-in MIDI attachment through the EXISTING transport layer.
+    # Any failure (no backend, no JT-4000M cable) is non-fatal: the header
+    # keeps showing "MIDI: offline" and the editor stays fully usable (§13).
+    try:
+        from .transport import MidiTransport
+        app.connect_midi(MidiTransport())
+    except Exception as exc:
+        app.midi_events.append({"direction": "status",
+                                "message": f"MIDI auto-connect skipped: {exc}"})
     app._start_animation()
     app.mainloop()
