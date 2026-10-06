@@ -50,6 +50,12 @@ except Exception:
 
 gui_test = pytest.mark.skipif(not _HAS_DISPLAY, reason="no display available")
 
+# Opt into the root-conftest pump neutralizer (see conftest._deterministic_
+# midi_pump) so rx_queue draining is always driven deterministically via
+# _poll_midi_once(), never by a leftover after() callback from an earlier
+# test's app.
+midi_pump_control = True
+
 
 def _make_app(rx=None, connect=True):
     """Editor with a loaded bank; optionally MIDI-connected over a fake backend.
