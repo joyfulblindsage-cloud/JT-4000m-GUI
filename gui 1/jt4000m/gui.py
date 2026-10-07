@@ -473,15 +473,23 @@ class Editor(tk.Tk):
                                   relief="flat", highlightthickness=0, activestyle="none")
         self.listbox.pack(fill="both", expand=True)
         self.listbox.bind("<<ListboxSelect>>", self._on_select)
-        self.listbox.bind("<Double-Button-1>", lambda _e: self.duplicate_program())
+        # P1.29 §12: double click now SELECTS the clicked row through the
+        # existing selection path (duplicate keeps its explicit button and
+        # Ctrl+D binding only — no hidden destructive gesture).
+        self.listbox.bind("<Double-Button-1>", self._on_double_click_select)
         # P1.10 UX polish: keyboard navigation of the patch list.  Arrow keys
         # move the model selection (through EditorModel.select_patch — never a
-        # direct bank touch); Return focuses the name entry; Ctrl+D duplicates.
+        # direct bank touch); Return re-asserts the cursor-row selection
+        # (P1.29 §12) and focuses the rename field; Ctrl+C/V/D route through
+        # the same Copy/Paste/Duplicate commands as the buttons below.
         for _key in ("<Up>", "<Down>", "<Prior>", "<Next>", "<Home>", "<End>"):
             self.listbox.bind(_key, self._on_key_nav)
-        self.listbox.bind("<Return>", lambda _e: self.name_entry.focus_set())
+        self.listbox.bind("<Return>", self._on_list_return)
+        self.listbox.bind("<Control-c>", lambda _e: self.copy_program())
+        self.listbox.bind("<Control-v>", lambda _e: self.paste_program())
         self.listbox.bind("<Control-d>", lambda _e: self.duplicate_program())
-        ttk.Label(left, text="↑↓ navigate · Enter rename · Ctrl+D / dbl-click duplicate.",
+        ttk.Label(left, text="↑↓ navigate · Enter select/rename · Ctrl+C/Ctrl+V · "
+                             "Ctrl+D duplicate.",
                   style="Muted.TLabel").pack(anchor="w", pady=(4, 0))
 
         # ---- preset info + rename bar (unchanged API) --------------------
@@ -496,8 +504,32 @@ class Editor(tk.Tk):
         self.slot_label = tk.Label(bar, textvariable=self.slot_var, bg="#292a2d", fg="#9aa0a6",
                                    font=("TkDefaultFont", 11, "bold"))
         self.slot_label.pack(side="right", padx=8)
+
+        # ---- P1.29: bank operations toolbar ------------------------------
+        # Every button routes through an EXISTING public GUI/model method
+        # (copy/paste/duplicate/reset/undo/redo/save/export) — no new state,
+        # no second clipboard, no MIDI/SysEx TX here (§16/§17: hardware
+        # transfer buttons stay out until protocol behavior is evidenced).
+        ops = ttk.Frame(center, style="Panel.TFrame")
+        ops.pack(fill="x", pady=(2, 6))
+        self.paste_btn = ttk.Button(ops, text="Paste", command=self.paste_program, state="disabled")
+        self.paste_btn.pack(side="left", padx=(0, 4))
+        for text, cmd in (("Copy", self.copy_program),
+                          ("Duplicate", self.duplicate_program),
+                          ("Rename", self._focus_rename),
+                          ("Reset Program", self.reset_program)):
+            ttk.Button(ops, text=text, command=cmd).pack(side="left", padx=4)
+        file_ops = ttk.Frame(center, style="Panel.TFrame")
+        file_ops.pack(fill="x", pady=(0, 6))
+        for text, cmd in (("Undo", self.undo), ("Redo", self.redo),
+                          ("Save Bank", self.save_bank),
+                          ("Export Single .syx", self.export_single)):
+            ttk.Button(file_ops, text=text, command=cmd).pack(side="left", padx=(0, 4))
+        self._presets_buttons_row = ops
         ttk.Label(center, text="Edit sounds in the SYNTH tab.\n"
-                               "Navigator ◀ ▶ works from every tab.",
+                               "Navigator ◀ ▶ works from every tab.\n"
+                               "Selection is not an edit: clicking a preset never\n"
+                               "creates history or marks the bank modified.",
                   style="Muted.TLabel", justify="left").pack(anchor="w", pady=8)
 
     # --------------------------------------------------- P1.26: RESEARCH tab
@@ -1089,6 +1121,10 @@ class Editor(tk.Tk):
         """Keep the listbox selection in sync with self.selected_index."""
         if self.bank is None:
             return
+        # P1.29: clear first — a plain selection_set() ADDs to the Listbox
+        # selection, so navigating away from a clicked row used to leave two
+        # rows highlighted (stale visual state desynced from the model).
+        self.listbox.selection_clear(0, "end")
         for pos, p in enumerate(self._visible_programs()):
             if p.index == self.selected_index:
                 self.listbox.selection_set(pos)
@@ -1106,6 +1142,38 @@ class Editor(tk.Tk):
         visible = self._visible_programs()
         if sel[0] < len(visible):
             self.select_program(visible[sel[0]].index)
+
+    # ------------------------------------------------ P1.29: list handlers
+    def _on_double_click_select(self, event) -> None:
+        """Double click SELECTS the clicked row (P1.29 §12).
+
+        Previously double-click duplicated the program — a destructive
+        surprise gesture.  Selection now rides the existing path:
+        row → select_program() → EditorModel → SYNTH/navigator/PC TX.
+        """
+        index = self.listbox.nearest(event.y)
+        if index < 0 or index >= self.listbox.size():
+            return
+        self.listbox.selection_clear(0, "end")
+        self.listbox.selection_set(index)
+        self.listbox.activate(index)
+        self._on_select()
+
+    def _on_list_return(self, _event=None) -> None:
+        """Enter in the bank list: re-assert the cursor-row selection
+        (no-op-safe through select_program) and focus the rename field."""
+        self._sync_selection_from_cursor()
+        self._focus_rename()
+
+    def _focus_rename(self) -> None:
+        """Rename entry point for the PRESETS toolbar (§10): enable and
+        focus the EXISTING name field; the actual rename still happens via
+        apply_name() → editor.rename_patch() — no raw byte access here."""
+        if self.bank is None or self.selected_index is None:
+            return
+        self.name_entry.configure(state="normal")
+        self.name_entry.focus_set()
+        self.name_entry.select_range(0, "end")
 
     def _on_key_nav(self, event) -> str | None:
         """Arrow/Page/Home/End navigation in the patch list.
@@ -1463,6 +1531,9 @@ class Editor(tk.Tk):
             return
         # Copy is a pure READ through the model API (P1.10 §6).
         self._clipboard = self.editor.get_patch(self.selected_index).program
+        # P1.29: Paste is only meaningful once a clipboard exists — reflect
+        # that in the PRESETS toolbar (projection of state, not new state).
+        self.paste_btn.configure(state="normal")
         self.status_var.set(f"Copied P{self.selected_index:02d} ({self._clipboard.name!r}) to clipboard.")
 
     def paste_program(self) -> None:
