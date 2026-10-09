@@ -1963,28 +1963,41 @@ class Editor(tk.Tk):
         # path would otherwise destroy it).  The visible state (including a
         # pending working copy of the SOURCE) is what the comparison uses,
         # mirroring the model's own contract.
+        # P1.29c: duplicate must operate on the VISIBLE state (working copy
+        # included), exactly like copy/paste in this GUI.  The previous
+        # implementation called editor.duplicate_patch(), whose fold-then-copy
+        # path preserves only source *data* bytes and whose else-branch
+        # silently DISCARDS a pending working copy whenever the uncommitted
+        # edit touches only the name field (name lives outside program data).
+        # That destroyed the user's rename while history still showed the old
+        # snapshot — an inconsistent, unrecoverable state.  Composing the
+        # existing primitives keeps EditorModel as the single source of truth
+        # without changing model semantics elsewhere.
         src_visible = self.editor.current_patch()
         if bytes(src_visible.data) == bytes(self.bank.get(target).data):
-            # P1.29c refinement: a pending working copy of the SOURCE is
-            # VISIBLE state — duplicating it onto a slot that only matches
-            # the COMMITTED source bytes is still a real edit for the user
-            # (the model's fold-then-copy path preserves it), so never skip
-            # while an uncommitted source edit exists.
-            if getattr(self.editor, "_working", None) is None:
-                self._sync_widgets_from_model()
-                self.status_var.set(
-                    f"P{target:02d} already holds these bytes — duplicate skipped.")
-                return
+            # No-op guard (audit invariant C): the target already holds the
+            # visible source bytes — nothing changes, no history entry, no
+            # dirty flip, and NO silent commit of a pending working copy on
+            # another slot.
+            self._sync_widgets_from_model()
+            self.status_var.set(
+                f"P{target:02d} already holds these bytes — duplicate skipped.")
+            return
         self._history.push()
         try:
             if not self.editor.loaded:
                 raise RuntimeError("No bank loaded.")
-            # P1.15 corrective fix: duplicate_patch now folds a pending
-            # working copy of the SOURCE slot itself (single mutation), so
-            # the pre-fold here is unnecessary and — worse — destructive:
-            # duplicating onto the currently selected edited slot must be a
-            # visible-state no-op, not a silent commit.
-            self.editor.duplicate_patch(self.selected_index, target)
+            # Fold any pending working copy first (visible state wins;
+            # commit() is a no-op when nothing is pending).
+            self.editor.commit()
+            # Duplicate full visible content: data AND name.  replace_patch
+            # owns the byte-for-byte slot write; rename_patch then applies
+            # the source's VISIBLE name (replace_patch alone keeps stale
+            # target name bytes, which would silently drop a pending rename).
+            copied = self.editor.get_patch(self.selected_index)
+            self.editor.replace_patch(target, copied)
+            if self.editor.get_patch_name(target) != src_visible.name:
+                self.editor.rename_patch(target, src_visible.name)
         except Exception as exc:
             self._history.undo()
             messagebox.showerror("Duplicate failed", str(exc))
