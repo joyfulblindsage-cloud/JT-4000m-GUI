@@ -115,7 +115,7 @@ def list_outputs() -> list[MidiPort]:
         check(winmm.midiOutGetDevCapsW(
             index, ctypes.byref(caps), ctypes.sizeof(caps)
         ), "midiOutGetDevCapsW")
-        result.append(MidiPort(index, caps.szPname.rstrip("\\0"), "output"))
+        result.append(MidiPort(index, caps.szPname.rstrip("\0"), "output"))
     return result
 
 
@@ -126,7 +126,7 @@ def list_inputs() -> list[MidiPort]:
         check(winmm.midiInGetDevCapsW(
             index, ctypes.byref(caps), ctypes.sizeof(caps)
         ), "midiInGetDevCapsW")
-        result.append(MidiPort(index, caps.szPname.rstrip("\\0"), "input"))
+        result.append(MidiPort(index, caps.szPname.rstrip("\0"), "input"))
     return result
 
 
