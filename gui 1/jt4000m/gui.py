@@ -1923,6 +1923,23 @@ class Editor(tk.Tk):
             return
         if self.bank is None or self.selected_index is None:
             return
+        # P1.29c no-op guard (audit invariant C/F): pasting bytes that are
+        # already identical to the target slot changes nothing — it must not
+        # create a history entry, flip dirty, or silently commit a pending
+        # working copy of another slot.  The model's replace_patch() carries
+        # the same contract; checking BEFORE push() keeps the GUI push policy
+        # ("a snapshot only precedes a REAL mutation") intact.  A pending
+        # working copy on the TARGET slot makes the visible state differ
+        # from the committed bytes, so the paste IS a real edit there.
+        pending_on_target = (getattr(self.editor, "_working", None) is not None
+                             and self.editor._working.index == self.selected_index)
+        if (not pending_on_target
+                and bytes(self._clipboard.data)
+                == bytes(self.bank.get(self.selected_index).data)):
+            self._sync_widgets_from_model()
+            self.status_var.set(
+                f"P{self.selected_index:02d} already holds these bytes — paste skipped.")
+            return
         self._history.push()
         try:
             self.editor.commit()                # fold pending working copy
@@ -1939,6 +1956,25 @@ class Editor(tk.Tk):
         if self.bank is None or self.selected_index is None:
             return
         target = self.selected_index % 32 + 1
+        # P1.29c no-op guard (audit invariant C): duplicating onto a slot
+        # that already holds byte-identical data changes nothing — no
+        # history entry, no dirty flip, and crucially NO silent commit of a
+        # pending working copy on another slot (duplicate_patch()'s fold
+        # path would otherwise destroy it).  The visible state (including a
+        # pending working copy of the SOURCE) is what the comparison uses,
+        # mirroring the model's own contract.
+        src_visible = self.editor.current_patch()
+        if bytes(src_visible.data) == bytes(self.bank.get(target).data):
+            # P1.29c refinement: a pending working copy of the SOURCE is
+            # VISIBLE state — duplicating it onto a slot that only matches
+            # the COMMITTED source bytes is still a real edit for the user
+            # (the model's fold-then-copy path preserves it), so never skip
+            # while an uncommitted source edit exists.
+            if getattr(self.editor, "_working", None) is None:
+                self._sync_widgets_from_model()
+                self.status_var.set(
+                    f"P{target:02d} already holds these bytes — duplicate skipped.")
+                return
         self._history.push()
         try:
             if not self.editor.loaded:
@@ -1964,6 +2000,20 @@ class Editor(tk.Tk):
             original = Bank.load(str(self.path)).get(self.selected_index)
         except Exception as exc:
             messagebox.showerror("Reset", str(exc))
+            return
+        # P1.29c no-op guard (audit invariant E): resetting a slot that
+        # already equals its on-disk version changes nothing — no history
+        # entry, no dirty flip, and NO silent commit of a pending working
+        # copy on another slot.  A pending working copy ON the target slot
+        # means the visible state differs from disk, so the reset IS a real
+        # edit there.
+        pending_on_target = (getattr(self.editor, "_working", None) is not None
+                             and self.editor._working.index == self.selected_index)
+        if (not pending_on_target
+                and bytes(original.data) == bytes(self.bank.get(self.selected_index).data)):
+            self._sync_widgets_from_model()
+            self.status_var.set(
+                f"P{self.selected_index:02d} already matches {self.path.name} — reset skipped.")
             return
         self._history.push()
         if self.editor.loaded:
