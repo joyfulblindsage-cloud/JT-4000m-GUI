@@ -1050,6 +1050,15 @@ class Editor(tk.Tk):
         self._midi_out_names = [p.name for p in outputs]
         self.midi_in_combo.configure(values=self._midi_in_names)
         self.midi_out_combo.configure(values=self._midi_out_names)
+        if not t.available:
+            # Empty port lists are ambiguous unless the missing backend is
+            # explained. Do not leave a stale selection or a quiet Offline label.
+            self.midi_in_combo.set("")
+            self.midi_out_combo.set("")
+            self._midi_last_error = t.note or "No MIDI backend is available."
+            self._set_midi_status("error")
+            self.status_var.set(f"MIDI unavailable: {self._midi_last_error}")
+            return
         # Preserve current selections where possible.
         cur_in = self.midi_in_combo.get()
         cur_out = self.midi_out_combo.get()
