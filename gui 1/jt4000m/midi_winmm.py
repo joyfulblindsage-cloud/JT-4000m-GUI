@@ -166,14 +166,16 @@ def send_sysex(index: int, data: bytes) -> None:
         if not (header.dwFlags & MHDR_DONE):
             raise TimeoutError("Timed out waiting for WinMM SysEx transmission")
     finally:
-        if prepared:
-            # A completed header can be unprepared directly. On timeout,
-            # midiOutUnprepareHeader may report STILLPLAYING; surface that
-            # honestly rather than claiming a successful send.
-            check(winmm.midiOutUnprepareHeader(
-                handle, ctypes.byref(header), ctypes.sizeof(header)
-            ), "midiOutUnprepareHeader")
-        winmm.midiOutClose(handle)
+        try:
+            if prepared:
+                # A completed header can be unprepared directly. On timeout,
+                # midiOutUnprepareHeader may report STILLPLAYING; surface that
+                # honestly rather than claiming a successful send.
+                check(winmm.midiOutUnprepareHeader(
+                    handle, ctypes.byref(header), ctypes.sizeof(header)
+                ), "midiOutUnprepareHeader")
+        finally:
+            winmm.midiOutClose(handle)
 
 
 def _short_message_from_packed(packed: int) -> bytes:
