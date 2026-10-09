@@ -49,7 +49,7 @@ py --version
 py -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -U pip
-python -m pip install -e .
+python -m pip install -e ".[midi]"
 ```
 
 If PowerShell blocks activation, you can skip activation and use the venv interpreter directly:
@@ -153,6 +153,14 @@ python -m jt4000m.gui
 ```
 
 The GUI can open a bulk `.syx`, select any of 32 programs, edit mapped
-parameters and names, and save a new bulk dump. MIDI hardware transport is
-not connected yet; the MIDI layer currently produces validated 3-byte CC
-messages.
+parameters and names, and save a new bulk dump. MIDI hardware control is
+optional and is activated explicitly from the GUI. On Windows the app prefers
+the native WinMM backend and falls back to `python-rtmidi` if WinMM cannot be
+loaded; install the optional dependency with `python -m pip install -e ".[midi]"`.
+Other platforms use `python-rtmidi` when installed.
+
+CC and Program Change transmission, input polling, and MIDI diagnostics are
+implemented, but successful API transmission does not prove that the synth
+applied a parameter. Verify behavior with the physical JT-4000M before relying
+on hardware writes or preset-transfer workflows. No preset-bank transfer is
+performed automatically.
