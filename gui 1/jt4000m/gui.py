@@ -1914,7 +1914,9 @@ class Editor(tk.Tk):
         if self.bank is None or self.selected_index is None:
             return
         # Copy is a pure READ through the model API (P1.10 §6).
-        self._clipboard = self.editor.get_patch(self.selected_index).program
+        # Copy the visible patch, including any active working copy, rather than
+        # a stale committed-only projection.
+        self._clipboard = self.editor.current_patch().program
         # P1.29: Paste is only meaningful once a clipboard exists — reflect
         # that in the PRESETS toolbar (projection of state, not new state).
         self.paste_btn.configure(state="normal")
