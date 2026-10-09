@@ -115,6 +115,23 @@ class Editor(tk.Tk):
         self.midi_events: list[dict] = []   # §15 TX/RX diagnostic log
         self._midi_poll_after_id = None     # Tk after() id of the RX pump
 
+        # P1.29a — MIDI Connection & Device Discovery panel state.  This is a
+        # thin lifecycle layer ONLY (list/open/close/connect/disconnect) over
+        # the EXISTING MidiTransport / MidiSyncBridge / connect_midi machinery;
+        # it adds no second MIDI engine, no new polling loop and no status
+        # system (the header midi_status_var stays the single connection
+        # indicator).  Ports are never opened during discovery (§3).
+        self._midi_transport = None         # lazy MidiTransport (on demand)
+        self._midi_connected = False        # real backend connection state
+        self._midi_last_error = ""          # honest last failure reason
+        self._midi_in_names: list[str] = []
+        self._midi_out_names: list[str] = []
+        self._midi_in_ports: dict[str, object] = {}
+        self._midi_out_ports: dict[str, object] = {}
+        self._midi_channel = 1              # existing configured channel only
+        self.midibtn = None                 # Connect/Disconnect toggle button
+        self.status_lbl = None              # colored Status: label
+
         self._style()
         self._build()
 
@@ -246,6 +263,12 @@ class Editor(tk.Tk):
                  font=("TkDefaultFont", 12, "bold"), width=20, anchor="w").pack(side="left", padx=6)
         ttk.Button(nav, text="▶", width=3,
                    command=lambda: self._nav_step(1)).pack(side="left", padx=4, pady=6)
+
+        # P1.29a — compact MIDI Connection & Device Discovery panel, packed
+        # into the SAME permanent bottom area as the navigator, so it is
+        # reachable from every workspace (SYNTH / PRESETS / RESEARCH) without
+        # a separate dialog and without eating vertical workspace height.
+        self._build_midi_panel()
 
         # ============ P1.26 — workspace migration =======================
         # SYNTH    : music controls only (OSC / MIX-RING / FILTER / ENV / LFO
@@ -743,7 +766,15 @@ class Editor(tk.Tk):
                                            output=output_port)
         if input_port is not None:
             try:
-                self._midi_input_port = transport.open_input(input_port)
+                # P1.29a: the panel already opened the selected IN before
+                # calling connect_midi; re-open only when it is still closed
+                # (keeps the legacy auto-discovery path working).
+                handle = getattr(transport, "_in_port", None)
+                if handle is not None and getattr(transport, "_in_index", None) \
+                        == input_port.index:
+                    self._midi_input_port = handle
+                else:
+                    self._midi_input_port = transport.open_input(input_port)
             except Exception as exc:               # RX unavailable, TX may work
                 self._midi_input_port = None
                 self.midi_events.append({"direction": "status",
@@ -919,6 +950,242 @@ class Editor(tk.Tk):
             return None                           # native control behavior wins
         self._nav_step(-1 if event.keysym == "Left" else 1)
         return "break"
+
+    # ================= P1.29a — MIDI Connection & Device Discovery ========
+    # Thin lifecycle layer over the EXISTING stack only:
+    #   discovery  -> MidiTransport.list_inputs()/list_outputs() (never opens)
+    #   connect    -> transport.open_input/open_output + existing connect_midi
+    #                 (same MidiSyncBridge, same RX pump, same TX paths)
+    #   disconnect -> transport.close() + timer cancel + state reset
+    # No second MIDI engine, no per-handler port opening, no new polling loop,
+    # no SysEx Identity probing (device support unconfirmed).  All Tk widget
+    # mutation happens exclusively in the GUI main thread; there is no extra
+    # background thread (the backend calls here are non-blocking enumerations
+    # and open/close operations).
+    _JT_HINTS = ("jt-4000m", "jt4000m", "behringer")   # suggestion only, never a claim
+
+    def _get_transport(self):
+        """Lazily create the single shared MidiTransport (construction is
+        offline-safe and never touches devices until list/open is called)."""
+        if self._midi_transport is None:
+            from .transport import MidiTransport      # lazy: module stays MIDI-free
+            self._midi_transport = MidiTransport()
+        return self._midi_transport
+
+    def _build_midi_panel(self) -> None:
+        panel = tk.Frame(self, bg="#151619")
+        panel.pack(fill="x", side="bottom", before=self._nav_frame_ref())
+        ttk.Label(panel, text="MIDI", style="Muted.TLabel").pack(side="left", padx=(10, 4))
+        ttk.Button(panel, text="Refresh", command=self.refresh_midi_ports)\
+            .pack(side="left", padx=4, pady=4)
+        ttk.Label(panel, text="In:", style="Muted.TLabel").pack(side="left", padx=(8, 2))
+        self.midi_in_combo = ttk.Combobox(panel, state="readonly", width=26, values=[])
+        self.midi_in_combo.pack(side="left")
+        ttk.Label(panel, text="Out:", style="Muted.TLabel").pack(side="left", padx=(8, 2))
+        self.midi_out_combo = ttk.Combobox(panel, state="readonly", width=26, values=[])
+        self.midi_out_combo.pack(side="left")
+        self.midibtn = ttk.Button(panel, text="Connect", command=self.toggle_midi_connection)
+        self.midibtn.pack(side="left", padx=8)
+        self.status_lbl = tk.Label(panel, text="Status: Offline", bg="#151619",
+                                   fg="#8f949b", font=("TkDefaultFont", 9, "bold"))
+        self.status_lbl.pack(side="left", padx=4)
+        self.refresh_midi_ports()   # initial enumeration (no ports opened)
+
+    def _nav_frame_ref(self):
+        """The navigator frame packs FIRST (it ends up lowest); the MIDI row
+        sits directly above it inside the same permanent bottom area."""
+        children = [c for c in self.pack_slaves() if isinstance(c, tk.Frame)]
+        return children[0] if children else None
+
+    # ------------------------------------------------------------- discovery
+    def refresh_midi_ports(self) -> None:
+        """Re-enumerate IN and OUT ports separately; NEVER opens anything.
+
+        Keeps the previous selection when the port still exists (§3.3/3.4);
+        honestly reports a vanished selection instead of pretending (§3.5).
+        """
+        try:
+            t = self._get_transport()
+            inputs = t.list_inputs()
+            outputs = t.list_outputs()
+        except Exception as exc:                    # e.g. no ALSA sequencer
+            self._midi_last_error = str(exc)
+            self._set_midi_status("error")
+            self.status_var.set(f"MIDI discovery failed: {exc}")
+            return
+        self._midi_in_ports = {p.name: p for p in inputs}
+        self._midi_out_ports = {p.name: p for p in outputs}
+        self._midi_in_names = [p.name for p in inputs]
+        self._midi_out_names = [p.name for p in outputs]
+        self.midi_in_combo.configure(values=self._midi_in_names)
+        self.midi_out_combo.configure(values=self._midi_out_names)
+        # Preserve current selections where possible.
+        cur_in = self.midi_in_combo.get()
+        cur_out = self.midi_out_combo.get()
+        if cur_in in self._midi_in_ports:
+            self.midi_in_combo.set(cur_in)
+        elif cur_in:
+            self.midi_in_combo.set("")
+            self.status_var.set(f"MIDI input '{cur_in}' disappeared")
+        else:
+            self.midi_in_combo.set("")
+        if cur_out in self._midi_out_ports:
+            self.midi_out_combo.set(cur_out)
+        elif cur_out:
+            self.midi_out_combo.set("")
+            self.status_var.set(f"MIDI output '{cur_out}' disappeared")
+        else:
+            self.midi_out_combo.set("")
+        # JT-ish name hints may PROPOSE defaults (user can always override);
+        # an unnamed generic "USB MIDI Device" is never auto-assumed to be
+        # the synthesizer beyond being selectable.
+        if not self.midi_in_combo.get():
+            guess = next((n for n in self._midi_in_names
+                          if any(h in n.lower() for h in self._JT_HINTS)), "")
+            self.midi_in_combo.set(guess)
+        if not self.midi_out_combo.get():
+            guess = next((n for n in self._midi_out_names
+                          if any(h in n.lower() for h in self._JT_HINTS)), "")
+            self.midi_out_combo.set(guess)
+
+    # ---------------------------------------------------------------- status
+    def _set_midi_status(self, state: str) -> None:
+        """Project the REAL backend state into the panel label + header var.
+
+        States: offline / connecting / connected / error.  Never a cosmetic
+        text swap: 'connected' is only set after open+bridge succeeded, and
+        backend failures land in 'error' with the reason kept in
+        _midi_last_error and the midi_events log.
+        """
+        colors = {"offline": "#8f949b", "connecting": "#ffb74d",
+                  "connected": "#81c995", "error": "#f28b82"}
+        texts = {"offline": "Status: Offline", "connecting": "Status: Connecting…",
+                 "connected": "Status: Connected", "error": "Status: Error"}
+        self.status_lbl.configure(text=texts[state], fg=colors[state])
+        if state == "connected":
+            in_name = self.midi_in_combo.get() or "—"
+            out_name = self.midi_out_combo.get() or "—"
+            self.midi_status_var.set(
+                f"MIDI: online (ch{self._midi_channel}) In:{in_name} Out:{out_name}")
+        elif state == "error":
+            self.midi_status_var.set("MIDI: offline")
+        elif state == "offline":
+            self.midi_status_var.set("MIDI: offline")
+
+    # --------------------------------------------------------------- connect
+    def toggle_midi_connection(self) -> None:
+        if self._midi_connected:
+            self.disconnect_midi()
+        else:
+            self.connect_selected_midi()
+
+    def connect_selected_midi(self) -> bool:
+        """Open the selected IN/OUT through the EXISTING transport and attach
+        them via the existing connect_midi path (bridge + single RX pump).
+
+        Failure anywhere closes every resource already opened — a partially
+        open connection is never left behind (§4).  No MIDI message is sent
+        by connecting itself (§4 end)."""
+        if self._midi_connected:
+            return True                      # idempotent: no second bridge/pump
+        if self._midi_transport is None:
+            self._get_transport()
+        in_name = self.midi_in_combo.get()
+        out_name = self.midi_out_combo.get()
+        if not in_name or not out_name:
+            self._midi_last_error = "Select both a MIDI IN and a MIDI OUT port."
+            self._set_midi_status("error")
+            self.status_var.set(self._midi_last_error)
+            return False
+        # Re-validate existence at click time (ports can vanish between
+        # refresh and connect) without silently re-scanning everything.
+        try:
+            live_in = {p.name: p for p in self._midi_transport.list_inputs()}
+            live_out = {p.name: p for p in self._midi_transport.list_outputs()}
+        except Exception as exc:
+            self._midi_last_error = str(exc)
+            self._set_midi_status("error")
+            self.status_var.set(f"MIDI discovery failed: {exc}")
+            return False
+        in_port, out_port = live_in.get(in_name), live_out.get(out_name)
+        if in_port is None or out_port is None:
+            missing = in_name if in_port is None else out_name
+            self._midi_last_error = f"Port '{missing}' is no longer available."
+            self._set_midi_status("error")
+            self.status_var.set(self._midi_last_error)
+            self.refresh_midi_ports()
+            return False
+        self._set_midi_status("connecting")
+        opened_input = False
+        try:
+            self._midi_transport.open_input(in_port)
+            opened_input = True
+            self._midi_transport.open_output(out_port)
+        except Exception as exc:
+            # Roll back ANY partially opened resource (§4/§5).
+            if opened_input:
+                try:
+                    self._midi_transport.close()
+                except Exception:
+                    pass
+            self._midi_connected = False
+            self._midi_last_error = str(exc)
+            self._set_midi_status("error")
+            self.status_var.set(f"MIDI connect failed: {exc}")
+            self.midi_events.append({"direction": "status",
+                                     "message": f"connect failed: {exc}"})
+            return False
+        # Attach through the EXISTING machinery: one bridge, one pump, the
+        # unchanged CC/PC TX-RX paths (P1.27/P1.28 integration point).
+        ok = self.connect_midi(self._midi_transport, channel=self._midi_channel,
+                               input_port=in_port, output_port=out_port)
+        if not ok:
+            try:
+                self._midi_transport.close()
+            except Exception:
+                pass
+            self._midi_connected = False
+            self._set_midi_status("error")
+            self.status_var.set("MIDI connect failed: no usable endpoint")
+            return False
+        self._midi_connected = True
+        self._set_midi_status("connected")
+        self.midibtn.configure(text="Disconnect")
+        self.status_var.set(f"MIDI connected: In '{in_name}' / Out '{out_name}'")
+        return True
+
+    # ------------------------------------------------------------- disconnect
+    def disconnect_midi(self) -> bool:
+        """Stop RX for this connection, close IN+OUT, release resources.
+
+        Safe when already disconnected (double-click, lost device, backend
+        exception): every teardown step is best-effort and the UI always ends
+        in the honest Offline state."""
+        if self._midi_poll_after_id is not None:
+            try:
+                self.after_cancel(self._midi_poll_after_id)
+            except Exception:
+                pass
+            self._midi_poll_after_id = None
+        transport = self._midi_bridge.transport if self._midi_bridge is not None \
+            else self._midi_transport
+        if transport is not None:
+            try:
+                transport.close()
+            except Exception as exc:
+                self.midi_events.append({"direction": "status",
+                                         "message": f"close error: {exc}"})
+        self._midi_bridge = None
+        self._midi_input_port = None
+        self._midi_connected = False
+        self._rx_applying = False
+        # P1.29a: after a real disconnect the stale bridge must not be reused
+        # by any TX path; the header status is owned by _set_midi_status now.
+        self.midi_status_var.set("MIDI: offline")
+        self._set_midi_status("offline")
+        self.midibtn.configure(text="Connect")
+        self.status_var.set("MIDI disconnected")
+        return True
 
     # ------------------------------------------------------------------ raw table
     def _build_raw_tab(self) -> None:
@@ -1682,14 +1949,9 @@ def main(argv: list[str] | None = None) -> None:
     args = list(argv or [])
     if args:  # optional: open a bank straight from the command line
         app.load_path(args[0])
-    # P1.27: opt-in MIDI attachment through the EXISTING transport layer.
-    # Any failure (no backend, no JT-4000M cable) is non-fatal: the header
-    # keeps showing "MIDI: offline" and the editor stays fully usable (§13).
-    try:
-        from .transport import MidiTransport
-        app.connect_midi(MidiTransport())
-    except Exception as exc:
-        app.midi_events.append({"direction": "status",
-                                "message": f"MIDI auto-connect skipped: {exc}"})
+    # P1.29a: startup NEVER auto-opens MIDI ports.  Connection is an explicit
+    # user action through the MIDI Connection panel (Connect button), so no
+    # stale/assumed port can hijack the session; the app starts Offline and
+    # stays fully usable without any hardware (§6/§8 compatibility).
     app._start_animation()
     app.mainloop()
