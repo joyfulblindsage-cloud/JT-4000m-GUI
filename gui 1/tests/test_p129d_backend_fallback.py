@@ -74,5 +74,5 @@ def test_no_backend_message_reports_both_failures(monkeypatch):
 def test_winmm_short_message_decoder_handles_cc_and_program_change():
     from jt4000m.midi_winmm import _short_message_from_packed
 
-    assert _short_message_from_packed(0x00403AB0) == bytes([0xB0, 74, 64])
+    assert _short_message_from_packed(0x00404AB0) == bytes([0xB0, 74, 64])
     assert _short_message_from_packed(0x000010C0) == bytes([0xC0, 16])
