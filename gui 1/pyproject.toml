@@ -9,6 +9,9 @@ description = "Behringer JT-4000M SysEx analyzer and parameter model"
 requires-python = ">=3.10"
 dependencies = []
 
+[project.optional-dependencies]
+midi = ["python-rtmidi>=1.5"]
+
 [project.scripts]
 jt4000m = "jt4000m.cli:main"
 jt4000m-gui = "jt4000m.gui:main"
