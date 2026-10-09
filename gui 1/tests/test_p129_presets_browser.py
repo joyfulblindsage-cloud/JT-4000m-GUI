@@ -354,6 +354,81 @@ def test_cc_tx_and_rx_still_work_after_browser_changes():
 
 # ------------------------------------------------------ 11. offline navigation
 @gui_test
+def test_search_does_not_visually_select_a_different_program():
+    app, _ = _make_app(connect=False)
+    try:
+        app.select_program(17)
+        app.search_var.set("05")
+        app.refresh_list()
+
+        assert _list_rows(app) and _list_rows(app)[0].startswith("05")
+        assert app.listbox.curselection() == ()
+        assert app.editor.selected == 17
+        assert app.nav_slot_var.get() == "P17"
+        assert app.slot_var.get().startswith("P17")
+
+        app.search_var.set("")
+        app.refresh_list()
+        selection = app.listbox.curselection()
+        assert selection and _list_rows(app)[selection[0]].startswith("17")
+    finally:
+        app.destroy()
+
+
+@gui_test
+def test_identical_paste_and_duplicate_are_noops():
+    app, _ = _make_app(connect=False)  # ALL INIT SAW: all slots are identical
+    try:
+        app.select_program(5)
+        app.copy_program()
+        app.select_program(6)
+
+        depth = _undo_depth(app)
+        assert app.editor.is_dirty() is False
+        app.paste_program()
+        assert _undo_depth(app) == depth
+        assert app.editor.is_dirty() is False
+
+        app.select_program(5)
+        depth = _undo_depth(app)
+        app.duplicate_program()  # target P06 already contains the same bytes
+        assert _undo_depth(app) == depth
+        assert app.editor.is_dirty() is False
+    finally:
+        app.destroy()
+
+
+@gui_test
+def test_reset_of_unchanged_program_is_noop():
+    app, _ = _make_app(connect=False)
+    try:
+        app.select_program(12)
+        depth = _undo_depth(app)
+        assert app.editor.is_dirty() is False
+        app.reset_program()
+        assert _undo_depth(app) == depth
+        assert app.editor.is_dirty() is False
+    finally:
+        app.destroy()
+
+
+@gui_test
+def test_duplicate_preserves_source_rename():
+    app, _ = _make_app(connect=False)
+    try:
+        app.select_program(5)
+        app.name_var.set("PENDING")
+        app.apply_name()
+        assert app.editor.get_patch_name(5).strip() == "PENDING"
+
+        app.duplicate_program()
+        assert app.editor.get_patch_name(6).strip() == "PENDING"
+        assert app.editor.get_patch_name(5).strip() == "PENDING"
+    finally:
+        app.destroy()
+
+
+@gui_test
 def test_offline_presets_navigation_works_without_midi():
     app, _ = _make_app(connect=False)             # no MIDI at all
     try:

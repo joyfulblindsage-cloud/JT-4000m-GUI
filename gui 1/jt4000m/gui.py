@@ -1,7 +1,8 @@
-"""JT-4000M Editor — offline Tkinter GUI.
+"""JT-4000M Editor — Tkinter GUI for local presets and MIDI control.
 
-This module never touches MIDI/hardware. It only reads and writes local .syx
-files through jt4000m.syx / jt4000m.patch.
+Preset files are read and written through jt4000m.syx / jt4000m.patch.
+MIDI transport is optional and explicitly connected by the user; successful
+API transmission is not proof that the hardware applied a parameter.
 
 P1.26 layout (shell from P1.25a):
     SYNTH     — music workspace: OSC 1/2 blocks, MIX/RING, FILTER with the
@@ -1049,6 +1050,15 @@ class Editor(tk.Tk):
         self._midi_out_names = [p.name for p in outputs]
         self.midi_in_combo.configure(values=self._midi_in_names)
         self.midi_out_combo.configure(values=self._midi_out_names)
+        if not t.available:
+            # Empty port lists are ambiguous unless the missing backend is
+            # explained. Do not leave a stale selection or a quiet Offline label.
+            self.midi_in_combo.set("")
+            self.midi_out_combo.set("")
+            self._midi_last_error = t.note or "No MIDI backend is available."
+            self._set_midi_status("error")
+            self.status_var.set(f"MIDI unavailable: {self._midi_last_error}")
+            return
         # Preserve current selections where possible.
         cur_in = self.midi_in_combo.get()
         cur_out = self.midi_out_combo.get()
@@ -1511,8 +1521,10 @@ class Editor(tk.Tk):
                 self.listbox.selection_set(pos)
                 self.listbox.see(pos)
                 return
-        if self.listbox.size():
-            self.listbox.selection_set(0)
+        # Search is a filter, not a selection operation. If the currently
+        # selected slot is filtered out, leave the list unselected rather
+        # than visually implying that the first result is active. EditorModel,
+        # SYNTH and the global navigator continue to refer to selected_index.
 
     def _on_select(self, _event=None) -> None:
         if self._loading_bank:
@@ -1911,7 +1923,9 @@ class Editor(tk.Tk):
         if self.bank is None or self.selected_index is None:
             return
         # Copy is a pure READ through the model API (P1.10 §6).
-        self._clipboard = self.editor.get_patch(self.selected_index).program
+        # Copy the visible patch, including any active working copy, rather than
+        # a stale committed-only projection.
+        self._clipboard = self.editor.current_patch().program
         # P1.29: Paste is only meaningful once a clipboard exists — reflect
         # that in the PRESETS toolbar (projection of state, not new state).
         self.paste_btn.configure(state="normal")

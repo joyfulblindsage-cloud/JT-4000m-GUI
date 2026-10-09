@@ -3,10 +3,10 @@
 This module is a thin façade over the EXISTING project backends; it adds no
 new MIDI library and reimplements no MIDI I/O:
 
-  * Windows: ``jt4000m.midi_winmm`` (ctypes WinMM) — lazy import only, so
-    importing this module never touches winmm.dll on any platform;
-  * other platforms: optional ``python-rtmidi`` if installed, otherwise the
-    transport reports "no backend available" honestly instead of pretending.
+  * Windows: try jt4000m.midi_winmm first, then optional python-rtmidi if
+    WinMM cannot be loaded;
+  * other platforms: optional python-rtmidi if installed.
+  If neither backend is available, the transport reports that honestly.
 
 Evidence discipline (critical): every send*() method returns a TransportReport
 that describes ONLY what the MIDI API acknowledged (TX level). It never claims
@@ -56,22 +56,35 @@ class TransportReport:
         return "\n".join(lines)
 
 
-def _load_backend():
-    """Return (backend_name, backend_module_or_None, note)."""
+def _load_backend(platform: str | None = None):
+    """Return (backend_name, backend_module_or_None, note).
+
+    On Windows prefer the native backend, but fall back to python-rtmidi if
+    WinMM cannot be imported. The platform argument is injectable for tests.
+    """
+    import importlib
     import os
-    if os.name == "nt":
+
+    platform = platform or os.name
+    failures = []
+    if platform == "nt":
         try:
-            from . import midi_winmm as be
+            be = importlib.import_module(f"{__package__}.midi_winmm")
             return "winmm", be, ""
-        except Exception as e:  # pragma: no cover - Windows-only path
-            return "none", None, f"winmm unavailable: {e}"
-    try:  # optional, only if the user installed it; never required for tests
-        import rtmidi as be  # type: ignore
-        return "rtmidi", be, ""
-    except Exception as e:
+        except Exception as exc:  # pragma: no cover - Windows-only path
+            failures.append(f"winmm unavailable: {exc}")
+
+    try:  # optional, never required for offline analysis or tests
+        be = importlib.import_module("rtmidi")
+        note = "; ".join(failures)
+        if note:
+            note += "; using python-rtmidi fallback"
+        return "rtmidi", be, note
+    except Exception as exc:
+        failures.append(f"python-rtmidi unavailable: {exc}")
         return "none", None, (
-            "no MIDI backend on this platform (python-rtmidi not installed; "
-            f"import error: {e}). Offline analysis commands still work."
+            "no MIDI backend available (" + "; ".join(failures) +
+            "). Offline analysis commands still work."
         )
 
 
@@ -79,7 +92,7 @@ class MidiTransport:
     """Backend-agnostic list/open/send/receive operations.
 
     Construction is always safe (no device access). Opening ports and sending
-    are explicit user actions from the CLI only — never from unit tests.
+    are explicit user actions from the GUI or CLI — never from unit tests.
 
     For offline testing a fake backend object can be injected explicitly via
     the constructor; default construction NEVER touches real MIDI devices.
@@ -166,11 +179,11 @@ class MidiTransport:
         if not self.available:
             raise RuntimeError(self.note or "no MIDI backend available")
         if self.backend_name == "winmm":
-            self._in_port, self._in_index = "winmm-callback", port.index
-            return port
-        handle = self._be.MidiIn()
-        handle.open_port(port.index)
-        handle.set_buffer_size(65536)
+            handle = self._be.open_input(port.index)
+        else:
+            handle = self._be.MidiIn()
+            handle.open_port(port.index)
+            handle.set_buffer_size(65536)
         self._in_port, self._in_index = handle, port.index
         return handle
 
@@ -237,49 +250,37 @@ class MidiTransport:
     def receive(self, timeout: float = 10.0,
                 on_message: Callable[[float, bytes], None] | None = None
                 ) -> Iterator[tuple[float, bytes]]:
-        """Yield (timestamp_seconds, raw_message_bytes) until `timeout` elapses.
+        """Yield queued short MIDI and SysEx messages until timeout.
 
-        winmm backend yields whole SysEx buffers via receive_sysex semantics;
-        rtmidi backend polls the input queue. No messages => empty iterator
-        (absence of RX is reported by the caller as 'Waiting for MIDI...',
-        never as a Python error).
+        Both backends expose a non-blocking get_message method. WinMM's
+        native callback only queues data; this polling path performs decoding
+        and keeps GUI work on the Tk thread.
         """
         if not self.available:
             raise RuntimeError(self.note or "no MIDI backend available")
+        dev = self._in_port
+        if dev is None:
+            raise RuntimeError("No MIDI input is open.")
         deadline = time.monotonic() + timeout
-        if self.backend_name == "winmm":
-            # One buffered SysEx per call within remaining time (documented
-            # limitation of the existing winmm helper; short messages are not
-            # surfaced by that helper).
-            remaining = max(0.05, deadline - time.monotonic())
-            try:
-                data = self._be.receive_sysex(self._in_index, timeout=remaining)
+        while time.monotonic() < deadline:
+            msg = dev.get_message()
+            if msg:
+                _delta, data = msg
+                raw = bytes(data)
                 ts = time.time()
                 if on_message:
-                    on_message(ts, data)
-                yield ts, data
-            except TimeoutError:
-                return
-        else:
-            dev = self._in_port
-            if dev is None:
-                raise RuntimeError("No MIDI input is open.")
-            while time.monotonic() < deadline:
-                msg = dev.get_message()
-                if msg:
-                    delta, data = msg
-                    raw = bytes(data)
-                    ts = time.time()
-                    if on_message:
-                        on_message(ts, raw)
-                    yield ts, raw
-                else:
-                    time.sleep(0.01)
+                    on_message(ts, raw)
+                yield ts, raw
+            else:
+                time.sleep(0.01)
 
     def close(self):
         try:
-            if self._in_port is not None and self.backend_name == "rtmidi":
-                self._in_port.close_port()
+            if self._in_port is not None:
+                if self.backend_name == "winmm":
+                    self._in_port.close()
+                else:
+                    self._in_port.close_port()
         finally:
             self._in_port = None
             self._in_index = None
