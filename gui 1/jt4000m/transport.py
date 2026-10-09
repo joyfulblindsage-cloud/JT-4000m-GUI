@@ -92,7 +92,7 @@ class MidiTransport:
     """Backend-agnostic list/open/send/receive operations.
 
     Construction is always safe (no device access). Opening ports and sending
-    are explicit user actions from the CLI only — never from unit tests.
+    are explicit user actions from the GUI or CLI — never from unit tests.
 
     For offline testing a fake backend object can be injected explicitly via
     the constructor; default construction NEVER touches real MIDI devices.
