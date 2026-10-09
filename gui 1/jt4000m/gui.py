@@ -1,7 +1,8 @@
-"""JT-4000M Editor — offline Tkinter GUI.
+"""JT-4000M Editor — Tkinter GUI for local presets and MIDI control.
 
-This module never touches MIDI/hardware. It only reads and writes local .syx
-files through jt4000m.syx / jt4000m.patch.
+Preset files are read and written through jt4000m.syx / jt4000m.patch.
+MIDI transport is optional and explicitly connected by the user; successful
+API transmission is not proof that the hardware applied a parameter.
 
 P1.26 layout (shell from P1.25a):
     SYNTH     — music workspace: OSC 1/2 blocks, MIX/RING, FILTER with the
@@ -1511,8 +1512,10 @@ class Editor(tk.Tk):
                 self.listbox.selection_set(pos)
                 self.listbox.see(pos)
                 return
-        if self.listbox.size():
-            self.listbox.selection_set(0)
+        # Search is a filter, not a selection operation. If the currently
+        # selected slot is filtered out, leave the list unselected rather
+        # than visually implying that the first result is active. EditorModel,
+        # SYNTH and the global navigator continue to refer to selected_index.
 
     def _on_select(self, _event=None) -> None:
         if self._loading_bank:
