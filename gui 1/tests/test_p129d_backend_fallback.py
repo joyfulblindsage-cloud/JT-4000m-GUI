@@ -70,6 +70,27 @@ def test_no_backend_message_reports_both_failures(monkeypatch):
     assert "python-rtmidi unavailable" in note
 
 
+@pytest.mark.skipif(
+    os.name != "nt" and not os.environ.get("DISPLAY"),
+    reason="requires a graphical display",
+)
+def test_gui_shows_reason_when_no_midi_backend_is_available(monkeypatch):
+    monkeypatch.setattr(
+        transport, "_load_backend",
+        lambda: ("none", None, "simulated: install python-rtmidi"),
+    )
+    from jt4000m.gui import Editor
+
+    app = Editor()
+    try:
+        app.refresh_midi_ports()
+        assert "MIDI unavailable" in app.status_var.get()
+        assert "install python-rtmidi" in app.status_var.get()
+        assert app._midi_status == "error"
+    finally:
+        app.destroy()
+
+
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows WinMM")
 def test_winmm_short_message_decoder_handles_cc_and_program_change():
     from jt4000m.midi_winmm import _short_message_from_packed
