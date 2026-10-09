@@ -571,12 +571,15 @@ class Editor(tk.Tk):
         self.dev_tab = ttk.Frame(nb, style="Panel.TFrame")
         self.cmp_tab = ttk.Frame(nb, style="Panel.TFrame")
         self.an_tab = ttk.Frame(nb, style="Panel.TFrame")
+        self.midi_log_tab = ttk.Frame(nb, style="Panel.TFrame")
         nb.add(self.dev_tab, text="Raw Program")
         nb.add(self.cmp_tab, text="Compare")
         nb.add(self.an_tab, text="Analyze Banks")
+        nb.add(self.midi_log_tab, text="MIDI Log")
         self._build_raw_tab()
         self._build_compare_tab()
         self._build_analysis_tab()
+        self._build_midi_log_view()
 
     # ------------------------------------------------- P1.25a shell helpers
     def _switch_tab(self) -> None:
@@ -586,6 +589,10 @@ class Editor(tk.Tk):
                 frame.place(relx=0.0, rely=0.0, relwidth=1.0, relheight=1.0)
             else:
                 frame.place_forget()    # unmap; child widgets/state are kept
+        if self.current_tab.get() == "RESEARCH":
+            # P1.29b: the MIDI Log view is a projection of midi_events;
+            # refresh it when the user opens RESEARCH (view-only, no state).
+            self._update_midi_log()
 
     def _nav_step(self, delta: int) -> None:
         """Preset navigator ◀/▶ — routes through the same model selection
@@ -799,6 +806,10 @@ class Editor(tk.Tk):
 
         Silent by design when disconnected; guarded against feedback loops
         (§9): a value that arrived FROM the hardware is never echoed back.
+
+        P1.29b: TX errors are also mirrored into the status bar (the MIDI Log
+        tab shows direction/type/channel/cc/value/message), so a failing
+        backend during a physical check is visible without opening RESEARCH.
         """
         bridge = self._midi_bridge
         if bridge is None or self._rx_applying:
@@ -811,11 +822,18 @@ class Editor(tk.Tk):
             self.midi_events.append({"direction": "tx-error", "key": key,
                                      "value": raw, "cc": cc,
                                      "message": str(exc)})
+            self.status_var.set(f"MIDI TX error ({key}): {exc}")
             return
         if report is not None:            # SysEx-only keys send nothing
             self.midi_events.append({"direction": "tx", "key": key,
                                      "channel": bridge.channel,
                                      "cc": cc, "value": raw})
+            if not report.api_ok:         # backend refused the bytes
+                self.midi_events.append({"direction": "tx-error", "key": key,
+                                         "value": raw, "cc": cc,
+                                         "message": report.error})
+                self.status_var.set(
+                    f"MIDI TX failed ({key}): {report.error}")
 
     def start_midi_polling(self, interval_ms: int = 30) -> None:
         """Schedule the non-blocking RX pump on the existing Tk event loop."""
@@ -878,6 +896,11 @@ class Editor(tk.Tk):
         except Exception as exc:
             self.midi_events.append({"direction": "rx-error",
                                      "message": str(exc)})
+            # P1.29b: a failing RX pump (e.g. USB unplugged under winmm) is
+            # surfaced in the status bar instead of silently repeating; the
+            # app stays usable and no stale "Connected" claim is added here —
+            # honest teardown remains a user Disconnect action.
+            self.status_var.set(f"MIDI RX error: {exc}")
 
     # ------------------- P1.28 — Program Change integration (selection only)
     def _apply_midi_program_select(self, select) -> None:
@@ -925,10 +948,17 @@ class Editor(tk.Tk):
             self.midi_events.append({"direction": "tx-error",
                                      "type": "program_change", "slot": slot,
                                      "message": str(exc)})
+            self.status_var.set(f"MIDI TX error (PC slot {slot}): {exc}")
             return
         self.midi_events.append({"direction": "tx", "type": "program_change",
                                  "channel": bridge.channel, "slot": slot,
                                  "api_ok": bool(report.api_ok)})
+        if not report.api_ok:                     # P1.29b: visible failure
+            self.midi_events.append({"direction": "tx-error",
+                                     "type": "program_change", "slot": slot,
+                                     "message": report.error})
+            self.status_var.set(
+                f"MIDI TX failed (PC slot {slot}): {report.error}")
 
     def _on_global_arrow_nav(self, event):
         """Global Left/Right preset navigation (P1.28 §7/§8).
@@ -1152,6 +1182,19 @@ class Editor(tk.Tk):
         self._set_midi_status("connected")
         self.midibtn.configure(text="Disconnect")
         self.status_var.set(f"MIDI connected: In '{in_name}' / Out '{out_name}'")
+        # P1.29b honest-capability note: on the winmm backend the existing
+        # receive helper surfaces buffered SysEx only — short messages (CC/PC)
+        # are NOT delivered to the RX pump there.  Record this once in the
+        # EXISTING midi_events log so a physical check can distinguish
+        # "hardware sends nothing" from "backend cannot see it".
+        if getattr(self._midi_transport, "backend_name", "") == "winmm":
+            self.midi_events.append({
+                "direction": "status",
+                "message": "winmm RX limitation: CC/PC RX unavailable via this "
+                           "backend (SysEx buffers only); TX works"})
+            self.status_var.set(
+                "MIDI connected (TX only): winmm backend does not surface "
+                "CC/PC RX — use rtmidi for hardware→GUI tests")
         return True
 
     # ------------------------------------------------------------- disconnect
@@ -1186,6 +1229,77 @@ class Editor(tk.Tk):
         self.midibtn.configure(text="Connect")
         self.status_var.set("MIDI disconnected")
         return True
+
+    # ------------------------------------------------------------------ raw table
+    # ------------------------------------------------ P1.29b MIDI Log view
+    # RESEARCH-side projection of the EXISTING midi_events diagnostic stream
+    # (P1.27 §15 / P1.28 §10-11 / P1.29a).  This is a pure VIEW: it creates no
+    # second log system, appends nothing itself, and shows no technical data
+    # on SYNTH/PRESETS.  It exists so a physical JT-4000M check can localize
+    # hardware problems from the GUI alone (which ports are open, what TX/RX
+    # actually passed, why a connection failed).
+    def _build_midi_log_view(self) -> None:
+        head = ttk.Frame(self.midi_log_tab, style="Panel.TFrame")
+        head.pack(fill="x", pady=4)
+        self.midi_diag_lbl = ttk.Label(head, text="", style="Muted.TLabel")
+        self.midi_diag_lbl.pack(side="left", padx=8)
+        ttk.Button(head, text="Refresh view", command=self._update_midi_log)\
+            .pack(side="right", padx=4)
+        body = ttk.Frame(self.midi_log_tab, style="Panel.TFrame")
+        body.pack(fill="both", expand=True)
+        cols = ("time", "direction", "type", "channel", "cc", "value",
+                "slot", "program", "mutated", "api_ok", "message")
+        titles = {"time": "t", "direction": "dir", "type": "type",
+                  "channel": "ch", "cc": "cc", "value": "val", "slot": "slot",
+                  "program": "pc", "mutated": "mut", "api_ok": "api",
+                  "message": "message"}
+        widths = {"time": 60, "direction": 70, "type": 110, "channel": 40,
+                  "cc": 40, "value": 50, "slot": 50, "program": 50,
+                  "mutated": 50, "api_ok": 50, "message": 320}
+        self.midi_log_tree = ttk.Treeview(body, columns=cols, show="headings",
+                                          height=18)
+        for c in cols:
+            self.midi_log_tree.heading(c, text=titles[c])
+            self.midi_log_tree.column(c, width=widths[c], anchor="w")
+        scroll = ttk.Scrollbar(body, orient="vertical",
+                               command=self.midi_log_tree.yview)
+        self.midi_log_tree.configure(yscrollcommand=scroll.set)
+        self.midi_log_tree.pack(side="left", fill="both", expand=True)
+        scroll.pack(side="right", fill="y")
+
+    def _midi_log_text(self) -> str:
+        """One-line human summary of the REAL backend state + last error."""
+        if self._midi_connected:
+            return (f"Connected — In: {self.midi_in_combo.get() or '—'} / "
+                    f"Out: {self.midi_out_combo.get() or '—'} / ch{self._midi_channel}")
+        base = {"offline": "Offline", "error": "Error"}.get(
+            self.status_lbl.cget("text").split(": ")[-1].lower(), "Offline") \
+            if self.status_lbl is not None else "Offline"
+        if self.status_lbl is not None and "Error" in self.status_lbl.cget("text"):
+            base = "Error"
+        return f"{base} — selected In: {self.midi_in_combo.get() or '—'} / " \
+               f"Out: {self.midi_out_combo.get() or '—'}"
+
+    def _update_midi_log(self) -> None:
+        """Re-render the MIDI Log tab FROM midi_events (view-only refresh)."""
+        tree = getattr(self, "midi_log_tree", None)
+        if tree is None:
+            return
+        try:
+            self.midi_diag_lbl.configure(text=self._midi_log_text())
+        except Exception:
+            pass
+        tree.delete(*tree.get_children())
+        for i, ev in enumerate(self.midi_events):
+            kind = ev.get("type") or ev.get("key") or ""
+            tree.insert("", "end", values=(
+                i, ev.get("direction", ""), kind, ev.get("channel", ""),
+                ev.get("cc", ""), ev.get("value", ""), ev.get("slot", ""),
+                ev.get("program", ""), ev.get("mutated", ""),
+                ev.get("api_ok", ""), ev.get("message", "")))
+        children = tree.get_children()
+        if children:
+            tree.see(children[-1])
 
     # ------------------------------------------------------------------ raw table
     def _build_raw_tab(self) -> None:
