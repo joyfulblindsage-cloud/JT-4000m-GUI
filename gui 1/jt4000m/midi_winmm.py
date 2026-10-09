@@ -310,7 +310,7 @@ def receive_sysex(index: int, timeout: float = 10, buffer_size: int = 4096) -> b
                 continue
             _delta, data = item
             raw = bytes(data)
-            if raw.startswith(b"\\xF0") and raw.endswith(b"\\xF7"):
+            if raw.startswith(b"\xF0") and raw.endswith(b"\xF7"):
                 return raw
         raise TimeoutError("Timed out waiting for WinMM SysEx input")
     finally:
