@@ -887,6 +887,16 @@ class Editor(tk.Tk):
             return
         try:
             for index, (_ts, data) in enumerate(bridge.transport.receive(timeout=0.005)):
+                # Always retain the raw packet in the diagnostic log, even if
+                # decode_incoming() does not yet map this CC to a known control.
+                # This separates "no MIDI arrived" from "MIDI arrived but is
+                # not mapped" during hardware reverse-engineering.
+                raw_hex = " ".join(f"{byte:02X}" for byte in data)
+                self.midi_events.append({
+                    "direction": "rx-raw",
+                    "type": "midi_packet",
+                    "message": raw_hex,
+                })
                 select = bridge.decode_program_change(data)
                 if select is not None:
                     self._apply_midi_program_select(select)
@@ -1192,19 +1202,6 @@ class Editor(tk.Tk):
         self._set_midi_status("connected")
         self.midibtn.configure(text="Disconnect")
         self.status_var.set(f"MIDI connected: In '{in_name}' / Out '{out_name}'")
-        # P1.29b honest-capability note: on the winmm backend the existing
-        # receive helper surfaces buffered SysEx only — short messages (CC/PC)
-        # are NOT delivered to the RX pump there.  Record this once in the
-        # EXISTING midi_events log so a physical check can distinguish
-        # "hardware sends nothing" from "backend cannot see it".
-        if getattr(self._midi_transport, "backend_name", "") == "winmm":
-            self.midi_events.append({
-                "direction": "status",
-                "message": "winmm RX limitation: CC/PC RX unavailable via this "
-                           "backend (SysEx buffers only); TX works"})
-            self.status_var.set(
-                "MIDI connected (TX only): winmm backend does not surface "
-                "CC/PC RX — use rtmidi for hardware→GUI tests")
         return True
 
     # ------------------------------------------------------------- disconnect
