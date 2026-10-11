@@ -378,8 +378,10 @@ class Editor(tk.Tk):
         self._bind_env_release(self.vcf_env_view)
         # P1.26 polish: filter env amount belongs to FILTER; no duplicate row
         # here anymore (the control still exists once, in the FILTER box).
-        for key in ("vcf_attack", "vcf_decay", "vcf_sustain", "vcf_release"):
-            self._parameter_row(vcf, specs[key])
+        vcf_adsr = tk.Frame(vcf, bg="#292a2d")
+        vcf_adsr.pack(fill="x", expand=True)
+        for col, key in enumerate(("vcf_attack", "vcf_decay", "vcf_sustain", "vcf_release")):
+            self._parameter_column(vcf_adsr, specs[key], col=col)
 
         # ---- VCA ENVELOPE -------------------------------------------------
         _, vca = self._synth_box(self.controls, "VCA ENVELOPE", 3, 0, columnspan=2)
@@ -388,8 +390,10 @@ class Editor(tk.Tk):
         self.vca_env_view.pack(anchor="center", pady=(0, 8))
         # P1.26 polish: commit drags on release (existing parameter path).
         self._bind_env_release(self.vca_env_view)
-        for key in ("vca_attack", "vca_decay", "vca_sustain", "vca_release"):
-            self._parameter_row(vca, specs[key])
+        vca_adsr = tk.Frame(vca, bg="#292a2d")
+        vca_adsr.pack(fill="x", expand=True)
+        for col, key in enumerate(("vca_attack", "vca_decay", "vca_sustain", "vca_release")):
+            self._parameter_column(vca_adsr, specs[key], col=col)
 
         # ---- LFO 1 / LFO 2 blocks ----------------------------------------
         _, lfo1 = self._synth_box(self.controls, "LFO 1", 3, 2, columnspan=2)
@@ -728,6 +732,48 @@ class Editor(tk.Tk):
                           highlightthickness=0, bd=0,
                           command=lambda key=spec.key: self.reset_one(key))
         reset.pack(side="right", padx=(2, 0))
+        self.reset_buttons[spec.key] = (reset, val_lbl)
+
+    def _parameter_column(self, parent, spec, *, col: int) -> None:
+        """Compact vertical ADSR control: name, slider, live value and reset.
+
+        This is a presentation-only alternative to _parameter_row; it reuses
+        the same parameter registry, model mutation path, MIDI mapping and
+        drag/undo behavior as every other continuous parameter.
+        """
+        column = tk.Frame(parent, bg="#292a2d", padx=3, pady=2)
+        column.grid(row=0, column=col, sticky="nsew", padx=2)
+        parent.grid_columnconfigure(col, weight=1, uniform="adsr")
+
+        label = tk.Label(column, text=_row_label(spec, self.developer_var.get()),
+                         bg="#292a2d", fg="#bfc3c8", anchor="center")
+        label.pack(fill="x", pady=(0, 2))
+        self.section_labels[spec.key] = label
+
+        var = tk.IntVar(value=spec.default)
+        self.vars[spec.key] = var
+        value = tk.StringVar(value=self._formatted(spec.key, spec.default))
+        self.value_vars[spec.key] = value
+
+        scale = tk.Scale(
+            column, from_=spec.maximum, to=spec.minimum, orient="vertical",
+            variable=var, showvalue=False, resolution=1, bg="#292a2d",
+            fg="#d8d8d8", troughcolor="#111214", highlightthickness=0, bd=0,
+            sliderrelief="flat", length=105, width=14,
+            command=lambda _v, key=spec.key: self._scale_changed(key))
+        scale.pack(anchor="center", fill="y", expand=True)
+        scale.bind("<ButtonPress-1>",
+                   lambda _e, key=spec.key: self._begin_parameter_drag(key))
+        scale.bind("<ButtonRelease-1>",
+                   lambda _e, key=spec.key: self._end_parameter_drag(key))
+
+        val_lbl = tk.Label(column, textvariable=value, bg="#292a2d",
+                           fg="#f1f1f1", width=9, anchor="center")
+        val_lbl.pack(fill="x", pady=(1, 0))
+        reset = tk.Button(column, text="D", width=2, relief="flat",
+                          bg="#292a2d", fg="#9aa0a6", highlightthickness=0,
+                          bd=0, command=lambda key=spec.key: self.reset_one(key))
+        reset.pack(anchor="center", pady=(1, 0))
         self.reset_buttons[spec.key] = (reset, val_lbl)
 
     def reset_one(self, key: str) -> None:
