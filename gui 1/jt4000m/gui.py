@@ -70,10 +70,10 @@ def _row_label(spec, developer: bool) -> str:
 class Editor(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
-        self.title("JT-4000M Editor v0.1")
-        self.geometry("1420x860")
-        self.minsize(1100, 700)
-        self.configure(bg="#202124")
+        self.title("JT-4000M Studio — Patch Designer")
+        self.geometry("1440x900")
+        self.minsize(1180, 740)
+        self.configure(bg="#0B1018")
 
         # ----- state -------------------------------------------------------
         # P1.10: the GUI is a thin presentation layer.  EditorModel is the
@@ -149,24 +149,53 @@ class Editor(tk.Tk):
             style.theme_use("clam")
         except tk.TclError:
             pass
-        style.configure("TFrame", background="#202124")
-        style.configure("Panel.TFrame", background="#292a2d")
-        style.configure("TLabel", background="#202124", foreground="#e7e7e7")
-        style.configure("Panel.TLabel", background="#292a2d", foreground="#e7e7e7")
-        style.configure("Muted.TLabel", background="#292a2d", foreground="#9aa0a6")
-        style.configure("TButton", padding=(9, 5))
-        style.configure("TLabelframe", background="#292a2d", foreground="#e7e7e7")
-        style.configure("TLabelframe.Label", background="#292a2d", foreground="#f0f0f0")
-        style.configure("TEntry", fieldbackground="#17181a", foreground="#eeeeee")
-        style.configure("Treeview", background="#17181a", fieldbackground="#17181a",
-                        foreground="#e8e8e8", rowheight=20)
-        style.configure("Treeview.Heading", background="#3b3d40", foreground="#f0f0f0")
-        # P1.26 final polish: unified flat tab buttons (visual hierarchy).
-        style.configure("Tab.TButton", padding=(16, 7), relief="flat")
+        # JT Studio visual system: deep navy surfaces, cool cyan signal color,
+        # warm amber for filter response, and consistent typography/spacing.
+        style.configure("TFrame", background="#0B1018")
+        style.configure("Panel.TFrame", background="#131D2B")
+        style.configure("TLabel", background="#0B1018", foreground="#DCE8F5",
+                        font=("TkDefaultFont", 9))
+        style.configure("Panel.TLabel", background="#131D2B", foreground="#F3F7FF",
+                        font=("TkDefaultFont", 9))
+        style.configure("Muted.TLabel", background="#131D2B", foreground="#8CA2BA")
+        style.configure("TButton", padding=(11, 7), background="#1B2A3D",
+                        foreground="#DCE8F5", borderwidth=1, relief="flat")
+        style.map("TButton",
+                  background=[("active", "#263B52"), ("pressed", "#42D9FF")],
+                  foreground=[("pressed", "#080D14"), ("disabled", "#71859B")])
+        style.configure("Accent.TButton", padding=(12, 7), background="#42D9FF",
+                        foreground="#080D14", font=("TkDefaultFont", 9, "bold"))
+        style.map("Accent.TButton",
+                  background=[("active", "#8AEAFF"), ("pressed", "#2CB6D8")])
+        style.configure("TLabelframe", background="#131D2B", foreground="#F3F7FF",
+                        bordercolor="#2A3A4F", relief="flat")
+        style.configure("TLabelframe.Label", background="#131D2B", foreground="#42D9FF",
+                        font=("TkDefaultFont", 9, "bold"))
+        style.configure("TEntry", fieldbackground="#0D1521", foreground="#F3F7FF",
+                        insertcolor="#42D9FF", padding=(7, 5))
+        style.configure("TCombobox", fieldbackground="#0D1521", foreground="#F3F7FF",
+                        arrowcolor="#42D9FF", padding=(6, 4))
+        style.map("TCombobox",
+                  fieldbackground=[("readonly", "#0D1521")],
+                  foreground=[("readonly", "#F3F7FF")])
+        style.configure("TCheckbutton", background="#131D2B", foreground="#DCE8F5")
+        style.map("TCheckbutton", foreground=[("active", "#42D9FF")])
+        style.configure("TScrollbar", background="#1B2A3D", troughcolor="#0D1521",
+                        bordercolor="#0D1521", arrowcolor="#8CA2BA")
+        style.configure("Treeview", background="#0D1521", fieldbackground="#0D1521",
+                        foreground="#DCE8F5", rowheight=26, borderwidth=0,
+                        font=("TkDefaultFont", 9))
+        style.configure("Treeview.Heading", background="#1B2A3D", foreground="#8CA2BA",
+                        font=("TkDefaultFont", 9, "bold"), padding=(8, 8), relief="flat")
+        style.map("Treeview",
+                  background=[("selected", "#17465A")],
+                  foreground=[("selected", "#F3F7FF")])
+        # Tabs share the same understated surface; selection uses signal cyan.
+        style.configure("Tab.TButton", padding=(16, 8), relief="flat",
+                        background="#080D14", foreground="#91A7C0")
         style.map("Tab.TButton",
-                  background=[("active", "#35373b"), ("pressed", "#3b3d40")],
-                  foreground=[("!disabled", "#c8ccd0")])
-
+                  background=[("active", "#1D2B3E"), ("pressed", "#243247")],
+                  foreground=[("!disabled", "#DCE8F5")])
     # ------------------------------------------------------------------- build
     def _build(self) -> None:
         menubar = tk.Menu(self)
@@ -217,56 +246,56 @@ class Editor(tk.Tk):
         #          permanent bottom preset navigator (◀ Pxx NAME ▶)
         # The existing editor UI is reparented into the SYNTH workspace
         # unchanged; PRESETS/RESEARCH are empty containers for later steps.
-        shell_header = tk.Frame(self, bg="#151619", height=56)
+        shell_header = tk.Frame(self, bg="#080D14", height=56)
         shell_header.pack(fill="x")
         shell_header.pack_propagate(False)
-        tk.Label(shell_header, text="JT-4000M", bg="#151619", fg="#f2f2f2",
+        tk.Label(shell_header, text="JT-4000M", bg="#080D14", fg="#F3F7FF",
                  font=("TkDefaultFont", 16, "bold")).pack(side="left", padx=16)
 
         # Existing Modified/dirty status label (projection of the model).
-        tk.Label(shell_header, textvariable=self.modified_var, bg="#151619",
-                 fg="#ffb74d", font=("TkDefaultFont", 10, "bold")).pack(side="right", padx=8)
+        tk.Label(shell_header, textvariable=self.modified_var, bg="#080D14",
+                 fg="#FFB454", font=("TkDefaultFont", 10, "bold")).pack(side="right", padx=8)
         # MIDI status: honest placeholder until a transport is wired in the
         # current GUI architecture (this app never touches MIDI yet).
-        tk.Label(shell_header, textvariable=self.midi_status_var, bg="#151619",
-                 fg="#8f949b", font=("TkDefaultFont", 9, "bold")).pack(side="right", padx=8)
+        tk.Label(shell_header, textvariable=self.midi_status_var, bg="#080D14",
+                 fg="#8CA2BA", font=("TkDefaultFont", 9, "bold")).pack(side="right", padx=8)
 
         # Central tab switcher: three radio buttons sharing one StringVar.
-        switcher = tk.Frame(shell_header, bg="#151619")
+        switcher = tk.Frame(shell_header, bg="#080D14")
         switcher.pack(side="left", expand=True)
         self.tab_buttons: dict[str, tk.Radiobutton] = {}
         for tab_name in ("SYNTH", "PRESETS", "RESEARCH"):
             btn = tk.Radiobutton(switcher, text=tab_name, value=tab_name,
-                                 variable=self.current_tab, bg="#151619",
-                                 fg="#c8ccd0", selectcolor="#4c6ef5",
-                                 activebackground="#151619", activeforeground="#ffffff",
+                                 variable=self.current_tab, bg="#080D14",
+                                 fg="#91A7C0", selectcolor="#42D9FF",
+                                 activebackground="#080D14", activeforeground="#ffffff",
                                  relief="flat", indicatoron=False, padx=14,
                                  command=self._switch_tab)
             btn.pack(side="left")
             self.tab_buttons[tab_name] = btn
 
         # Workspace container: exactly one child visible at a time.
-        self.workspace = tk.Frame(self, bg="#202124")
+        self.workspace = tk.Frame(self, bg="#0B1018")
         self.workspace.pack(fill="both", expand=True)
         self.tab_frames: dict[str, tk.Frame] = {}
         for tab_name in ("SYNTH", "PRESETS", "RESEARCH"):
-            frame = tk.Frame(self.workspace, bg="#202124")
+            frame = tk.Frame(self.workspace, bg="#0B1018")
             self.tab_frames[tab_name] = frame
         # SYNTH opens by default.
         self.tab_frames["SYNTH"].place(relx=0.0, rely=0.0, relwidth=1.0, relheight=1.0)
 
         # ---- permanent bottom panel: preset navigator ------------------
-        nav = tk.Frame(self, bg="#151619", height=44)
+        nav = tk.Frame(self, bg="#080D14", height=44)
         nav.pack(fill="x", side="bottom")
         nav.pack_propagate(False)
-        tk.Frame(nav, bg="#3a3b3e", height=1).pack(fill="x")
+        tk.Frame(nav, bg="#243247", height=1).pack(fill="x")
         ttk.Button(nav, text="◀", width=3,
                    command=lambda: self._nav_step(-1)).pack(side="left", padx=(10, 4), pady=6)
-        tk.Label(nav, textvariable=self.nav_slot_var, bg="#151619", fg="#4c6ef5",
+        tk.Label(nav, textvariable=self.nav_slot_var, bg="#080D14", fg="#42D9FF",
                  font=("TkDefaultFont", 12, "bold")).pack(side="left", padx=4)
         # P1.26 polish: fixed-width name label keeps the bar stable while
         # patch names change (no jitter of the ▶ button).
-        tk.Label(nav, textvariable=self.nav_name_var, bg="#151619", fg="#f1f1f1",
+        tk.Label(nav, textvariable=self.nav_name_var, bg="#080D14", fg="#F3F7FF",
                  font=("TkDefaultFont", 12, "bold"), width=20, anchor="w").pack(side="left", padx=6)
         ttk.Button(nav, text="▶", width=3,
                    command=lambda: self._nav_step(1)).pack(side="left", padx=4, pady=6)
@@ -289,32 +318,31 @@ class Editor(tk.Tk):
         self._build_presets_tab(self.tab_frames["PRESETS"])
         self._build_research_tab(self.tab_frames["RESEARCH"])
 
-        status = tk.Frame(self, bg="#151619")
+        status = tk.Frame(self, bg="#080D14")
         status.pack(fill="x", side="bottom")
-        tk.Label(status, textvariable=self.status_var, bg="#151619", fg="#c8ccd0",
+        tk.Label(status, textvariable=self.status_var, bg="#080D14", fg="#91A7C0",
                  anchor="w").pack(fill="x", padx=8, pady=3)
 
     # ------------------------------------------------------ P1.26: SYNTH tab
     def _synth_box(self, parent, title: str, row: int, col: int,
                    columnspan: int = 1):
         """One visual section box (consistent padding + header hierarchy)."""
-        box = tk.Frame(parent, bg="#292a2d", highlightthickness=1,
-                       highlightbackground="#3b3d40")
+        box = tk.Frame(parent, bg="#131D2B", highlightthickness=1,
+                       highlightbackground="#2A3A4F", bd=0)
         box.grid(row=row, column=col, columnspan=columnspan,
-                 sticky="nsew", padx=5, pady=5)
-        head = tk.Frame(box, bg="#292a2d")
-        head.pack(fill="x", padx=10, pady=(8, 2))
-        tk.Label(head, text=title, bg="#292a2d", fg="#f1f1f1",
+                 sticky="nsew", padx=7, pady=7)
+        head = tk.Frame(box, bg="#131D2B")
+        head.pack(fill="x", padx=12, pady=(10, 0))
+        tk.Label(head, text=title, bg="#131D2B", fg="#F3F7FF",
                  font=("TkDefaultFont", 10, "bold")).pack(side="left")
-        # P1.26 polish: thin accent underline under every section title —
-        # clear visual hierarchy without new widgets or behavior.
-        tk.Frame(head, bg="#4c6ef5", height=2).pack(side="left", pady=(0, 2))
-        inner = tk.Frame(box, bg="#292a2d")
-        inner.pack(fill="both", expand=True, padx=10, pady=(4, 8))
+        # Full-width signal strip gives each module a consistent visual anchor.
+        tk.Frame(box, bg="#42D9FF", height=2).pack(fill="x", padx=12, pady=(7, 0))
+        inner = tk.Frame(box, bg="#131D2B")
+        inner.pack(fill="both", expand=True, padx=12, pady=(8, 12))
         return box, inner
 
     def _build_synth_tab(self, frame) -> None:
-        canvas = tk.Canvas(frame, bg="#202124", highlightthickness=0)
+        canvas = tk.Canvas(frame, bg="#0B1018", highlightthickness=0)
         scrollbar = ttk.Scrollbar(frame, orient="vertical", command=canvas.yview)
         canvas.configure(yscrollcommand=scrollbar.set)
         canvas.pack(side="left", fill="both", expand=True)
@@ -354,7 +382,7 @@ class Editor(tk.Tk):
         # P1.26 polish: compact strip — the mix controls share two columns
         # instead of a tall full-width box with dead vertical space.
         _, mix = self._synth_box(self.controls, "MIX / RING", 1, 0, columnspan=4)
-        mix_rows = tk.Frame(mix, bg="#292a2d")
+        mix_rows = tk.Frame(mix, bg="#131D2B")
         mix_rows.pack(fill="x")
         mix_rows.grid_columnconfigure(0, weight=1)
         mix_rows.grid_columnconfigure(1, weight=1)
@@ -378,7 +406,7 @@ class Editor(tk.Tk):
         self._bind_env_release(self.vcf_env_view)
         # P1.26 polish: filter env amount belongs to FILTER; no duplicate row
         # here anymore (the control still exists once, in the FILTER box).
-        vcf_adsr = tk.Frame(vcf, bg="#292a2d")
+        vcf_adsr = tk.Frame(vcf, bg="#131D2B")
         vcf_adsr.pack(fill="x", expand=True)
         for col, key in enumerate(("vcf_attack", "vcf_decay", "vcf_sustain", "vcf_release")):
             self._parameter_column(vcf_adsr, specs[key], col=col)
@@ -390,30 +418,30 @@ class Editor(tk.Tk):
         self.vca_env_view.pack(anchor="center", pady=(0, 8))
         # P1.26 polish: commit drags on release (existing parameter path).
         self._bind_env_release(self.vca_env_view)
-        vca_adsr = tk.Frame(vca, bg="#292a2d")
+        vca_adsr = tk.Frame(vca, bg="#131D2B")
         vca_adsr.pack(fill="x", expand=True)
         for col, key in enumerate(("vca_attack", "vca_decay", "vca_sustain", "vca_release")):
             self._parameter_column(vca_adsr, specs[key], col=col)
 
         # ---- LFO 1 / LFO 2 blocks ----------------------------------------
         _, lfo1 = self._synth_box(self.controls, "LFO 1", 3, 2, columnspan=2)
-        self.lfo1_canvas = tk.Canvas(lfo1, width=200, height=44, bg="#17181a",
-                                     highlightthickness=1, highlightbackground="#3b3d40")
+        self.lfo1_canvas = tk.Canvas(lfo1, width=200, height=44, bg="#0D1521",
+                                     highlightthickness=1, highlightbackground="#2A3A4F")
         self.lfo1_canvas.pack(anchor="center", pady=(0, 6))
         self.lfo1_tile = WaveTile(self.lfo1_canvas, lambda: None, width=200, height=44)
         self.lfo1_tile.draw()
         for key in ("lfo1_wave", "lfo1_destination", "lfo1_rate", "lfo1_amount"):
             self._parameter_row(lfo1, specs[key])
         _, lfo2 = self._synth_box(self.controls, "LFO 2", 4, 0, columnspan=2)
-        self.lfo2_canvas = tk.Canvas(lfo2, width=200, height=44, bg="#17181a",
-                                     highlightthickness=1, highlightbackground="#3b3d40")
+        self.lfo2_canvas = tk.Canvas(lfo2, width=200, height=44, bg="#0D1521",
+                                     highlightthickness=1, highlightbackground="#2A3A4F")
         self.lfo2_canvas.pack(anchor="center", pady=(0, 6))
         self.lfo2_tile = WaveTile(self.lfo2_canvas, lambda: None, width=200, height=44)
         self.lfo2_tile.draw()
         for key in ("lfo2_wave", "lfo2_rate", "lfo2_amount"):
             self._parameter_row(lfo2, specs[key])
         tk.Label(lfo2, text="LFO2 destination: values not established",
-                 bg="#292a2d", fg="#9aa0a6").pack(anchor="w", pady=(2, 0))
+                 bg="#131D2B", fg="#8CA2BA").pack(anchor="w", pady=(2, 0))
 
         # ---- MODULATION / PORTAMENTO (bottom) -----------------------------
         _, mod = self._synth_box(self.controls, "MODULATION / PORTAMENTO", 4, 2, columnspan=2)
@@ -424,10 +452,10 @@ class Editor(tk.Tk):
         # musical names (no "CC ONLY" wording); mapping/registry untouched.
         for spec in PARAMETERS:
             if spec.offset is None:
-                row = tk.Frame(mod, bg="#292a2d")
+                row = tk.Frame(mod, bg="#131D2B")
                 row.pack(fill="x", pady=2)
                 lbl = tk.Label(row, text=f"{_synth_label(spec)}: CC {spec.cc}",
-                               bg="#292a2d", fg="#9aa0a6", anchor="w")
+                               bg="#131D2B", fg="#8CA2BA", anchor="w")
                 lbl.pack(side="left")
                 self.section_labels[spec.key] = lbl
 
@@ -445,15 +473,15 @@ class Editor(tk.Tk):
 
     def _build_wave_tile_row(self, parent, key: str, caption: str) -> None:
         """Per-OSC waveform preview tile (reuses the existing WaveTile)."""
-        row = tk.Frame(parent, bg="#292a2d")
+        row = tk.Frame(parent, bg="#131D2B")
         row.pack(fill="x", pady=(0, 4))
         # P1.26 polish: darker inset well + thin border make the preview read
         # as a display, clearly separated from the sliders below it.
-        canvas = tk.Canvas(row, width=150, height=44, bg="#17181a",
-                           highlightthickness=1, highlightbackground="#3b3d40")
+        canvas = tk.Canvas(row, width=150, height=44, bg="#0D1521",
+                           highlightthickness=1, highlightbackground="#2A3A4F")
         canvas.pack(side="left")
         tile = WaveTile(canvas, self._update_wave_phase, width=150, height=44)
-        canvas.create_text(4, 40, text=caption, anchor="w", fill="#9aa0a6",
+        canvas.create_text(4, 40, text=caption, anchor="w", fill="#8CA2BA",
                            font=("TkDefaultFont", 7, "bold"))
         if not hasattr(self, "_osc_tiles"):
             self._osc_tiles: dict[str, WaveTile] = {}
@@ -502,8 +530,8 @@ class Editor(tk.Tk):
         search = ttk.Entry(left, textvariable=self.search_var)
         search.pack(fill="x", pady=(7, 4))
         search.bind("<KeyRelease>", lambda _e: self.refresh_list())
-        self.listbox = tk.Listbox(left, exportselection=False, bg="#17181a", fg="#e8e8e8",
-                                  selectbackground="#4c6ef5", selectforeground="#ffffff",
+        self.listbox = tk.Listbox(left, exportselection=False, bg="#0D1521", fg="#DCE8F5",
+                                  selectbackground="#42D9FF", selectforeground="#ffffff",
                                   relief="flat", highlightthickness=0, activestyle="none")
         self.listbox.pack(fill="both", expand=True)
         self.listbox.bind("<<ListboxSelect>>", self._on_select)
@@ -527,7 +555,7 @@ class Editor(tk.Tk):
                   style="Muted.TLabel").pack(anchor="w", pady=(4, 0))
 
         # ---- preset info + rename bar (unchanged API) --------------------
-        bar = tk.Frame(center, bg="#292a2d")
+        bar = tk.Frame(center, bg="#131D2B")
         bar.pack(fill="x", pady=(0, 6))
         ttk.Label(bar, text="PRESET", style="Panel.TLabel").pack(side="left")
         self.name_entry = ttk.Entry(bar, textvariable=self.name_var, width=14, state="disabled")
@@ -535,7 +563,7 @@ class Editor(tk.Tk):
         self.apply_name_btn = ttk.Button(bar, text="Apply Name", command=self.apply_name, state="disabled")
         self.apply_name_btn.pack(side="left")
         ttk.Button(bar, text="Revert Name", command=self._revert_name).pack(side="left", padx=4)
-        self.slot_label = tk.Label(bar, textvariable=self.slot_var, bg="#292a2d", fg="#9aa0a6",
+        self.slot_label = tk.Label(bar, textvariable=self.slot_var, bg="#131D2B", fg="#8CA2BA",
                                    font=("TkDefaultFont", 11, "bold"))
         self.slot_label.pack(side="right", padx=8)
 
@@ -568,11 +596,11 @@ class Editor(tk.Tk):
 
     # --------------------------------------------------- P1.26: RESEARCH tab
     def _build_research_tab(self, frame) -> None:
-        top = tk.Frame(frame, bg="#151619", height=30)
+        top = tk.Frame(frame, bg="#080D14", height=30)
         top.pack(fill="x")
         top.pack_propagate(False)
         tk.Label(top, text="RESEARCH — offline analysis tools",
-                 bg="#151619", fg="#8f949b",
+                 bg="#080D14", fg="#8CA2BA",
                  font=("TkDefaultFont", 9, "bold")).pack(side="left", padx=16)
         ttk.Checkbutton(top, text="Developer view", variable=self.developer_var,
                         command=self._update_developer).pack(side="right", padx=10)
@@ -680,13 +708,13 @@ class Editor(tk.Tk):
         every section aligned; `grid=True` lets compact strips (MIX / RING)
         place several rows side by side instead of stacking dead space.
         """
-        line = tk.Frame(parent, bg="#292a2d")
+        line = tk.Frame(parent, bg="#131D2B", padx=2, pady=2)
         if grid:
             line.grid(row=row, column=col, sticky="ew", padx=(0, 10), pady=3)
         else:
             line.pack(fill="x", pady=3)
-        label = tk.Label(line, text=_row_label(spec, self.developer_var.get()), bg="#292a2d",
-                         fg="#bfc3c8", width=22, anchor="w")
+        label = tk.Label(line, text=_row_label(spec, self.developer_var.get()), bg="#131D2B",
+                         fg="#A8BDD3", width=22, anchor="w")
         label.pack(side="left")
         self.section_labels[spec.key] = label
         # Initial value = documented default; it is overwritten from the model
@@ -708,27 +736,27 @@ class Editor(tk.Tk):
             else:
                 # No confirmed enum table exists yet (hardware TODO): show the
                 # raw value read-only instead of inventing editable options.
-                tk.Label(line, text="values not established", bg="#292a2d",
-                         fg="#9aa0a6").pack(side="right")
+                tk.Label(line, text="values not established", bg="#131D2B",
+                         fg="#8CA2BA").pack(side="right")
         elif spec.kind == "boolean":
             check = ttk.Checkbutton(line, text="ON", variable=var,
                                     command=lambda key=spec.key: self.apply_parameter(key))
             check.pack(side="right")
         else:
             scale = tk.Scale(line, from_=spec.minimum, to=spec.maximum, orient="horizontal",
-                             variable=var, showvalue=False, resolution=1, bg="#292a2d",
-                             fg="#d8d8d8", troughcolor="#111214", highlightthickness=0, bd=0,
-                             sliderrelief="flat", length=170,
+                             variable=var, showvalue=False, resolution=1, bg="#131D2B",
+                             fg="#B6C8DC", troughcolor="#0D1521", highlightthickness=0, bd=0,
+                             sliderrelief="flat", length=185,
                              command=lambda _v, key=spec.key: self._scale_changed(key))
             scale.pack(side="left", fill="x", expand=True, padx=5)
             scale.bind("<ButtonPress-1>",
                        lambda _e, key=spec.key: self._begin_parameter_drag(key))
             scale.bind("<ButtonRelease-1>",
                        lambda _e, key=spec.key: self._end_parameter_drag(key))
-        val_lbl = tk.Label(line, textvariable=value, bg="#292a2d", fg="#f1f1f1", width=11,
+        val_lbl = tk.Label(line, textvariable=value, bg="#131D2B", fg="#F3F7FF", width=11,
                            anchor="e")
         val_lbl.pack(side="right", padx=(4, 0))
-        reset = tk.Button(line, text="D", width=2, relief="flat", bg="#292a2d", fg="#9aa0a6",
+        reset = tk.Button(line, text="↺", width=2, relief="flat", bg="#131D2B", fg="#8CA2BA",
                           highlightthickness=0, bd=0,
                           command=lambda key=spec.key: self.reset_one(key))
         reset.pack(side="right", padx=(2, 0))
@@ -741,12 +769,12 @@ class Editor(tk.Tk):
         the same parameter registry, model mutation path, MIDI mapping and
         drag/undo behavior as every other continuous parameter.
         """
-        column = tk.Frame(parent, bg="#292a2d", padx=3, pady=2)
+        column = tk.Frame(parent, bg="#131D2B", padx=4, pady=4, highlightthickness=1, highlightbackground="#2A3A4F")
         column.grid(row=0, column=col, sticky="nsew", padx=2)
         parent.grid_columnconfigure(col, weight=1, uniform="adsr")
 
         label = tk.Label(column, text=_row_label(spec, self.developer_var.get()),
-                         bg="#292a2d", fg="#bfc3c8", anchor="center")
+                         bg="#131D2B", fg="#A8BDD3", anchor="center")
         label.pack(fill="x", pady=(0, 2))
         self.section_labels[spec.key] = label
 
@@ -757,9 +785,9 @@ class Editor(tk.Tk):
 
         scale = tk.Scale(
             column, from_=spec.maximum, to=spec.minimum, orient="vertical",
-            variable=var, showvalue=False, resolution=1, bg="#292a2d",
-            fg="#d8d8d8", troughcolor="#111214", highlightthickness=0, bd=0,
-            sliderrelief="flat", length=105, width=14,
+            variable=var, showvalue=False, resolution=1, bg="#131D2B",
+            fg="#B6C8DC", troughcolor="#0D1521", highlightthickness=0, bd=0,
+            sliderrelief="flat", length=118, width=14,
             command=lambda _v, key=spec.key: self._scale_changed(key))
         scale.pack(anchor="center", fill="y", expand=True)
         scale.bind("<ButtonPress-1>",
@@ -767,11 +795,11 @@ class Editor(tk.Tk):
         scale.bind("<ButtonRelease-1>",
                    lambda _e, key=spec.key: self._end_parameter_drag(key))
 
-        val_lbl = tk.Label(column, textvariable=value, bg="#292a2d",
-                           fg="#f1f1f1", width=9, anchor="center")
+        val_lbl = tk.Label(column, textvariable=value, bg="#131D2B",
+                           fg="#F3F7FF", width=9, anchor="center")
         val_lbl.pack(fill="x", pady=(1, 0))
-        reset = tk.Button(column, text="D", width=2, relief="flat",
-                          bg="#292a2d", fg="#9aa0a6", highlightthickness=0,
+        reset = tk.Button(column, text="↺", width=2, relief="flat",
+                          bg="#131D2B", fg="#8CA2BA", highlightthickness=0,
                           bd=0, command=lambda key=spec.key: self.reset_one(key))
         reset.pack(anchor="center", pady=(1, 0))
         self.reset_buttons[spec.key] = (reset, val_lbl)
@@ -1189,7 +1217,7 @@ class Editor(tk.Tk):
         return self._midi_transport
 
     def _build_midi_panel(self) -> None:
-        panel = tk.Frame(self, bg="#151619")
+        panel = tk.Frame(self, bg="#080D14")
         panel.pack(fill="x", side="bottom", before=self._nav_frame_ref())
         ttk.Label(panel, text="MIDI", style="Muted.TLabel").pack(side="left", padx=(10, 4))
         ttk.Button(panel, text="Refresh", command=self.refresh_midi_ports)\
@@ -1202,8 +1230,8 @@ class Editor(tk.Tk):
         self.midi_out_combo.pack(side="left")
         self.midibtn = ttk.Button(panel, text="Connect", command=self.toggle_midi_connection)
         self.midibtn.pack(side="left", padx=8)
-        self.status_lbl = tk.Label(panel, text="Status: Offline", bg="#151619",
-                                   fg="#8f949b", font=("TkDefaultFont", 9, "bold"))
+        self.status_lbl = tk.Label(panel, text="Status: Offline", bg="#080D14",
+                                   fg="#8CA2BA", font=("TkDefaultFont", 9, "bold"))
         self.status_lbl.pack(side="left", padx=4)
         self.refresh_midi_ports()   # initial enumeration (no ports opened)
 
@@ -1282,7 +1310,7 @@ class Editor(tk.Tk):
         backend failures land in 'error' with the reason kept in
         _midi_last_error and the midi_events log.
         """
-        colors = {"offline": "#8f949b", "connecting": "#ffb74d",
+        colors = {"offline": "#8CA2BA", "connecting": "#FFB454",
                   "connected": "#81c995", "error": "#f28b82"}
         texts = {"offline": "Status: Offline", "connecting": "Status: Connecting…",
                  "connected": "Status: Connected", "error": "Status: Error"}
@@ -1568,7 +1596,7 @@ class Editor(tk.Tk):
         ttk.Button(btns, text="Run Cross-Bank Analysis", command=self.analysis_run).pack(side="left", padx=6)
         ttk.Button(btns, text="Clear", command=self.analysis_clear).pack(side="left")
         self.an_files: list[str] = []
-        self.an_list = tk.Listbox(top, height=3, bg="#17181a", fg="#e8e8e8",
+        self.an_list = tk.Listbox(top, height=3, bg="#0D1521", fg="#DCE8F5",
                                   selectbackground="#4c525a", relief="flat", highlightthickness=0)
         self.an_list.pack(fill="x", pady=4)
         body = ttk.Frame(self.an_tab, style="Panel.TFrame")
