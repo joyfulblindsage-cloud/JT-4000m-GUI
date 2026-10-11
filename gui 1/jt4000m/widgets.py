@@ -21,10 +21,10 @@ from __future__ import annotations
 import math
 import tkinter as tk
 
-BG = "#292a2d"
-FG = "#e8e8e8"
-MUTED = "#9aa0a6"
-ACCENT = "#4c6ef5"
+BG = "#131D2B"
+FG = "#DCE8F5"
+MUTED = "#8CA2BA"
+ACCENT = "#42D9FF"
 
 
 def _clamp(v: float, lo: float = 0.0, hi: float = 1.0) -> float:
@@ -75,14 +75,14 @@ class Knob(tk.Canvas):
         self._hover = False
 
         if show_entry:
-            self.entry = tk.Entry(parent, width=12, bg="#17181a", fg=FG,
+            self.entry = tk.Entry(parent, width=12, bg="#0D1521", fg=FG,
                                   insertbackground=FG, relief="flat",
-                                  highlightthickness=1, highlightbackground="#3b3d40")
+                                  highlightthickness=1, highlightbackground="#2A3A4F")
             self.entry.bind("<Return>", self._entry_apply)
             self.entry.bind("<FocusIn>", lambda _e: self.entry.configure(
                 highlightbackground=ACCENT))
             self.entry.bind("<FocusOut>", lambda _e: self.entry.configure(
-                highlightbackground="#3b3d40"))
+                highlightbackground="#2A3A4F"))
         else:
             self.entry = None
 
@@ -217,13 +217,13 @@ class Knob(tk.Canvas):
     def _paint(self) -> None:
         self.delete("all")
         cx, cy, r = self._cx, self._cy, self._r
-        ring = "#3b3d40"
+        ring = "#2A3A4F"
         if self._focused:
             ring = ACCENT
         elif self._hover:
-            ring = "#6c7076"
+            ring = "#55718D"
         self.create_oval(cx - r, cy - r, cx + r, cy + r, outline=ring, width=2,
-                         fill="#17181a")
+                         fill="#0D1521")
         # active arc from start angle to current position
         a0, a1 = 135.0, 135.0 - 270.0 * self._norm
         steps = max(2, int(abs(a1 - a0)))
@@ -236,7 +236,7 @@ class Knob(tk.Canvas):
         # pointer line
         ang = math.radians(135.0 - 270.0 * self._norm)
         self.create_line(cx, cy, cx + (r - 8) * math.cos(ang),
-                         cy - (r - 8) * math.sin(ang), fill="#f1f1f1", width=2)
+                         cy - (r - 8) * math.sin(ang), fill="#F3F7FF", width=2)
         self.create_text(cx, cy + r + 12, text=self.label, fill=MUTED,
                          font=("TkDefaultFont", 8, "bold"))
 
@@ -252,8 +252,8 @@ class EnvelopeView(tk.Canvas):
 
     def __init__(self, parent, *, title: str, width: int = 150, height: int = 64,
                  on_segment=None) -> None:
-        super().__init__(parent, width=width, height=height + 16, bg="#17181a",
-                         highlightthickness=1, highlightbackground="#3b3d40", bd=0)
+        super().__init__(parent, width=width, height=height + 16, bg="#0D1521",
+                         highlightthickness=1, highlightbackground="#2A3A4F", bd=0)
         self.title = title
         self.width = width
         self.height = height
@@ -325,15 +325,15 @@ class EnvelopeView(tk.Canvas):
     def _paint(self) -> None:
         self.delete("all")
         p0, p1, p2, p3, p4 = self._points()
-        self.create_line(*p0, *p1, *p2, *p3, *p4, fill="#7aa2ff", width=2)
-        self.create_line(p0[0], p0[1], p4[0], p4[1], fill="#3b3d40")
+        self.create_line(*p0, *p1, *p2, *p3, *p4, fill="#47D8F5", width=2)
+        self.create_line(p0[0], p0[1], p4[0], p4[1], fill="#2A3A4F")
         for pt in (p1, p2, p4):
             self.create_oval(pt[0] - 2, pt[1] - 2, pt[0] + 2, pt[1] + 2,
-                             fill="#cdd6f4", outline="")
+                             fill="#EAF7FF", outline="")
         self.create_text(4, self.height + 8, anchor="w", text=self.title,
                          fill=MUTED, font=("TkDefaultFont", 7, "bold"))
         self.create_text(self.width - 4, self.height + 8, anchor="e",
-                         text="visual approximation", fill="#5f6368",
+                         text="visual approximation", fill="#71859B",
                          font=("TkDefaultFont", 6, "italic"))
 
 
@@ -346,8 +346,8 @@ class FilterView(tk.Canvas):
     """
 
     def __init__(self, parent, *, width: int = 150, height: int = 56) -> None:
-        super().__init__(parent, width=width, height=height + 14, bg="#17181a",
-                         highlightthickness=1, highlightbackground="#3b3d40", bd=0)
+        super().__init__(parent, width=width, height=height + 14, bg="#0D1521",
+                         highlightthickness=1, highlightbackground="#2A3A4F", bd=0)
         self.width = width
         self.height = height
         self._cutoff = 0.5
@@ -375,11 +375,11 @@ class FilterView(tk.Canvas):
                 atten = min(1.0, (t - 1.0) / 3.0)
                 y = 10 + atten * (h - 22)
             pts += [x, y]
-        self.create_line(*pts, fill="#ffb74d", width=2, smooth=False)
-        self.create_line(6, h - 6, w - 6, h - 6, fill="#3b3d40")
+        self.create_line(*pts, fill="#FFB454", width=2, smooth=False)
+        self.create_line(6, h - 6, w - 6, h - 6, fill="#2A3A4F")
         self.create_text(4, h + 7, anchor="w", text="FILTER", fill=MUTED,
                          font=("TkDefaultFont", 7, "bold"))
-        self.create_text(w - 4, h + 7, anchor="e", text="approx.", fill="#5f6368",
+        self.create_text(w - 4, h + 7, anchor="e", text="approx.", fill="#71859B",
                          font=("TkDefaultFont", 6, "italic"))
 
 
@@ -390,8 +390,8 @@ class MixBar(tk.Frame):
         super().__init__(parent, bg=BG)
         self.width = width
         self.on_change = on_change
-        self.canvas = tk.Canvas(self, width=width, height=26, bg="#17181a",
-                                highlightthickness=1, highlightbackground="#3b3d40",
+        self.canvas = tk.Canvas(self, width=width, height=26, bg="#0D1521",
+                                highlightthickness=1, highlightbackground="#2A3A4F",
                                 bd=0)
         self.canvas.pack(fill="x")
         self._pos = 0.5
@@ -416,9 +416,9 @@ class MixBar(tk.Frame):
         c.delete("all")
         w = self.width
         x = 4 + (w - 8) * self._pos
-        c.create_line(4, 13, w - 4, 13, fill="#3b3d40", width=3)
-        c.create_line(4, 13, x, 13, fill="#7aa2ff", width=3)
-        c.create_oval(x - 5, 8, x + 5, 18, fill="#cdd6f4", outline="")
+        c.create_line(4, 13, w - 4, 13, fill="#2A3A4F", width=3)
+        c.create_line(4, 13, x, 13, fill="#47D8F5", width=3)
+        c.create_oval(x - 5, 8, x + 5, 18, fill="#EAF7FF", outline="")
         c.create_text(6, 4, anchor="w", text="OSC1", fill=MUTED,
                       font=("TkDefaultFont", 6, "bold"))
         c.create_text(w - 6, 4, anchor="e", text="OSC2", fill=MUTED,
