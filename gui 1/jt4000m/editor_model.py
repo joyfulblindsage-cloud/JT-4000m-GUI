@@ -43,7 +43,7 @@ from .experiment import PROVENANCE_FIXTURE, detect_provenance
 from .model import (BY_KEY, BY_OFFSET, ENUM_OPTIONS, ParameterSpec,
                     display_value, writable_parameters)
 from .patch import Bank, JTProgram
-from .syx import NAME_START, PROGRAM_LEN, field_name
+from .syx import NAME_START, PROGRAM_LEN, field_name, parse as parse_sysex
 
 # Re-export the single project-wide evidence vocabulary (no second system).
 LEVEL_STATIC = discovery.LEVEL_STATIC      # STATIC_KNOWN  (registry only)
@@ -579,6 +579,31 @@ class EditorModel:
         self._bank = bank
         self._path = p.resolve()
         self._provenance = provenance or detect_provenance(p)
+        self._selected = 1
+        self._working = None
+        self._baseline = bank.to_sysex()
+        self._dirty = False
+        return bank
+
+    def load_bytes(self, raw: bytes, *, provenance: str = "CAPTURED_FROM_DEVICE") -> Bank:
+        """Load an in-memory bulk dump without inventing a disk path.
+
+        Parsing and the 32-slot Bank invariant remain owned by the existing
+        SysEx/domain layers. A bad checksum or single-program frame is rejected
+        before this session's current bank is changed.
+        """
+        syx = parse_sysex(bytes(raw))
+        if syx.mode != "bulk":
+            raise ValueError("A received hardware bank must be a bulk SysEx dump.")
+        if not syx.checksum_ok:
+            raise ValueError(
+                f"Bulk dump checksum mismatch: expected 0x{syx.checksum_expected:02X}, "
+                f"received 0x{syx.checksum_value:02X}."
+            )
+        bank = Bank.from_sysex(syx)
+        self._bank = bank
+        self._path = None
+        self._provenance = provenance
         self._selected = 1
         self._working = None
         self._baseline = bank.to_sysex()
