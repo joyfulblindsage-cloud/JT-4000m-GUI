@@ -29,7 +29,7 @@ from .diff import format_change, semantic_diff
 from .editor_model import EditorHistory, EditorModel
 from .model import BY_KEY, PARAMETERS, display_value, enum_options
 from .patch import Bank, JTProgram, program_to_single
-from .syx import SysExFile, field_name, parse_file, semantic_value
+from .syx import SysExFile, field_name, parse as parse_sysex, parse_file, semantic_value
 from .waveforms import WaveTile
 from .widgets import EnvelopeView, FilterView
 
@@ -130,6 +130,9 @@ class Editor(tk.Tk):
         self._midi_in_ports: dict[str, object] = {}
         self._midi_out_ports: dict[str, object] = {}
         self._midi_channel = 1              # existing configured channel only
+        # P1.30 — receive a user-initiated hardware bulk dump after Connect.
+        self._bulk_receive_pending = False
+        self._bulk_sysex_buffer = bytearray()
         self.midibtn = None                 # Connect/Disconnect toggle button
         self.status_lbl = None              # colored Status: label
 
@@ -870,6 +873,124 @@ class Editor(tk.Tk):
         if mutated:
             self._after_mutation()        # model -> widgets, single source of truth
 
+    def _handle_bulk_sysex_packet(self, data: bytes) -> bool:
+        """Collect and validate one incoming bulk SysEx while capture is armed.
+
+        Returns True when the packet belongs to a SysEx capture (including
+        incomplete fragments), so it cannot fall through to CC/PC decoding.
+        The existing transport RX pump remains the only receive loop.
+        """
+        if not self._bulk_receive_pending:
+            return False
+        data = bytes(data)
+        if not data:
+            return False
+        if data[0] == 0xF0:
+            self._bulk_sysex_buffer = bytearray(data)
+        elif self._bulk_sysex_buffer:
+            self._bulk_sysex_buffer.extend(data)
+        else:
+            return False
+
+        # The fixture-verified bulk frame is 2058 bytes. Bound the collector
+        # if a broken endpoint emits unrelated long data.
+        if len(self._bulk_sysex_buffer) > 8192:
+            self._bulk_sysex_buffer.clear()
+            self.midi_events.append({
+                "direction": "rx-error", "type": "sysex_bulk",
+                "message": "SysEx capture exceeded 8192 bytes; discarded",
+            })
+            self.status_var.set("Bulk dump rejected: SysEx message too large")
+            return True
+        try:
+            end = self._bulk_sysex_buffer.index(0xF7, 1)
+        except ValueError:
+            return True
+
+        frame = bytes(self._bulk_sysex_buffer[:end + 1])
+        trailing = bytes(self._bulk_sysex_buffer[end + 1:])
+        self._bulk_sysex_buffer = bytearray()
+        if trailing and trailing[0] == 0xF0:
+            self._bulk_sysex_buffer.extend(trailing)
+
+        try:
+            syx = parse_sysex(frame)
+        except (ValueError, IndexError) as exc:
+            self.midi_events.append({
+                "direction": "rx-error", "type": "sysex_bulk",
+                "message": f"SysEx rejected: {exc}",
+            })
+            self.status_var.set(f"SysEx received but not recognized: {exc}")
+            return True
+
+        if syx.mode != "bulk":
+            self.midi_events.append({
+                "direction": "rx", "type": "sysex_single",
+                "message": "Single-program dump received; still waiting for bulk dump",
+            })
+            self.status_var.set(
+                "Single dump received; choose PROG BULK SYX SEND for all 32 presets")
+            return True
+        if not syx.checksum_ok:
+            self.midi_events.append({
+                "direction": "rx-error", "type": "sysex_bulk",
+                "message": (f"Checksum mismatch: expected 0x{syx.checksum_expected:02X}, "
+                            f"received 0x{syx.checksum_value:02X}; bank not loaded"),
+            })
+            self.status_var.set("Bulk dump rejected: checksum mismatch; try sending again")
+            return True
+
+        self._bulk_receive_pending = False
+        self.midi_events.append({
+            "direction": "rx", "type": "sysex_bulk", "programs": len(syx.programs),
+            "checksum": "OK", "message": "Validated bulk dump (32 programs)",
+        })
+        self._load_received_bulk(frame, syx)
+        return True
+
+    def _load_received_bulk(self, raw: bytes, syx) -> None:
+        """Offer a validated device bank without silently replacing user work."""
+        if self.bank is not None:
+            warning = (
+                "A valid bank of 32 presets was received from the JT-4000M.\n\n"
+                "Replace the bank currently open in the editor?"
+            )
+            if self.editor.is_dirty():
+                warning += "\n\nThe current bank has unsaved changes; replacing it will discard them."
+            if not messagebox.askyesno("Bulk dump received", warning, parent=self):
+                self.status_var.set(
+                    "Bulk dump received and validated; current editor bank was kept")
+                return
+        try:
+            self.editor.load_bytes(raw, provenance="CAPTURED_FROM_DEVICE")
+        except Exception as exc:
+            self.midi_events.append({
+                "direction": "rx-error", "type": "sysex_bulk",
+                "message": f"Could not load validated dump: {exc}",
+            })
+            self.status_var.set(f"Bulk dump could not be loaded: {exc}")
+            return
+
+        self.bank = self.editor.bank
+        self.path = None
+        self._history.clear()
+        self._loading_bank = True
+        items = self._slot_items()
+        self.cmp_a["values"] = items
+        self.cmp_b["values"] = items
+        self.cmp_a.current(0)
+        self.cmp_b.current(min(1, max(0, len(items) - 1)))
+        self.search_var.set("")
+        self.refresh_list()
+        self._loading_bank = False
+        self.selected_index = self.editor.selected
+        self._sync_widgets_from_model()
+        self._highlight_selection()
+        self._update_developer()
+        self._update_modified()
+        self.status_var.set(
+            "Received JT-4000M bank — 32 presets, checksum OK; use Save Bank As to keep a .syx copy")
+
     def _poll_midi_once(self, max_packets: int = 64) -> None:
         """Drain pending MIDI input without blocking the UI (test hook: call
         directly instead of relying on the Tk timer).
@@ -897,6 +1018,8 @@ class Editor(tk.Tk):
                     "type": "midi_packet",
                     "message": raw_hex,
                 })
+                if self._handle_bulk_sysex_packet(data):
+                    continue
                 select = bridge.decode_program_change(data)
                 if select is not None:
                     self._apply_midi_program_select(select)
@@ -1201,7 +1324,14 @@ class Editor(tk.Tk):
         self._midi_connected = True
         self._set_midi_status("connected")
         self.midibtn.configure(text="Disconnect")
-        self.status_var.set(f"MIDI connected: In '{in_name}' / Out '{out_name}'")
+        self._bulk_sysex_buffer.clear()
+        self._bulk_receive_pending = True
+        self.status_var.set(
+            "Connected — on JT-4000M choose PROG BULK SYX SEND to transfer all 32 presets")
+        self.midi_events.append({
+            "direction": "status", "type": "bulk_receive",
+            "message": "Waiting for user-initiated JT-4000M bulk dump",
+        })
         return True
 
     # ------------------------------------------------------------- disconnect
@@ -1229,6 +1359,8 @@ class Editor(tk.Tk):
         self._midi_input_port = None
         self._midi_connected = False
         self._rx_applying = False
+        self._bulk_receive_pending = False
+        self._bulk_sysex_buffer.clear()
         # P1.29a: after a real disconnect the stale bridge must not be reused
         # by any TX path; the header status is owned by _set_midi_status now.
         self.midi_status_var.set("MIDI: offline")
