@@ -56,6 +56,10 @@ def _synth_label(spec) -> str:
 # Correlation only — NOT a confirmed parameter. Needs hardware verification.
 RING_MOD_CANDIDATE_OFFSET = 0x2C
 
+# Experimental only: not confirmed for JT-4000M.
+JT4000M_READBACK_PROBE = bytes.fromhex("F0 00 20 32 00 01 38 75 F7")
+JT4000M_READBACK_REPLY_COMMAND = 0x76
+
 
 def _row_label(spec, developer: bool) -> str:
     # P1.26: SYNTH shows musical names; the registry label stays untouched.
@@ -125,6 +129,8 @@ class Editor(tk.Tk):
         self._midi_transport = None         # lazy MidiTransport (on demand)
         self._midi_connected = False        # real backend connection state
         self._midi_last_error = ""          # honest last failure reason
+        self._readback_probe_pending = False
+        self._readback_probe_timeout_id = None
         self._midi_in_names: list[str] = []
         self._midi_out_names: list[str] = []
         self._midi_in_ports: dict[str, object] = {}
@@ -892,11 +898,14 @@ class Editor(tk.Tk):
                 # This separates "no MIDI arrived" from "MIDI arrived but is
                 # not mapped" during hardware reverse-engineering.
                 raw_hex = " ".join(f"{byte:02X}" for byte in data)
+                is_sysex = bool(data and data[0] == 0xF0)
                 self.midi_events.append({
                     "direction": "rx-raw",
-                    "type": "midi_packet",
+                    "type": (f"sysex_0x{data[7]:02X}" if is_sysex and len(data) > 7 else "sysex") if is_sysex else "midi_packet",
                     "message": raw_hex,
                 })
+                if is_sysex:
+                    self._handle_readback_probe_packet(data)
                 select = bridge.decode_program_change(data)
                 if select is not None:
                     self._apply_midi_program_select(select)
@@ -1202,7 +1211,63 @@ class Editor(tk.Tk):
         self._set_midi_status("connected")
         self.midibtn.configure(text="Disconnect")
         self.status_var.set(f"MIDI connected: In '{in_name}' / Out '{out_name}'")
+        # Experimental readback probe: RX/polling are active before TX.
+        # Any reply is logged only; its payload is never applied automatically.
+        self.after(100, self._send_readback_probe_075)
         return True
+
+    # -------------------------------------------------- experimental readback
+    def _send_readback_probe_075(self) -> None:
+        """Send one unconfirmed 0x75 readback probe after MIDI Connect."""
+        if not self._midi_connected or self._midi_transport is None:
+            return
+        out_port = self._midi_out_ports.get(self.midi_out_combo.get())
+        if out_port is None:
+            self.midi_events.append({"direction": "tx-error", "type": "readback_probe_0x75", "message": "No selected MIDI output."})
+            self._update_midi_log()
+            return
+        self._readback_probe_pending = True
+        self.midi_events.append({"direction": "tx", "type": "readback_probe_0x75", "message": "F0 00 20 32 00 01 38 75 F7", "api_ok": "pending"})
+        try:
+            report = self._midi_transport.send_sysex(out_port, JT4000M_READBACK_PROBE)
+        except Exception as exc:
+            self._readback_probe_pending = False
+            self.midi_events[-1]["api_ok"] = False
+            self.midi_events[-1]["message"] += f" — send failed: {exc}"
+            self.status_var.set(f"0x75 probe send failed: {exc}")
+            self._update_midi_log()
+            return
+        self.midi_events[-1]["api_ok"] = report.api_ok
+        if not report.api_ok:
+            self._readback_probe_pending = False
+            self.midi_events[-1]["message"] += f" — {report.error}"
+            self.status_var.set(f"0x75 probe send failed: {report.error}")
+        else:
+            self.status_var.set("Sent experimental SysEx 0x75; waiting 2 s for response…")
+            self._readback_probe_timeout_id = self.after(2000, self._readback_probe_timed_out)
+        self._update_midi_log()
+
+    def _readback_probe_timed_out(self) -> None:
+        self._readback_probe_timeout_id = None
+        if not self._readback_probe_pending:
+            return
+        self._readback_probe_pending = False
+        self.midi_events.append({"direction": "status", "type": "readback_probe_timeout", "message": "No 0x76 response within 2 s; inconclusive, not proof of unsupported readback."})
+        self.status_var.set("No 0x76 response observed (inconclusive; see MIDI Log)")
+        self._update_midi_log()
+
+    def _handle_readback_probe_packet(self, data: bytes) -> None:
+        """Annotate a 0x76 reply; do not interpret or apply its payload."""
+        if len(data) >= 9 and data[0] == 0xF0 and data[-1] == 0xF7 and data[7] == JT4000M_READBACK_REPLY_COMMAND:
+            self._readback_probe_pending = False
+            if self._readback_probe_timeout_id is not None:
+                try:
+                    self.after_cancel(self._readback_probe_timeout_id)
+                except Exception:
+                    pass
+                self._readback_probe_timeout_id = None
+            self.midi_events.append({"direction": "status", "type": "readback_probe_reply_0x76", "message": "Received command 0x76; payload semantics and active-patch relevance unverified."})
+            self.status_var.set("Received SysEx 0x76 reply — payload not yet interpreted")
 
     # ------------------------------------------------------------- disconnect
     def disconnect_midi(self) -> bool:
