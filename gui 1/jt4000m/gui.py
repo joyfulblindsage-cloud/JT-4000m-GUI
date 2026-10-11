@@ -1258,7 +1258,8 @@ class Editor(tk.Tk):
 
     def _handle_readback_probe_packet(self, data: bytes) -> None:
         """Annotate a 0x76 reply; do not interpret or apply its payload."""
-        if len(data) >= 9 and data[0] == 0xF0 and data[-1] == 0xF7 and data[7] == JT4000M_READBACK_REPLY_COMMAND:
+        if (self._readback_probe_pending and len(data) >= 9 and data[0] == 0xF0
+                and data[-1] == 0xF7 and data[7] == JT4000M_READBACK_REPLY_COMMAND):
             self._readback_probe_pending = False
             if self._readback_probe_timeout_id is not None:
                 try:
