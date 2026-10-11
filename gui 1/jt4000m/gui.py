@@ -89,6 +89,9 @@ class Editor(tk.Tk):
         self._loading_bank = False
         self._syncing = False                    # guard: model->widget->event loop
         self._dragging_env = False               # P1.26: envelope-graph drag session
+        # Slider edits are live during a gesture, but form one undo step.
+        self._parameter_drag_key: str | None = None
+        self._parameter_drag_changed = False
 
         self.vars: dict[str, tk.IntVar] = {}
         self.value_vars: dict[str, tk.StringVar] = {}
@@ -712,9 +715,12 @@ class Editor(tk.Tk):
                              variable=var, showvalue=False, resolution=1, bg="#292a2d",
                              fg="#d8d8d8", troughcolor="#111214", highlightthickness=0, bd=0,
                              sliderrelief="flat", length=170,
-                             command=lambda _v, key=spec.key: self._value_preview(key))
+                             command=lambda _v, key=spec.key: self._scale_changed(key))
             scale.pack(side="left", fill="x", expand=True, padx=5)
-            scale.bind("<ButtonRelease-1>", lambda _e, key=spec.key: self.apply_parameter(key))
+            scale.bind("<ButtonPress-1>",
+                       lambda _e, key=spec.key: self._begin_parameter_drag(key))
+            scale.bind("<ButtonRelease-1>",
+                       lambda _e, key=spec.key: self._end_parameter_drag(key))
         val_lbl = tk.Label(line, textvariable=value, bg="#292a2d", fg="#f1f1f1", width=11,
                            anchor="e")
         val_lbl.pack(side="right", padx=(4, 0))
@@ -1917,6 +1923,68 @@ class Editor(tk.Tk):
         if self._syncing:
             return
         self.value_vars[key].set(self._formatted(key, int(self.vars[key].get())))
+
+    def _begin_parameter_drag(self, key: str) -> None:
+        """Start a live slider gesture; its edits will share one undo step."""
+        if self._syncing:
+            return
+        self._parameter_drag_key = key
+        self._parameter_drag_changed = False
+
+    def _scale_changed(self, key: str) -> None:
+        """Apply slider changes during movement, not only on mouse release.
+
+        Tk Scale invokes its command as the value moves. During a mouse drag,
+        mutate the model and transmit each changed raw value immediately while
+        recording only one history snapshot for the whole gesture. Keyboard
+        and wheel changes outside a drag keep the ordinary one-step path.
+        """
+        if self._syncing:
+            return
+        self._value_preview(key)
+        if self._parameter_drag_key != key:
+            self.apply_parameter(key)
+            return
+        if self.bank is None or self.selected_index is None:
+            return
+
+        raw = int(self.vars[key].get())
+        if self.editor.get_patch(self.selected_index).get_raw(key) == raw:
+            return
+
+        first_change = not self._parameter_drag_changed
+        if first_change:
+            self._history.push()
+        spec = BY_KEY[key]
+        try:
+            if not self.editor.loaded:
+                raise RuntimeError("No bank loaded.")
+            self.editor.set_slot_parameter(self.selected_index, key, raw)
+        except Exception as exc:
+            if first_change:
+                self._history.undo()
+            self._parameter_drag_changed = False
+            self._after_mutation()
+            messagebox.showerror("Parameter", str(exc))
+            return
+
+        self._parameter_drag_changed = True
+        self.bank = self.editor.bank
+        self.value_vars[key].set(self._formatted(key, raw))
+        self._refresh_visualizations()
+        self.status_var.set(f"P{self.selected_index:02d}  "
+                            f"{_synth_label(spec)} = {display_value(key, raw)}")
+        self._midi_tx(key, raw)
+
+    def _end_parameter_drag(self, key: str) -> None:
+        """Finish a slider gesture and refresh the full GUI projection once."""
+        if self._parameter_drag_key != key:
+            return
+        changed = self._parameter_drag_changed
+        self._parameter_drag_key = None
+        self._parameter_drag_changed = False
+        if changed:
+            self._after_mutation()
 
     def _env_release(self, _event=None) -> None:
         """Envelope-graph drag end -> commit through the normal parameter path."""
