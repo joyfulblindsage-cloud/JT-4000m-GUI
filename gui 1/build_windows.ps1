@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
     [switch]$SkipTests,
+    [switch]$GuiTests,
     [switch]$FullTests
 )
 
@@ -27,8 +28,10 @@ if ($LASTEXITCODE -ne 0) { throw "Installing build dependencies failed." }
 if (-not $SkipTests) {
     if ($FullTests) {
         & $Python -m pytest -q
-    } else {
+    } elseif ($GuiTests) {
         & $Python -m pytest -q tests/test_live_parameter_steps.py tests/test_p135_knob_integration.py
+    } else {
+        & $Python -m pytest -q tests/test_live_parameter_steps.py
     }
     if ($LASTEXITCODE -ne 0) { throw "Tests failed; refusing to build." }
 }
