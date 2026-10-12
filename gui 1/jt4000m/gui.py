@@ -27,6 +27,7 @@ from tkinter import filedialog, messagebox, ttk
 from .analyzer import cross_bank
 from .diff import format_change, semantic_diff
 from .editor_model import EditorHistory, EditorModel
+from .gesture_steps import intermediate_raw_values
 from .model import BY_KEY, PARAMETERS, display_value, enum_options
 from .patch import Bank, JTProgram, program_to_single
 from .syx import SysExFile, field_name, parse as parse_sysex, parse_file, semantic_value
@@ -51,21 +52,6 @@ SYNTH_LABEL_OVERRIDES = {
 def _synth_label(spec) -> str:
     """Musical label for the SYNTH workspace (registry stays untouched)."""
     return SYNTH_LABEL_OVERRIDES.get(spec.key, spec.label)
-
-def _intermediate_raw_values(previous: int, current: int):
-    """Yield every integer value after previous through current.
-
-    Continuous UI gestures can jump several raw values between Tk events.
-    Emitting the intervening values ensures the MIDI device sees a smooth
-    sequence rather than only the endpoints. This helper is shared by the
-    custom rotary knob and every tk.Scale through _scale_changed.
-    """
-    if current > previous:
-        return range(previous + 1, current + 1)
-    if current < previous:
-        return range(previous - 1, current - 1, -1)
-    return ()
-
 
 # Offset 0x2C changes together with Ring Mod on/off in existing banks.
 # Correlation only — NOT a confirmed parameter. Needs hardware verification.
@@ -2158,7 +2144,7 @@ class Editor(tk.Tk):
                             f"{_synth_label(spec)} = {display_value(key, raw)}")
         # This path is shared by the custom Knob and all tk.Scale controls.
         # Send each intermediate CC in order, including the final target.
-        for midi_raw in _intermediate_raw_values(previous_raw, raw):
+        for midi_raw in intermediate_raw_values(previous_raw, raw):
             self._midi_tx(key, midi_raw)
 
     def _end_parameter_drag(self, key: str) -> None:
