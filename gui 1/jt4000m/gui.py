@@ -71,8 +71,12 @@ class Editor(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title("JT-4000M Studio — Patch Designer")
-        self.geometry("1440x900")
-        self.minsize(1180, 740)
+        # Start within the available desktop instead of assuming a 1440x900 display.
+        screen_w, screen_h = self.winfo_screenwidth(), self.winfo_screenheight()
+        initial_w = max(800, min(1440, screen_w - 60))
+        initial_h = max(560, min(900, screen_h - 100))
+        self.geometry(f"{initial_w}x{initial_h}")
+        self.minsize(800, 560)
         self.configure(bg="#0B1018")
 
         # ----- state -------------------------------------------------------
@@ -92,6 +96,9 @@ class Editor(tk.Tk):
         # Slider edits are live during a gesture, but form one undo step.
         self._parameter_drag_key: str | None = None
         self._parameter_drag_changed = False
+        # Live references allow the slider geometry to follow the workspace
+        # width without replacing widgets or changing their MIDI/model path.
+        self._parameter_scales: list[tk.Scale] = []
 
         self.vars: dict[str, tk.IntVar] = {}
         self.value_vars: dict[str, tk.StringVar] = {}
@@ -351,14 +358,14 @@ class Editor(tk.Tk):
         self.controls = ttk.Frame(canvas, style="TFrame")
         self.canvas_window = canvas.create_window((0, 0), window=self.controls, anchor="nw")
         self.controls.bind("<Configure>", lambda _e: canvas.configure(scrollregion=canvas.bbox("all")))
-        # P1.26 polish: the workspace fills the visible width when the window
-        # is wide enough, and keeps a readable minimum (horizontal scroll)
-        # when it is not — no stretched-out empty gutters on resize.
-        self._controls_min_width = 1000
+        # Responsive workspace: controls follow the actual viewport width.
+        # Vertical overflow scrolls; horizontal overflow is not forced by a
+        # hard-coded minimum width.
         canvas.bind("<Configure>", self._on_synth_resize)
         for col in range(4):
-            self.controls.grid_columnconfigure(col, weight=1)
-            self.controls.grid_rowconfigure(col, weight=1)
+            self.controls.grid_columnconfigure(col, weight=1, uniform="synth-col")
+        for row in range(5):
+            self.controls.grid_rowconfigure(row, weight=0)
 
         self.section_labels: dict[str, tk.Label] = {}
         self.reset_buttons: dict[str, tuple[tk.Button, tk.Label]] = {}
@@ -466,10 +473,26 @@ class Editor(tk.Tk):
         a readable minimum width (the canvas scrolls horizontally instead of
         squashing rows or leaving stretched dead gutters).
         """
-        width = max(event.width, getattr(self, "_controls_min_width", 1000))
+        width = max(1, event.width)
         self.canvas.itemconfigure(self.canvas_window, width=width)
-        # Horizontal scroll region follows the same rule as the vertical one.
-        self.canvas.configure(xscrollincrement=0)
+
+        # Preserve readable labels while reclaiming room for controls on a
+        # narrow window. Slider values, callbacks and model bindings are kept.
+        compact = width < 1120
+        label_width = 16 if compact else 22
+        for label in getattr(self, "section_labels", {}).values():
+            try:
+                if int(label.cget("width")) in (16, 22):
+                    label.configure(width=label_width)
+            except (tk.TclError, ValueError):
+                pass
+
+        slider_length = max(105, min(190, width // 8))
+        for scale in getattr(self, "_parameter_scales", ()):
+            try:
+                scale.configure(length=slider_length)
+            except tk.TclError:
+                pass
 
     def _build_wave_tile_row(self, parent, key: str, caption: str) -> None:
         """Per-OSC waveform preview tile (reuses the existing WaveTile)."""
@@ -749,6 +772,7 @@ class Editor(tk.Tk):
                              sliderrelief="flat", length=185,
                              command=lambda _v, key=spec.key: self._scale_changed(key))
             scale.pack(side="left", fill="x", expand=True, padx=5)
+            self._parameter_scales.append(scale)
             scale.bind("<ButtonPress-1>",
                        lambda _e, key=spec.key: self._begin_parameter_drag(key))
             scale.bind("<ButtonRelease-1>",
@@ -790,6 +814,7 @@ class Editor(tk.Tk):
             sliderrelief="flat", length=118, width=14,
             command=lambda _v, key=spec.key: self._scale_changed(key))
         scale.pack(anchor="center", fill="y", expand=True)
+        self._parameter_scales.append(scale)
         scale.bind("<ButtonPress-1>",
                    lambda _e, key=spec.key: self._begin_parameter_drag(key))
         scale.bind("<ButtonRelease-1>",
