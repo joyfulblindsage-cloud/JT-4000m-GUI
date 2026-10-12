@@ -15,8 +15,9 @@ Requirements: Windows 10/11 and Python 3.10 or newer. Open PowerShell in
 ```
 
 The script creates a local `.venv`, installs the package plus build/test tools,
-runs the focused gesture and knob-integration tests, and builds the application. Use
-`-FullTests` to run the entire legacy suite as well (it currently has unrelated
+runs the pure gesture-step tests, and builds the application. Use `-GuiTests` to
+also run the Tkinter knob integration tests (requires a working Tcl/Tk install),
+or `-FullTests` to run the entire legacy suite (which currently has unrelated
 GUI/Windows failures). To skip tests deliberately:
 
 ```powershell
