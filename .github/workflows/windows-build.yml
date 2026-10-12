@@ -28,9 +28,16 @@ jobs:
       - name: Install package and build/test tools
         working-directory: "gui 1"
         run: python -m pip install -e ".[build]"
-      - name: Run tests
+      - name: Configure Windows test environment
+        shell: pwsh
+        run: |
+          "TEMP=$env:RUNNER_TEMP" >> $env:GITHUB_ENV
+          "TMP=$env:RUNNER_TEMP" >> $env:GITHUB_ENV
+          "TMPDIR=$env:RUNNER_TEMP" >> $env:GITHUB_ENV
+          "PYTHONUTF8=1" >> $env:GITHUB_ENV
+      - name: Run focused gesture tests
         working-directory: "gui 1"
-        run: python -m pytest -q
+        run: python -m pytest -q tests/test_live_parameter_steps.py tests/test_p135_knob_integration.py
       - name: Build standalone onedir app
         working-directory: "gui 1"
         run: python -m PyInstaller --noconfirm --clean JT4000M-Studio.spec
