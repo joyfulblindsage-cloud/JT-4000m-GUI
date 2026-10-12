@@ -11,6 +11,7 @@ dependencies = []
 
 [project.optional-dependencies]
 midi = ["python-rtmidi>=1.5"]
+build = ["pyinstaller>=6", "pytest>=8"]
 
 [project.scripts]
 jt4000m = "jt4000m.cli:main"

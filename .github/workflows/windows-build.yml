@@ -1,0 +1,74 @@
+name: JT-4000M Studio Windows build
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "gui 1/**"
+      - ".github/workflows/windows-build.yml"
+  push:
+    branches: [main]
+    paths:
+      - "gui 1/**"
+      - ".github/workflows/windows-build.yml"
+  workflow_dispatch:
+
+jobs:
+  gui-integration-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Tk test prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb python3-tk tk-dev
+      - name: Install package and test tools
+        working-directory: "gui 1"
+        run: python -m pip install -e ".[build]"
+      - name: Run knob integration tests with a virtual display
+        working-directory: "gui 1"
+        run: xvfb-run -a python -m pytest -q tests/test_live_parameter_steps.py tests/test_p135_knob_integration.py
+
+  test-and-build:
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: "gui 1/pyproject.toml"
+      - name: Install package and build/test tools
+        working-directory: "gui 1"
+        run: python -m pip install -e ".[build]"
+      - name: Configure Windows test environment
+        shell: pwsh
+        run: |
+          "TEMP=$env:RUNNER_TEMP" >> $env:GITHUB_ENV
+          "TMP=$env:RUNNER_TEMP" >> $env:GITHUB_ENV
+          "TMPDIR=$env:RUNNER_TEMP" >> $env:GITHUB_ENV
+          "PYTHONUTF8=1" >> $env:GITHUB_ENV
+      - name: Run focused gesture tests
+        working-directory: "gui 1"
+        run: python -m pytest -q tests/test_live_parameter_steps.py
+      - name: Build standalone onedir app
+        working-directory: "gui 1"
+        run: python -m PyInstaller --noconfirm --clean JT4000M-Studio.spec
+      - name: Verify executable exists
+        shell: pwsh
+        run: |
+          $exe = "gui 1/dist/JT4000M-Studio/JT4000M-Studio.exe"
+          if (-not (Test-Path $exe)) { throw "Missing packaged executable: $exe" }
+      - name: Upload standalone build
+        uses: actions/upload-artifact@v4
+        with:
+          name: JT4000M-Studio-Windows
+          path: "gui 1/dist/JT4000M-Studio/"
+          if-no-files-found: error

@@ -27,6 +27,7 @@ from tkinter import filedialog, messagebox, ttk
 from .analyzer import cross_bank
 from .diff import format_change, semantic_diff
 from .editor_model import EditorHistory, EditorModel
+from .gesture_steps import intermediate_raw_values
 from .model import BY_KEY, PARAMETERS, display_value, enum_options
 from .patch import Bank, JTProgram, program_to_single
 from .syx import SysExFile, field_name, parse as parse_sysex, parse_file, semantic_value
@@ -2112,7 +2113,8 @@ class Editor(tk.Tk):
             return
 
         raw = int(self.vars[key].get())
-        if self.editor.get_patch(self.selected_index).get_raw(key) == raw:
+        previous_raw = self.editor.get_patch(self.selected_index).get_raw(key)
+        if previous_raw == raw:
             return
 
         first_change = not self._parameter_drag_changed
@@ -2122,6 +2124,9 @@ class Editor(tk.Tk):
         try:
             if not self.editor.loaded:
                 raise RuntimeError("No bank loaded.")
+            # The model stores the latest value once per Tk event. MIDI TX
+            # below fills in every intermediate raw value, so fast pointer
+            # movement cannot skip CC values on either a knob or a slider.
             self.editor.set_slot_parameter(self.selected_index, key, raw)
         except Exception as exc:
             if first_change:
@@ -2137,7 +2142,10 @@ class Editor(tk.Tk):
         self._refresh_visualizations()
         self.status_var.set(f"P{self.selected_index:02d}  "
                             f"{_synth_label(spec)} = {display_value(key, raw)}")
-        self._midi_tx(key, raw)
+        # This path is shared by the custom Knob and all tk.Scale controls.
+        # Send each intermediate CC in order, including the final target.
+        for midi_raw in intermediate_raw_values(previous_raw, raw):
+            self._midi_tx(key, midi_raw)
 
     def _end_parameter_drag(self, key: str) -> None:
         """Finish a slider gesture and refresh the full GUI projection once."""

@@ -164,3 +164,18 @@ implemented, but successful API transmission does not prove that the synth
 applied a parameter. Verify behavior with the physical JT-4000M before relying
 on hardware writes or preset-transfer workflows. No preset-bank transfer is
 performed automatically.
+
+
+## JT-4000M Studio — standalone Windows app
+
+A reproducible Windows `onedir` build is documented in [BUILD_WINDOWS.md](BUILD_WINDOWS.md).
+From PowerShell in this directory, run:
+
+```powershell
+.\build_windows.ps1
+```
+
+The script runs tests before packaging and creates
+`dist/JT4000M-Studio/JT4000M-Studio.exe`. Copy the complete output folder to
+another Windows computer. A Windows CI workflow also builds and uploads the
+same artifact for pull requests that touch this project.
