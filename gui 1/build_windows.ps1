@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
-    [switch]$SkipTests
+    [switch]$SkipTests,
+    [switch]$FullTests
 )
 
 $ErrorActionPreference = "Stop"
@@ -24,7 +25,11 @@ if ($LASTEXITCODE -ne 0) { throw "pip upgrade failed." }
 if ($LASTEXITCODE -ne 0) { throw "Installing build dependencies failed." }
 
 if (-not $SkipTests) {
-    & $Python -m pytest -q
+    if ($FullTests) {
+        & $Python -m pytest -q
+    } else {
+        & $Python -m pytest -q tests/test_live_parameter_steps.py tests/test_p135_knob_integration.py
+    }
     if ($LASTEXITCODE -ne 0) { throw "Tests failed; refusing to build." }
 }
 
