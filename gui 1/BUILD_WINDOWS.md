@@ -15,7 +15,9 @@ Requirements: Windows 10/11 and Python 3.10 or newer. Open PowerShell in
 ```
 
 The script creates a local `.venv`, installs the package plus build/test tools,
-runs the test suite, and builds the application. To skip tests deliberately:
+runs the focused gesture and knob-integration tests, and builds the application. Use
+`-FullTests` to run the entire legacy suite as well (it currently has unrelated
+GUI/Windows failures). To skip tests deliberately:
 
 ```powershell
 .\build_windows.ps1 -SkipTests
