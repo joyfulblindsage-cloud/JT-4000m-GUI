@@ -111,10 +111,13 @@ def test_knob_gesture_transmits_cc_through_existing_bridge(loaded,
     assert cc == 29                                  # mapping NOT changed
 
     knob = loaded._knobs["osc_balance"]
+    previous = loaded.editor.get_patch(1).get_raw("osc_balance")
     _drag_gesture(knob, steps=1)                    # one moved value
 
     raw = loaded.editor.get_patch(1).get_raw("osc_balance")
-    assert fake_backend.tx_log == [bytes([0xB0, cc, raw])]
+    expected = [bytes([0xB0, cc, value])
+                for value in range(previous + 1, raw + 1)]
+    assert fake_backend.tx_log == expected
     # No-op guard: dragging back to the current value sends nothing extra.
     n = len(fake_backend.tx_log)
     knob._press(_FakeEvent(x_root=50, y_root=50))
