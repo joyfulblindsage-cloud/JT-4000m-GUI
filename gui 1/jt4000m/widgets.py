@@ -48,6 +48,15 @@ class Knob(tk.Canvas):
     on_change      : callable(int) — fired when the user commits a new value
     on_reset       : callable()    — double-click (reset gesture); optional
     default_raw    : int           — reset target (registry default)
+    on_gesture_start: callable()   — P1.35: fired once at the beginning of a
+                             continuous user gesture (mouse press).  The GUI
+                             opens one undo session there, exactly like the
+                             ButtonPress binding of a tk.Scale.
+    on_gesture_end  : callable()   — P1.35: fired once when the gesture ends
+                             (mouse release); the GUI closes the undo session.
+                             Wheel/arrow/Home-End edits are discrete and never
+                             open a gesture (they keep the ordinary one-step
+                             path, mirroring Scale keyboard behavior).
     """
 
     STEP_COARSE = 4          # wheel / arrow step, in normalized units
@@ -55,7 +64,8 @@ class Knob(tk.Canvas):
 
     def __init__(self, parent, *, label: str, minimum: int = 0, maximum: int = 127,
                  diameter: int = 58, on_change=None, on_reset=None,
-                 default_raw: int = 0, show_entry: bool = True) -> None:
+                 default_raw: int = 0, show_entry: bool = True,
+                 on_gesture_start=None, on_gesture_end=None) -> None:
         height = diameter + 34 if not show_entry else diameter + 52
         super().__init__(parent, width=diameter + 8, height=height, bg=BG,
                          highlightthickness=0, bd=0)
@@ -64,6 +74,8 @@ class Knob(tk.Canvas):
         self.maximum = max(minimum + 1, maximum)
         self.on_change = on_change
         self.on_reset = on_reset
+        self.on_gesture_start = on_gesture_start
+        self.on_gesture_end = on_gesture_end
         self.default_raw = default_raw
         self._d = diameter
         self._cx = (diameter + 8) / 2
@@ -71,6 +83,7 @@ class Knob(tk.Canvas):
         self._r = diameter / 2 - 6
         self._norm = 0.0            # last painted position
         self._drag_last: tuple[int, int] | None = None
+        self._gesture_active = False    # P1.35: continuous drag session flag
         self._focused = False
         self._hover = False
 
@@ -139,16 +152,27 @@ class Knob(tk.Canvas):
     def _press(self, event) -> str:
         self.focus_set()
         self._drag_last = (event.x_root, event.y_root)
+        # P1.35: open one continuous undo session per mouse gesture, exactly
+        # like the ButtonPress binding of a tk.Scale in gui.py.
+        if not self._gesture_active:
+            self._gesture_active = True
+            if self.on_gesture_start is not None:
+                self.on_gesture_start()
         return "break"
 
     def _release(self, _event) -> None:
         self._drag_last = None
+        # P1.35: close the undo session on release (fires once per gesture).
+        if self._gesture_active:
+            self._gesture_active = False
+            if self.on_gesture_end is not None:
+                self.on_gesture_end()
 
     def _drag(self, event) -> str:
         if self._drag_last is None:
             return "break"
-        dx = event.y_root - self._drag_last[1]
-        dy = self._drag_last[0] - event.x_root
+        dx = event.x_root - self._drag_last[0]
+        dy = self._drag_last[1] - event.y_root
         delta = max(dx, dy) if (abs(dx) >= abs(dy)) else (dx + dy) / 2.0
         fine = bool(event.state & 0x0001)          # Shift held
         step = 0.004 if fine else 0.012
