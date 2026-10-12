@@ -52,6 +52,21 @@ def _synth_label(spec) -> str:
     """Musical label for the SYNTH workspace (registry stays untouched)."""
     return SYNTH_LABEL_OVERRIDES.get(spec.key, spec.label)
 
+def _intermediate_raw_values(previous: int, current: int):
+    """Yield every integer value after previous through current.
+
+    Continuous UI gestures can jump several raw values between Tk events.
+    Emitting the intervening values ensures the MIDI device sees a smooth
+    sequence rather than only the endpoints. This helper is shared by the
+    custom rotary knob and every tk.Scale through _scale_changed.
+    """
+    if current > previous:
+        return range(previous + 1, current + 1)
+    if current < previous:
+        return range(previous - 1, current - 1, -1)
+    return ()
+
+
 # Offset 0x2C changes together with Ring Mod on/off in existing banks.
 # Correlation only — NOT a confirmed parameter. Needs hardware verification.
 RING_MOD_CANDIDATE_OFFSET = 0x2C
@@ -2112,7 +2127,8 @@ class Editor(tk.Tk):
             return
 
         raw = int(self.vars[key].get())
-        if self.editor.get_patch(self.selected_index).get_raw(key) == raw:
+        previous_raw = self.editor.get_patch(self.selected_index).get_raw(key)
+        if previous_raw == raw:
             return
 
         first_change = not self._parameter_drag_changed
@@ -2122,6 +2138,9 @@ class Editor(tk.Tk):
         try:
             if not self.editor.loaded:
                 raise RuntimeError("No bank loaded.")
+            # The model stores the latest value once per Tk event. MIDI TX
+            # below fills in every intermediate raw value, so fast pointer
+            # movement cannot skip CC values on either a knob or a slider.
             self.editor.set_slot_parameter(self.selected_index, key, raw)
         except Exception as exc:
             if first_change:
@@ -2137,7 +2156,10 @@ class Editor(tk.Tk):
         self._refresh_visualizations()
         self.status_var.set(f"P{self.selected_index:02d}  "
                             f"{_synth_label(spec)} = {display_value(key, raw)}")
-        self._midi_tx(key, raw)
+        # This path is shared by the custom Knob and all tk.Scale controls.
+        # Send each intermediate CC in order, including the final target.
+        for midi_raw in _intermediate_raw_values(previous_raw, raw):
+            self._midi_tx(key, midi_raw)
 
     def _end_parameter_drag(self, key: str) -> None:
         """Finish a slider gesture and refresh the full GUI projection once."""
