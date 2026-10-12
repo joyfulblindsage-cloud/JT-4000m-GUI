@@ -31,7 +31,7 @@ from .model import BY_KEY, PARAMETERS, display_value, enum_options
 from .patch import Bank, JTProgram, program_to_single
 from .syx import SysExFile, field_name, parse as parse_sysex, parse_file, semantic_value
 from .waveforms import WaveTile
-from .widgets import EnvelopeView, FilterView
+from .widgets import EnvelopeView, FilterView, Knob
 
 # Sections rendered inside the SYNTH workspace, in musical order.
 SYNTH_SECTION_ORDER = ["OSCILLATORS", "FILTER", "VCF ENVELOPE",
@@ -99,6 +99,8 @@ class Editor(tk.Tk):
         # Live references allow the slider geometry to follow the workspace
         # width without replacing widgets or changing their MIDI/model path.
         self._parameter_scales: list[tk.Scale] = []
+        # P1.35: custom rotary knobs (live refs for the model->widget sync).
+        self._knobs: dict[str, "Knob"] = {}
 
         self.vars: dict[str, tk.IntVar] = {}
         self.value_vars: dict[str, tk.StringVar] = {}
@@ -393,8 +395,13 @@ class Editor(tk.Tk):
         mix_rows.pack(fill="x")
         mix_rows.grid_columnconfigure(0, weight=1)
         mix_rows.grid_columnconfigure(1, weight=1)
-        for i, key in enumerate(("osc_balance", "ring_mod_toggle")):
-            self._parameter_row(mix_rows, specs[key], grid=True, row=0, col=i)
+        # P1.35: OSC Balance is the first control driven by the custom rotary
+        # Knob widget instead of a tk.Scale.  The knob reuses the EXACT same
+        # path as every other continuous parameter: shared IntVar/StringVar,
+        # _begin/_scale_changed/_end drag session (one undo snapshot per
+        # gesture), EditorModel.set_slot_parameter and MidiSyncBridge TX.
+        self._knob_row(mix_rows, specs["osc_balance"], row=0, col=0)
+        self._parameter_row(mix_rows, specs["ring_mod_toggle"], grid=True, row=0, col=1)
         self._parameter_row(mix_rows, specs["ring_mod_amount"], grid=True, row=1, col=0)
 
         # ---- FILTER (response graph right next to cutoff/resonance) ------
@@ -785,6 +792,56 @@ class Editor(tk.Tk):
                           command=lambda key=spec.key: self.reset_one(key))
         reset.pack(side="right", padx=(2, 0))
         self.reset_buttons[spec.key] = (reset, val_lbl)
+
+    def _knob_row(self, parent, spec, *, row: int = 0, col: int = 0) -> None:
+        """P1.35 — one parameter line driven by the custom rotary Knob.
+
+        Presentation-only alternative to ``_parameter_row`` (same contract as
+        ``_parameter_column`` for ADSR): it registers the SAME shared
+        IntVar/StringVar pair and reuses the EXISTING drag-session semantics
+        (_begin_parameter_drag / _scale_changed / _end_parameter_drag), so
+        model mutation, MIDI CC TX (via EditorModel + MidiSyncBridge) and the
+        single-undo-snapshot-per-gesture rule come for free.  No second
+        parameter system is introduced; range/limits stay registry-driven.
+        """
+        line = tk.Frame(parent, bg="#131D2B", padx=2, pady=2)
+        line.grid(row=row, column=col, sticky="ew", padx=(0, 10), pady=3)
+        label = tk.Label(line, text=_row_label(spec, self.developer_var.get()),
+                         bg="#131D2B", fg="#A8BDD3", width=22, anchor="w")
+        label.pack(side="left")
+        self.section_labels[spec.key] = label
+
+        var = tk.IntVar(value=spec.default)
+        self.vars[spec.key] = var
+        value = tk.StringVar(value=self._formatted(spec.key, spec.default))
+        self.value_vars[spec.key] = value
+
+        knob = Knob(line, label=_synth_label(spec), minimum=spec.minimum,
+                    maximum=spec.maximum, default_raw=spec.default, diameter=54,
+                    show_entry=False,
+                    on_gesture_start=lambda key=spec.key: self._begin_parameter_drag(key),
+                    on_gesture_end=lambda key=spec.key: self._end_parameter_drag(key),
+                    on_change=lambda raw, key=spec.key: self._knob_changed(key, raw),
+                    on_reset=lambda key=spec.key: self.reset_one(key))
+        knob.pack(side="left", padx=5)
+        self._knobs[spec.key] = knob
+        knob.set_value(spec.default, self._formatted(spec.key, spec.default))
+
+        val_lbl = tk.Label(line, textvariable=value, bg="#131D2B", fg="#F3F7FF",
+                           width=11, anchor="e")
+        val_lbl.pack(side="right", padx=(4, 0))
+        reset = tk.Button(line, text="↺", width=2, relief="flat", bg="#131D2B",
+                          fg="#8CA2BA", highlightthickness=0, bd=0,
+                          command=lambda key=spec.key: self.reset_one(key))
+        reset.pack(side="right", padx=(2, 0))
+        self.reset_buttons[spec.key] = (reset, val_lbl)
+
+    def _knob_changed(self, key: str, raw: int) -> None:
+        """Knob gesture delta -> the existing Scale-command path verbatim."""
+        if self._syncing or not isinstance(raw, int):
+            return          # label-entry strings ("__label__:...") are unused here
+        self.vars[key].set(int(raw))
+        self._scale_changed(key)
 
     def _parameter_column(self, parent, spec, *, col: int) -> None:
         """Compact vertical ADSR control: name, slider, live value and reset.
@@ -1888,6 +1945,13 @@ class Editor(tk.Tk):
         self.name_entry.configure(state="normal" if enabled else "disabled")
         self.apply_name_btn.configure(state="normal" if enabled else "disabled")
         self._syncing = False
+        # P1.35: the knob paints its pointer from a pushed value, so refresh
+        # it once per model projection update (set_value never fires the
+        # on_change callback — no echo loop is possible).
+        for key, knob in self._knobs.items():
+            if key in self.vars:
+                knob.set_value(int(self.vars[key].get()),
+                               self.value_vars[key].get())
         self._refresh_wave_tiles()
         self._refresh_visualizations()
 
