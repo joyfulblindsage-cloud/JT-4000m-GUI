@@ -475,8 +475,16 @@ class Editor(tk.Tk):
 
         # ---- MODULATION / PORTAMENTO (bottom) -----------------------------
         _, mod = self._synth_box(self.controls, "MODULATION / PORTAMENTO", 4, 2, columnspan=2)
-        for key in ("portamento_mode", "portamento_amount"):
-            self._parameter_row(mod, specs[key])
+        # The current evidence confirms Portamento Time CC 5, but does NOT
+        # establish an ON value for the SysEx byte called Portamento Mode.
+        # Do not present a one-item OFF dropdown as if it were a working
+        # enable switch; the live CC 5 control below is the actionable path.
+        tk.Label(
+            mod,
+            text="Portamento ON/OFF mapping unverified — use Portamento Time below",
+            bg="#131D2B", fg="#8CA2BA", anchor="w", justify="left",
+        ).pack(fill="x", pady=(2, 4))
+        self._parameter_row(mod, specs["portamento_amount"])
         # CC-only parameters: real MIDI CC numbers are documented externally,
         # but their SysEx offsets are not yet established.  On SYNTH they use
         # musical names (no "CC ONLY" wording); mapping/registry untouched.
