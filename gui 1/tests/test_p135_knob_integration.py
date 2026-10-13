@@ -128,6 +128,32 @@ def test_knob_gesture_transmits_cc_through_existing_bridge(loaded,
 
 # -------------------------------------------------------- 3b. full rotation
 @gui_test
+def test_portamento_time_is_live_cc5_and_does_not_mutate_patch(
+        loaded, fake_transport, fake_backend):
+    loaded.connect_midi(fake_transport, channel=1)
+    assert "portamento_time" in loaded._midi_only_scales
+    before = loaded.editor.bank.to_sysex()
+
+    loaded._midi_only_changed("portamento_time", 100)
+
+    assert fake_backend.tx_log == [bytes([0xB0, 5, 100])]
+    assert loaded.editor.bank.to_sysex() == before
+    assert "live CC only" in loaded.status_var.get()
+
+
+@gui_test
+def test_modulation_is_live_cc1_and_does_not_mutate_patch(
+        loaded, fake_transport, fake_backend):
+    loaded.connect_midi(fake_transport, channel=1)
+    before = loaded.editor.bank.to_sysex()
+
+    loaded._midi_only_changed("modulation", 73)
+
+    assert fake_backend.tx_log == [bytes([0xB0, 1, 73])]
+    assert loaded.editor.bank.to_sysex() == before
+
+
+@gui_test
 def test_knob_range_uses_240_degree_arc_with_minimum_at_bottom(loaded):
     knob = loaded._knobs["osc_balance"]
     cx, cy, radius = knob._cx, knob._cy, knob._r - 1
