@@ -115,9 +115,9 @@ def test_knob_gesture_transmits_cc_through_existing_bridge(loaded,
     _drag_gesture(knob, steps=1)                    # one moved value
 
     raw = loaded.editor.get_patch(1).get_raw("osc_balance")
-    expected = [bytes([0xB0, cc, value])
-                for value in range(previous + 1, raw + 1)]
-    assert fake_backend.tx_log == expected
+    # One fast pointer gesture is coalesced to its latest value, not every
+    # skipped integer between pointer events. Release always flushes final CC.
+    assert fake_backend.tx_log == [bytes([0xB0, cc, raw])]
     # No-op guard: dragging back to the current value sends nothing extra.
     n = len(fake_backend.tx_log)
     knob._press(_FakeEvent(x_root=50, y_root=50))
@@ -128,13 +128,23 @@ def test_knob_gesture_transmits_cc_through_existing_bridge(loaded,
 
 # -------------------------------------------------------- 3b. full rotation
 @gui_test
-def test_knob_full_range_completes_a_360_degree_arc(loaded):
+def test_knob_range_uses_240_degree_arc_with_minimum_at_bottom(loaded):
     knob = loaded._knobs["osc_balance"]
+    cx, cy, radius = knob._cx, knob._cy, knob._r - 1
+
+    knob.set_value(knob.minimum)
+    coords_min = knob.coords(knob._arc_item)
+    assert len(coords_min) == 6  # two-point minimum arc (start and end coincide)
+
+    # At the minimum, the arc starts at 6 o'clock.
+    assert coords_min[1] == pytest.approx(cy + radius, abs=0.1)
+
     knob.set_value(knob.maximum)
-    coords = knob.coords(knob._arc_item)
-    assert len(coords) > 170                 # full 360-degree polyline
-    assert ((coords[0] - coords[-2]) ** 2
-            + (coords[1] - coords[-1]) ** 2) ** 0.5 < 1.0
+    coords_max = knob.coords(knob._arc_item)
+    assert 90 <= len(coords_max) <= 102  # ~240° at 5° per segment
+    # Maximum ends at 30°: upper-right, not a full revolution back to start.
+    assert coords_max[-2] > cx
+    assert coords_max[-1] < cy
 
 
 @gui_test
