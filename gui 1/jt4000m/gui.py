@@ -1147,6 +1147,23 @@ class Editor(tk.Tk):
         if update is None:
             return                        # other channels / unknown CCs ignored
         spec = BY_KEY[update.key]
+        if update.key in self._midi_only_vars:
+            # CC 1 / CC 5 have no confirmed SysEx byte offsets, so they must
+            # update their live-only controls without entering EditorModel.
+            # Calling apply_update here would try to read a nonexistent patch
+            # field; echoing the packet would also create a MIDI feedback loop.
+            self._midi_only_values[update.key] = update.value
+            self._midi_only_vars[update.key].set(update.value)
+            self._midi_only_value_vars[update.key].set(str(update.value))
+            self.status_var.set(
+                f"{_synth_label(spec)} = {update.value} (received live CC only)")
+            self.midi_events.append({
+                "direction": "rx", "key": update.key,
+                "channel": update.channel, "cc": spec.cc,
+                "value": update.value, "mutated": False,
+                "message": "live-only CC; patch unchanged",
+            })
+            return
         self._rx_applying = True          # feedback-loop guard for this mutation
         try:
             mutated = bridge.apply_update(self.editor, update)
