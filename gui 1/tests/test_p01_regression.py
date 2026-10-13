@@ -521,16 +521,20 @@ def test_gui_rejects_unconfirmed_enum_value_from_model(editor):
 
 
 @pytest.mark.skipif(not _HAS_DISPLAY, reason="no display available")
-def test_gui_unknown_raw_value_shows_placeholder_not_wrong_option(editor):
-    # P1.15 follow-up: setup goes through the PUBLIC EditorModel API only
-    # (no `editor.bank = ...` injection).  osc1_wave is a continuous-range
-    # registry parameter, so raw value 9 (outside the confirmed waveform
-    # enum table) CAN be set via the model; the GUI must then render the
-    # "Unknown (0xNN)" placeholder instead of snapping to a wrong option.
-    editor.load_path(FIX / "ALL EMPTY.syx")
-    editor.editor.set_slot_parameter(1, "osc1_wave", 9)   # public API
-    editor._after_mutation()                                # model -> GUI projection
-    editor.select_program(1)  # must not raise on out-of-table raw value
+def test_gui_unknown_raw_value_shows_placeholder_not_wrong_option(editor, tmp_path):
+    # Unknown enum bytes may exist in a received/loaded bank, but the editor
+    # must not let the user introduce an unconfirmed enum value through the
+    # public mutation API. Build a valid fixture bank with one unknown raw
+    # value so this test covers the read/display path without bypassing safety.
+    raw = bytearray((FIX / "ALL EMPTY.syx").read_bytes())
+    assert len(raw) == 2058  # 8-byte header + 32 * 64 + checksum + F7
+    raw[8] = 9  # OSC1 waveform byte in program 1: deliberately unknown
+    raw[2056] = (-sum(raw[8:2056])) & 0x7F
+    unknown_bank = tmp_path / "unknown-wave.syx"
+    unknown_bank.write_bytes(raw)
+
+    editor.load_path(unknown_bank)
+    editor.select_program(1)
     assert editor.combo_osc1_wave.get() == "Unknown (0x09)"
     assert editor.value_vars["osc1_wave"].get() == "Unknown (0x09)"
 
