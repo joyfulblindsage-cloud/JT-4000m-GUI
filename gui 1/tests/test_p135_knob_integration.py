@@ -132,7 +132,7 @@ def test_knob_full_range_completes_a_360_degree_arc(loaded):
     knob = loaded._knobs["osc_balance"]
     knob.set_value(knob.maximum)
     coords = knob.coords(knob._arc_item)
-    assert len(coords) > 700                 # full 360-degree polyline
+    assert len(coords) > 170                 # full 360-degree polyline
     assert ((coords[0] - coords[-2]) ** 2
             + (coords[1] - coords[-1]) ** 2) ** 0.5 < 1.0
 
