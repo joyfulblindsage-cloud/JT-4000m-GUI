@@ -520,13 +520,15 @@ class Editor(tk.Tk):
         self._osc_tiles[key] = tile
 
     def _env_drag(self, prefix: str, seg_key: str, norm: float) -> None:
-        """Preview one ADSR segment and collect only the segment being edited."""
+        """Edit an ADSR segment live through the same model/MIDI path as sliders."""
         param_key = f"{prefix}_{seg_key}"
         if (param_key not in BY_KEY or param_key not in self.vars
                 or self.bank is None or self.selected_index is None):
             return
-        self.vars[param_key].set(int(round(norm * 127)))
-        self._value_preview(param_key)
+        raw = max(0, min(127, int(round(norm * 127))))
+        previous_raw = self.editor.get_patch(self.selected_index).get_raw(param_key)
+        if raw == previous_raw:
+            return
         if not self._dragging_env:
             try:
                 self._history.push()
@@ -534,46 +536,39 @@ class Editor(tk.Tk):
                 self._dragging_env_keys.clear()
                 raise
             self._dragging_env = True
-        self._dragging_env_keys.add(param_key)
-
-    def _bind_env_release(self, view) -> None:
-        """Commit the edited ADSR segment(s) together as one undoable gesture."""
-        view.bind("<ButtonRelease-1>", self._env_release, add="+")
-
-    def _env_release(self, _event=None) -> None:
-        """Apply only touched ADSR parameters, in one model-sync transaction.
-
-        Applying every ADSR field used to reset the edited variable when an
-        earlier, unchanged field triggered _sync_widgets_from_model(). That
-        made graph edits appear to do nothing unless the first field changed.
-        """
-        if not self._dragging_env:
-            return
-        keys = list(self._dragging_env_keys)
-        self._dragging_env = False
-        self._dragging_env_keys.clear()
-        if not keys or self.bank is None or self.selected_index is None:
-            return
-
-        changed: list[tuple[str, int]] = []
         try:
-            for key in keys:
-                raw = int(self.vars[key].get())
-                if self.editor.get_patch(self.selected_index).get_raw(key) == raw:
-                    continue
-                self.editor.set_slot_parameter(self.selected_index, key, raw)
-                changed.append((key, raw))
+            self.editor.set_slot_parameter(self.selected_index, param_key, raw)
         except Exception as exc:
             self._history.undo()
+            self._dragging_env = False
+            self._dragging_env_keys.clear()
             self._after_mutation()
             messagebox.showerror("Envelope", str(exc))
             return
+        self._dragging_env_keys.add(param_key)
+        self.bank = self.editor.bank
+        self.vars[param_key].set(raw)
+        self._value_preview(param_key)
+        # Only repaint the envelope currently being manipulated.
+        self._refresh_visualizations(changed_key=param_key)
+        self.status_var.set(
+            f"P{self.selected_index:02d}  {_synth_label(BY_KEY[param_key])} = {display_value(param_key, raw)}")
+        for midi_raw in intermediate_raw_values(previous_raw, raw):
+            self._midi_tx(param_key, midi_raw)
 
-        if not changed:
+    def _bind_env_release(self, view) -> None:
+        """Close the live ADSR gesture as one undoable action."""
+        view.bind("<ButtonRelease-1>", self._env_release, add="+")
+
+    def _env_release(self, _event=None) -> None:
+        """Close the ADSR gesture and refresh the full GUI projection once."""
+        if not self._dragging_env:
             return
-        self._after_mutation()
-        for key, raw in changed:
-            self._midi_tx(key, raw)
+        changed = bool(self._dragging_env_keys)
+        self._dragging_env = False
+        self._dragging_env_keys.clear()
+        if changed:
+            self._after_mutation()
     # ---------------------------------------------------- P1.26: PRESETS tab
     def _build_presets_tab(self, frame) -> None:
         body = ttk.Panedwindow(frame, orient="horizontal")
