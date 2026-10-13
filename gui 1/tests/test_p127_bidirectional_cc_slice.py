@@ -207,14 +207,17 @@ def test_gui_projects_rx_continuous_and_enum_updates_without_echo():
         assert app.editor.get_patch(1).get_raw("osc1_wave") == 2
         # ...and the GUI projects them (single source of truth, no widget state).
         assert app.vars["filter_cutoff"].get() == 42
-        # osc1/osc2 wave are edited through the animated WaveTile rows on the
-        # SYNTH tab; their projection is the tile display (registry DISPLAY).
+        # WaveTile is a preview; the registry-backed enum combo is the editor.
+        assert app.vars["osc1_wave"].get() == 2
+        assert app.combo_osc1_wave.get().upper().startswith("SQUARE")
         assert app._osc_tiles["osc1_wave"].display.upper().startswith("SQUARE")
         assert app.editor.is_dirty()
 
         # Feedback-loop protection: RX mutations produced NO outgoing traffic.
         assert backend.tx_log == []
-        assert [e["direction"] for e in app.midi_events] == ["rx", "rx"]
+        # Every packet is retained raw before its decoded event is appended.
+        assert [e["direction"] for e in app.midi_events] == [
+            "rx-raw", "rx", "rx-raw", "rx"]
     finally:
         app.destroy()
 
