@@ -350,135 +350,114 @@ class Editor(tk.Tk):
         box = tk.Frame(parent, bg="#131D2B", highlightthickness=1,
                        highlightbackground="#2A3A4F", bd=0)
         box.grid(row=row, column=col, columnspan=columnspan,
-                 sticky="nsew", padx=7, pady=7)
+                 sticky="nsew", padx=3, pady=3)
         head = tk.Frame(box, bg="#131D2B")
-        head.pack(fill="x", padx=12, pady=(10, 0))
+        head.pack(fill="x", padx=7, pady=(5, 0))
         tk.Label(head, text=title, bg="#131D2B", fg="#F3F7FF",
                  font=("TkDefaultFont", 10, "bold")).pack(side="left")
         # Full-width signal strip gives each module a consistent visual anchor.
-        tk.Frame(box, bg="#42D9FF", height=2).pack(fill="x", padx=12, pady=(7, 0))
+        tk.Frame(box, bg="#42D9FF", height=2).pack(fill="x", padx=7, pady=(4, 0))
         inner = tk.Frame(box, bg="#131D2B")
-        inner.pack(fill="both", expand=True, padx=12, pady=(8, 12))
+        inner.pack(fill="both", expand=True, padx=7, pady=(5, 6))
         return box, inner
 
     def _build_synth_tab(self, frame) -> None:
-        canvas = tk.Canvas(frame, bg="#0B1018", highlightthickness=0)
-        scrollbar = ttk.Scrollbar(frame, orient="vertical", command=canvas.yview)
-        canvas.configure(yscrollcommand=scrollbar.set)
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
-        self.canvas = canvas
-        self.controls = ttk.Frame(canvas, style="TFrame")
-        self.canvas_window = canvas.create_window((0, 0), window=self.controls, anchor="nw")
-        self.controls.bind("<Configure>", lambda _e: canvas.configure(scrollregion=canvas.bbox("all")))
-        # Responsive workspace: controls follow the actual viewport width.
-        # Vertical overflow scrolls; horizontal overflow is not forced by a
-        # hard-coded minimum width.
-        canvas.bind("<Configure>", self._on_synth_resize)
-        for col in range(4):
+        """Build a fixed, no-scroll synth surface following the compact layout sketch.
+
+        The SYNTH workspace is a two-row / three-column instrument panel:
+        OSC 1, OSC 2 and FILTER/VCF EG on top; VCA EG, both LFOs, and the
+        MIX/RING + MOD/PORTAMENTO stack below.  Preset and engineering views
+        stay in their own top-level tabs, so they do not consume synth space.
+        """
+        self.controls = tk.Frame(frame, bg="#0B1018")
+        self.controls.pack(fill="both", expand=True, padx=2, pady=2)
+        for col in range(3):
             self.controls.grid_columnconfigure(col, weight=1, uniform="synth-col")
-        for row in range(5):
-            self.controls.grid_rowconfigure(row, weight=0)
+        self.controls.grid_rowconfigure(0, weight=1, uniform="synth-row")
+        self.controls.grid_rowconfigure(1, weight=1, uniform="synth-row")
 
         self.section_labels: dict[str, tk.Label] = {}
         self.reset_buttons: dict[str, tuple[tk.Button, tk.Label]] = {}
 
         specs = {s.key: s for s in PARAMETERS}
-        # Phase indicator backing the animated tiles (created before WaveTiles
-        # so their animation callbacks never hit a missing attribute).
         self.wave_phase_var = tk.StringVar(value="")
 
-        # ---- OSC 1 / OSC 2 blocks (editable waveform + preview, PWM + tuning) ----
-        _, osc1 = self._synth_box(self.controls, "OSC 1", 0, 0, columnspan=2)
+        # ---- Top row: OSC 1 / OSC 2 / FILTER + VCF envelope ---------------
+        _, osc1 = self._synth_box(self.controls, "OSC 1", 0, 0)
         self._build_wave_tile_row(osc1, "osc1_wave", "OSC1 Preview")
-        self._parameter_row(osc1, specs["osc1_wave"])
         for key in ("osc1_pwm_fm", "osc1_coarse", "osc1_fine"):
             self._parameter_row(osc1, specs[key])
-        _, osc2 = self._synth_box(self.controls, "OSC 2", 0, 2, columnspan=2)
+
+        _, osc2 = self._synth_box(self.controls, "OSC 2", 0, 1)
         self._build_wave_tile_row(osc2, "osc2_wave", "OSC2 Preview")
-        self._parameter_row(osc2, specs["osc2_wave"])
         for key in ("osc2_pwm", "osc2_coarse", "osc2_fine"):
             self._parameter_row(osc2, specs[key])
 
-        # ---- MIX / RING --------------------------------------------------
-        # P1.26 polish: compact strip — the mix controls share two columns
-        # instead of a tall full-width box with dead vertical space.
-        _, mix = self._synth_box(self.controls, "MIX / RING", 1, 0, columnspan=4)
-        mix_rows = tk.Frame(mix, bg="#131D2B")
-        mix_rows.pack(fill="x")
-        mix_rows.grid_columnconfigure(0, weight=1)
-        mix_rows.grid_columnconfigure(1, weight=1)
-        # P1.35: OSC Balance is the first control driven by the custom rotary
-        # Knob widget instead of a tk.Scale.  The knob reuses the EXACT same
-        # path as every other continuous parameter: shared IntVar/StringVar,
-        # _begin/_scale_changed/_end drag session (one undo snapshot per
-        # gesture), EditorModel.set_slot_parameter and MidiSyncBridge TX.
-        self._knob_row(mix_rows, specs["osc_balance"], row=0, col=0)
-        self._parameter_row(mix_rows, specs["ring_mod_toggle"], grid=True, row=0, col=1)
-        self._parameter_row(mix_rows, specs["ring_mod_amount"], grid=True, row=1, col=0)
-
-        # ---- FILTER (response graph right next to cutoff/resonance) ------
-        _, filt = self._synth_box(self.controls, "FILTER", 2, 0, columnspan=2)
-        self.filter_view = FilterView(filt, width=230, height=72)
-        self.filter_view.pack(anchor="center", pady=(0, 8))
+        _, filt = self._synth_box(self.controls, "FILTER", 0, 2)
+        self.filter_view = FilterView(filt, width=190, height=48)
+        self.filter_view.pack(anchor="center", pady=(0, 4))
         for key in ("filter_cutoff", "filter_resonance", "filter_env_amount"):
             self._parameter_row(filt, specs[key])
 
-        # ---- VCF ENVELOPE (graph above the sliders, interactive drag) ----
-        _, vcf = self._synth_box(self.controls, "VCF ENVELOPE", 2, 2, columnspan=2)
-        self.vcf_env_view = EnvelopeView(vcf, title="VCF EG", width=230, height=72,
-                                         on_segment=lambda k, n: self._env_drag("vcf", k, n))
-        self.vcf_env_view.pack(anchor="center", pady=(0, 8))
-        # P1.26 polish: commit drags on release (existing parameter path).
+        tk.Label(filt, text="VCF ENVELOPE", bg="#131D2B", fg="#A8BDD3",
+                 font=("TkDefaultFont", 9, "bold"), anchor="w").pack(fill="x", pady=(3, 1))
+        self.vcf_env_view = EnvelopeView(
+            filt, title="VCF EG", width=190, height=48,
+            on_segment=lambda k, n: self._env_drag("vcf", k, n))
+        self.vcf_env_view.pack(anchor="center", pady=(0, 3))
         self._bind_env_release(self.vcf_env_view)
-        # P1.26 polish: filter env amount belongs to FILTER; no duplicate row
-        # here anymore (the control still exists once, in the FILTER box).
-        vcf_adsr = tk.Frame(vcf, bg="#131D2B")
+        vcf_adsr = tk.Frame(filt, bg="#131D2B")
         vcf_adsr.pack(fill="x", expand=True)
         for col, key in enumerate(("vcf_attack", "vcf_decay", "vcf_sustain", "vcf_release")):
             self._parameter_column(vcf_adsr, specs[key], col=col)
 
-        # ---- VCA ENVELOPE -------------------------------------------------
-        _, vca = self._synth_box(self.controls, "VCA ENVELOPE", 3, 0, columnspan=2)
-        self.vca_env_view = EnvelopeView(vca, title="VCA EG", width=230, height=72,
-                                         on_segment=lambda k, n: self._env_drag("vca", k, n))
-        self.vca_env_view.pack(anchor="center", pady=(0, 8))
-        # P1.26 polish: commit drags on release (existing parameter path).
+        # ---- Bottom left: VCA envelope ------------------------------------
+        _, vca = self._synth_box(self.controls, "VCA ENVELOPE", 1, 0)
+        self.vca_env_view = EnvelopeView(
+            vca, title="VCA EG", width=210, height=56,
+            on_segment=lambda k, n: self._env_drag("vca", k, n))
+        self.vca_env_view.pack(anchor="center", pady=(0, 4))
         self._bind_env_release(self.vca_env_view)
         vca_adsr = tk.Frame(vca, bg="#131D2B")
         vca_adsr.pack(fill="x", expand=True)
         for col, key in enumerate(("vca_attack", "vca_decay", "vca_sustain", "vca_release")):
             self._parameter_column(vca_adsr, specs[key], col=col)
 
-        # ---- LFO 1 / LFO 2 blocks ----------------------------------------
-        _, lfo1 = self._synth_box(self.controls, "LFO 1", 3, 2, columnspan=2)
-        self.lfo1_canvas = tk.Canvas(lfo1, width=200, height=44, bg="#0D1521",
-                                     highlightthickness=1, highlightbackground="#2A3A4F")
-        self.lfo1_canvas.pack(anchor="center", pady=(0, 6))
-        self.lfo1_tile = WaveTile(self.lfo1_canvas, lambda: None, width=200, height=44)
-        self.lfo1_tile.draw()
-        for key in ("lfo1_wave", "lfo1_destination", "lfo1_rate", "lfo1_amount"):
-            self._parameter_row(lfo1, specs[key])
-        _, lfo2 = self._synth_box(self.controls, "LFO 2", 4, 0, columnspan=2)
-        self.lfo2_canvas = tk.Canvas(lfo2, width=200, height=44, bg="#0D1521",
-                                     highlightthickness=1, highlightbackground="#2A3A4F")
-        self.lfo2_canvas.pack(anchor="center", pady=(0, 6))
-        self.lfo2_tile = WaveTile(self.lfo2_canvas, lambda: None, width=200, height=44)
-        self.lfo2_tile.draw()
-        for key in ("lfo2_wave", "lfo2_rate", "lfo2_amount"):
-            self._parameter_row(lfo2, specs[key])
-        tk.Label(
-            lfo2,
-            text="No LFO2 destination in the documented CC map (CC 56 = LFO1)",
-            bg="#131D2B", fg="#8CA2BA", anchor="w", justify="left",
-        ).pack(anchor="w", pady=(2, 0))
+        # ---- Bottom middle: compact stacked LFO 1 / LFO 2 -----------------
+        _, lfo = self._synth_box(self.controls, "LFO", 1, 1)
+        for lfo_title, keys in (
+            ("LFO 1", ("lfo1_wave", "lfo1_destination", "lfo1_rate", "lfo1_amount")),
+            ("LFO 2", ("lfo2_wave", "lfo2_rate", "lfo2_amount")),
+        ):
+            sub = tk.Frame(lfo, bg="#131D2B")
+            sub.pack(fill="x", expand=True, pady=(0, 3))
+            tk.Label(sub, text=lfo_title, bg="#131D2B", fg="#F3F7FF",
+                     font=("TkDefaultFont", 9, "bold"), anchor="w").pack(fill="x")
+            for key in keys:
+                self._parameter_row(sub, specs[key])
+            if lfo_title == "LFO 2":
+                tk.Label(
+                    sub, text="Destination not documented (CC 56 = LFO1)",
+                    bg="#131D2B", fg="#8CA2BA", anchor="w", justify="left",
+                ).pack(anchor="w", pady=(0, 1))
 
-        # ---- MODULATION / PORTAMENTO (bottom) -----------------------------
-        _, mod = self._synth_box(self.controls, "MODULATION / PORTAMENTO", 4, 2, columnspan=2)
-        # OFF is the only observed value for the SysEx Portamento Mode byte.
-        # Keep this registry parameter represented for model/UI consistency,
-        # but make its one-item control explicitly informational and disabled:
-        # an ON value has not been verified. CC 5 below controls time only.
+        # ---- Bottom right: MIX/RING above MOD/PORTAMENTO ------------------
+        right = tk.Frame(self.controls, bg="#0B1018")
+        right.grid(row=1, column=2, sticky="nsew")
+        right.grid_columnconfigure(0, weight=1)
+        right.grid_rowconfigure(0, weight=1)
+        right.grid_rowconfigure(1, weight=1)
+
+        _, mix = self._synth_box(right, "MIX / RING", 0, 0)
+        mix_rows = tk.Frame(mix, bg="#131D2B")
+        mix_rows.pack(fill="x")
+        mix_rows.grid_columnconfigure(0, weight=1)
+        mix_rows.grid_columnconfigure(1, weight=1)
+        self._knob_row(mix_rows, specs["osc_balance"], row=0, col=0)
+        self._parameter_row(mix_rows, specs["ring_mod_toggle"], grid=True, row=0, col=1)
+        self._parameter_row(mix_rows, specs["ring_mod_amount"], grid=True, row=1, col=0)
+
+        _, mod = self._synth_box(right, "MOD / PORTAMENTO", 1, 0)
         self._parameter_row(mod, specs["portamento_mode"])
         portamento_mode_combo = getattr(self, "combo_portamento_mode", None)
         if portamento_mode_combo is not None:
@@ -486,49 +465,34 @@ class Editor(tk.Tk):
         self.section_labels["portamento_mode"].configure(
             text="Portamento Mode (ON unverified)"
         )
-        tk.Label(
-            mod,
-            text="Enable mapping unverified — Portamento Time below is live CC 5",
-            bg="#131D2B", fg="#8CA2BA", anchor="w", justify="left",
-        ).pack(fill="x", pady=(2, 4))
-        self._parameter_row(mod, specs["portamento_amount"])
-        # CC-only parameters: real MIDI CC numbers are documented externally,
-        # but their SysEx offsets are not yet established.  On SYNTH they use
-        # musical names (no "CC ONLY" wording); mapping/registry untouched.
         for spec in PARAMETERS:
             if spec.offset is None:
                 if spec.key in ("modulation", "portamento_time"):
                     self._midi_only_parameter_row(mod, spec)
                 else:
-                    row = tk.Frame(mod, bg="#131D2B")
-                    row.pack(fill="x", pady=2)
-                    lbl = tk.Label(row, text=f"{_synth_label(spec)}: CC {spec.cc}",
-                                   bg="#131D2B", fg="#8CA2BA", anchor="w")
-                    lbl.pack(side="left")
+                    lbl = tk.Label(
+                        mod, text=f"{_synth_label(spec)}: CC {spec.cc}",
+                        bg="#131D2B", fg="#8CA2BA", anchor="w")
+                    lbl.pack(fill="x", pady=1)
                     self.section_labels[spec.key] = lbl
+        self._parameter_row(mod, specs["portamento_amount"])
+        tk.Label(
+            mod, text="Portamento ON/OFF mapping unverified",
+            bg="#131D2B", fg="#8CA2BA", anchor="w", justify="left",
+        ).pack(fill="x", pady=(1, 0))
 
     def _on_synth_resize(self, event) -> None:
-        """P1.26 polish: SYNTH workspace width on resize.
-
-        Fill the visible canvas width when it is wide enough; otherwise keep
-        a readable minimum width (the canvas scrolls horizontally instead of
-        squashing rows or leaving stretched dead gutters).
-        """
+        """Adapt control density to the fixed synth workspace without scrolling."""
         width = max(1, event.width)
-        self.canvas.itemconfigure(self.canvas_window, width=width)
-
-        # Preserve readable labels while reclaiming room for controls on a
-        # narrow window. Slider values, callbacks and model bindings are kept.
-        compact = width < 1120
-        label_width = 16 if compact else 22
+        compact = width < 1180
+        label_width = 14 if compact else 18
         for label in getattr(self, "section_labels", {}).values():
             try:
-                if int(label.cget("width")) in (16, 22):
+                if int(label.cget("width")) in (14, 16, 18, 22, 30):
                     label.configure(width=label_width)
             except (tk.TclError, ValueError):
                 pass
-
-        slider_length = max(105, min(190, width // 8))
+        slider_length = max(90, min(155, width // 10))
         for scale in getattr(self, "_parameter_scales", ()):
             try:
                 scale.configure(length=slider_length)
@@ -1006,7 +970,7 @@ class Editor(tk.Tk):
             column, from_=spec.maximum, to=spec.minimum, orient="vertical",
             variable=var, showvalue=False, resolution=1, bg="#131D2B",
             fg="#B6C8DC", troughcolor="#0D1521", highlightthickness=0, bd=0,
-            sliderrelief="flat", length=118, width=14,
+            sliderrelief="flat", length=88, width=12,
             command=lambda _v, key=spec.key: self._scale_changed(key))
         scale.pack(anchor="center", fill="y", expand=True)
         self._parameter_scales.append(scale)
