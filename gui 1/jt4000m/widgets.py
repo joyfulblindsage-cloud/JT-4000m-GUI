@@ -244,7 +244,7 @@ class Knob(tk.Canvas):
         if not hasattr(self, "_ring_item"):
             self._ring_item = self.create_oval(
                 cx - r, cy - r, cx + r, cy + r,
-                outline="#2A3A4F", width=2, fill="#0D1521)
+                outline="#2A3A4F", width=2, fill="#0D1521")
             self._arc_item = self.create_line(
                 cx, cy, cx, cy, fill=ACCENT, width=3, cap="butt")
             self._pointer_item = self.create_line(
