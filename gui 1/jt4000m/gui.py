@@ -371,6 +371,7 @@ class Editor(tk.Tk):
         """
         self.controls = tk.Frame(frame, bg="#0B1018")
         self.controls.pack(fill="both", expand=True, padx=2, pady=2)
+        self.controls.bind("<Configure>", self._on_synth_resize)
         for col in range(3):
             self.controls.grid_columnconfigure(col, weight=1, uniform="synth-col")
         self.controls.grid_rowconfigure(0, weight=1, uniform="synth-row")
