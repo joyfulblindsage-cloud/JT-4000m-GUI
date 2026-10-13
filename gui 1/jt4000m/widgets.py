@@ -257,7 +257,7 @@ class Knob(tk.Canvas):
         # Map the complete 0..maximum range to one complete revolution.
         # This is a 360-degree control, not the previous 270-degree arc.
         a0, a1 = 135.0, 135.0 - 360.0 * self._norm
-        steps = max(2, int(abs(a1 - a0)))
+        steps = max(2, int(abs(a1 - a0) / 4.0))
         pts: list[float] = []
         for i in range(steps + 1):
             ang = math.radians(a0 + (a1 - a0) * i / steps)
