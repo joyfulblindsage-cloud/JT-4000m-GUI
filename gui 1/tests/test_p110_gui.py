@@ -477,17 +477,17 @@ def test_keyboard_navigation_selects_through_model(app):
 
 
 @pytest.mark.skipif(not _HAS_DISPLAY, reason="no display available")
-def test_synth_workspace_is_compact_and_has_no_vertical_scrollbar(editor):
+def test_synth_workspace_is_compact_and_has_no_vertical_scrollbar(app):
     """SYNTH uses the fixed six-cell layout; browsing tools stay in other tabs."""
-    assert not hasattr(editor, "canvas")
-    assert editor.controls.winfo_manager() == "pack"
+    assert not hasattr(app, "canvas")
+    assert app.controls.winfo_manager() == "pack"
     cells = {
         (int(child.grid_info()["row"]), int(child.grid_info()["column"]))
-        for child in editor.controls.winfo_children()
+        for child in app.controls.winfo_children()
         if child.winfo_manager() == "grid"
     }
     assert {(0, 0), (0, 1), (0, 2), (1, 0), (1, 1), (1, 2)} <= cells
-    assert editor.current_tab.get() == "SYNTH"
+    assert app.current_tab.get() == "SYNTH"
     # The fixed surface must still expose all registry-backed controls.
     from jt4000m.model import editable_parameters
-    assert {spec.key for spec in editable_parameters()} <= set(editor.vars)
+    assert {spec.key for spec in editable_parameters()} <= set(app.vars)
