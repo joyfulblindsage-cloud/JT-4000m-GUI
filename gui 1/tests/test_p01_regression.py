@@ -479,6 +479,21 @@ def test_gui_enum_dropdown_shows_names_not_numbers(editor):
 
 
 @pytest.mark.skipif(not _HAS_DISPLAY, reason="no display available")
+def test_gui_waveform_selection_updates_model_and_preview(editor):
+    editor.load_path(FIX / "ALL INIT SAW.syx")
+    editor.select_program(1)
+    combo = editor.combo_osc1_wave
+    assert "SQUARE" in list(combo["values"])
+
+    combo.set("SQUARE")
+    editor._combo_apply("osc1_wave", combo)
+
+    assert editor.editor.get_patch(1).get_raw("osc1_wave") == 2
+    assert editor.vars["osc1_wave"].get() == 2
+    assert editor._osc_tiles["osc1_wave"].display.upper().startswith("SQUARE")
+
+
+@pytest.mark.skipif(not _HAS_DISPLAY, reason="no display available")
 def test_gui_ring_mod_toggle_is_off_on_combo(editor):
     editor.load_path(FIX / "ALL INIT SAW.syx")
     editor.select_program(1)
