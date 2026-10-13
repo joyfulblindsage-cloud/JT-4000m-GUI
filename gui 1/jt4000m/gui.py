@@ -379,13 +379,15 @@ class Editor(tk.Tk):
         # so their animation callbacks never hit a missing attribute).
         self.wave_phase_var = tk.StringVar(value="")
 
-        # ---- OSC 1 / OSC 2 blocks (waveform preview + PWM + tuning) -----
+        # ---- OSC 1 / OSC 2 blocks (editable waveform + preview, PWM + tuning) ----
         _, osc1 = self._synth_box(self.controls, "OSC 1", 0, 0, columnspan=2)
-        self._build_wave_tile_row(osc1, "osc1_wave", "OSC1 Wave")
+        self._build_wave_tile_row(osc1, "osc1_wave", "OSC1 Preview")
+        self._parameter_row(osc1, specs["osc1_wave"])
         for key in ("osc1_pwm_fm", "osc1_coarse", "osc1_fine"):
             self._parameter_row(osc1, specs[key])
         _, osc2 = self._synth_box(self.controls, "OSC 2", 0, 2, columnspan=2)
-        self._build_wave_tile_row(osc2, "osc2_wave", "OSC2 Wave")
+        self._build_wave_tile_row(osc2, "osc2_wave", "OSC2 Preview")
+        self._parameter_row(osc2, specs["osc2_wave"])
         for key in ("osc2_pwm", "osc2_coarse", "osc2_fine"):
             self._parameter_row(osc2, specs[key])
 
