@@ -74,9 +74,9 @@ class Editor(tk.Tk):
         # Start within the available desktop instead of assuming a 1440x900 display.
         screen_w, screen_h = self.winfo_screenwidth(), self.winfo_screenheight()
         initial_w = max(800, min(1440, screen_w - 60))
-        initial_h = max(560, min(900, screen_h - 100))
+        initial_h = max(700, min(1000, screen_h - 80))
         self.geometry(f"{initial_w}x{initial_h}")
-        self.minsize(800, 560)
+        self.minsize(900, 700)
         self.configure(bg="#0B1018")
 
         # ----- state -------------------------------------------------------
@@ -386,16 +386,18 @@ class Editor(tk.Tk):
         # ---- Top row: OSC 1 / OSC 2 / FILTER + VCF envelope ---------------
         _, osc1 = self._synth_box(self.controls, "OSC 1", 0, 0)
         self._build_wave_tile_row(osc1, "osc1_wave", "OSC1 Preview")
+        self._parameter_row(osc1, specs["osc1_wave"])
         for key in ("osc1_pwm_fm", "osc1_coarse", "osc1_fine"):
             self._parameter_row(osc1, specs[key])
 
         _, osc2 = self._synth_box(self.controls, "OSC 2", 0, 1)
         self._build_wave_tile_row(osc2, "osc2_wave", "OSC2 Preview")
+        self._parameter_row(osc2, specs["osc2_wave"])
         for key in ("osc2_pwm", "osc2_coarse", "osc2_fine"):
             self._parameter_row(osc2, specs[key])
 
         _, filt = self._synth_box(self.controls, "FILTER", 0, 2)
-        self.filter_view = FilterView(filt, width=190, height=48)
+        self.filter_view = FilterView(filt, width=180, height=40)
         self.filter_view.pack(anchor="center", pady=(0, 4))
         for key in ("filter_cutoff", "filter_resonance", "filter_env_amount"):
             self._parameter_row(filt, specs[key])
@@ -403,7 +405,7 @@ class Editor(tk.Tk):
         tk.Label(filt, text="VCF ENVELOPE", bg="#131D2B", fg="#A8BDD3",
                  font=("TkDefaultFont", 9, "bold"), anchor="w").pack(fill="x", pady=(3, 1))
         self.vcf_env_view = EnvelopeView(
-            filt, title="VCF EG", width=190, height=48,
+            filt, title="VCF EG", width=180, height=38,
             on_segment=lambda k, n: self._env_drag("vcf", k, n))
         self.vcf_env_view.pack(anchor="center", pady=(0, 3))
         self._bind_env_release(self.vcf_env_view)
@@ -415,7 +417,7 @@ class Editor(tk.Tk):
         # ---- Bottom left: VCA envelope ------------------------------------
         _, vca = self._synth_box(self.controls, "VCA ENVELOPE", 1, 0)
         self.vca_env_view = EnvelopeView(
-            vca, title="VCA EG", width=210, height=56,
+            vca, title="VCA EG", width=200, height=46,
             on_segment=lambda k, n: self._env_drag("vca", k, n))
         self.vca_env_view.pack(anchor="center", pady=(0, 4))
         self._bind_env_release(self.vca_env_view)
@@ -971,7 +973,7 @@ class Editor(tk.Tk):
             column, from_=spec.maximum, to=spec.minimum, orient="vertical",
             variable=var, showvalue=False, resolution=1, bg="#131D2B",
             fg="#B6C8DC", troughcolor="#0D1521", highlightthickness=0, bd=0,
-            sliderrelief="flat", length=88, width=12,
+            sliderrelief="flat", length=68, width=12,
             command=lambda _v, key=spec.key: self._scale_changed(key))
         scale.pack(anchor="center", fill="y", expand=True)
         self._parameter_scales.append(scale)
