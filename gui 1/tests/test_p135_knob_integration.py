@@ -194,6 +194,27 @@ def test_modulation_is_live_cc1_and_does_not_mutate_patch(
     assert loaded.editor.bank.to_sysex() == before
 
 
+@pytest.mark.parametrize(
+    "key,cc,value",
+    [("portamento_time", 5, 88), ("modulation", 1, 42)],
+)
+@gui_test
+def test_live_only_cc_rx_updates_control_without_patch_mutation_or_echo(
+        loaded, fake_transport, fake_backend, key, cc, value):
+    loaded.connect_midi(fake_transport, channel=1)
+    fake_backend.tx_log.clear()
+    before = loaded.editor.bank.to_sysex()
+
+    loaded._midi_rx_packet(bytes([0xB0, cc, value]))
+
+    assert loaded._midi_only_vars[key].get() == value
+    assert loaded._midi_only_value_vars[key].get() == str(value)
+    assert loaded.editor.bank.to_sysex() == before
+    assert fake_backend.tx_log == []
+    assert loaded.midi_events[-1]["direction"] == "rx"
+    assert loaded.midi_events[-1]["mutated"] is False
+
+
 @gui_test
 def test_knob_range_uses_240_degree_arc_with_minimum_at_bottom(loaded):
     knob = loaded._knobs["osc_balance"]
