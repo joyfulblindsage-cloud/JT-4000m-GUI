@@ -128,6 +128,25 @@ def test_knob_gesture_transmits_cc_through_existing_bridge(loaded,
 
 # -------------------------------------------------------- 3b. full rotation
 @gui_test
+def test_knob_drag_down_decreases_value_and_ignores_horizontal_only_motion(loaded):
+    knob = loaded._knobs["osc_balance"]
+    start = loaded.editor.get_patch(1).get_raw("osc_balance")
+
+    # Vertical downward movement decreases the value.
+    knob._press(_FakeEvent(x_root=100, y_root=100))
+    knob._drag(_FakeEvent(x_root=100, y_root=120, state=0))
+    knob._release(_FakeEvent())
+    down = loaded.editor.get_patch(1).get_raw("osc_balance")
+    assert down < start
+
+    # A purely horizontal movement is intentionally ignored by a vertical knob.
+    knob._press(_FakeEvent(x_root=100, y_root=100))
+    knob._drag(_FakeEvent(x_root=140, y_root=100, state=0))
+    knob._release(_FakeEvent())
+    assert loaded.editor.get_patch(1).get_raw("osc_balance") == down
+
+
+@gui_test
 def test_portamento_time_is_live_cc5_and_does_not_mutate_patch(
         loaded, fake_transport, fake_backend):
     loaded.connect_midi(fake_transport, channel=1)
