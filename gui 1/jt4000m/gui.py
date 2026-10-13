@@ -475,13 +475,20 @@ class Editor(tk.Tk):
 
         # ---- MODULATION / PORTAMENTO (bottom) -----------------------------
         _, mod = self._synth_box(self.controls, "MODULATION / PORTAMENTO", 4, 2, columnspan=2)
-        # The current evidence confirms Portamento Time CC 5, but does NOT
-        # establish an ON value for the SysEx byte called Portamento Mode.
-        # Do not present a one-item OFF dropdown as if it were a working
-        # enable switch; the live CC 5 control below is the actionable path.
+        # OFF is the only observed value for the SysEx Portamento Mode byte.
+        # Keep this registry parameter represented for model/UI consistency,
+        # but make its one-item control explicitly informational and disabled:
+        # an ON value has not been verified. CC 5 below controls time only.
+        self._parameter_row(mod, specs["portamento_mode"])
+        portamento_mode_combo = getattr(self, "combo_portamento_mode", None)
+        if portamento_mode_combo is not None:
+            portamento_mode_combo.configure(state="disabled")
+        self.section_labels["portamento_mode"].configure(
+            text="Portamento Mode (ON unverified)"
+        )
         tk.Label(
             mod,
-            text="Portamento ON/OFF mapping unverified — use Portamento Time below",
+            text="Enable mapping unverified — Portamento Time below is live CC 5",
             bg="#131D2B", fg="#8CA2BA", anchor="w", justify="left",
         ).pack(fill="x", pady=(2, 4))
         self._parameter_row(mod, specs["portamento_amount"])
