@@ -61,6 +61,10 @@ class Knob(tk.Canvas):
 
     STEP_COARSE = 4          # wheel / arrow step, in normalized units
     STEP_FINE = 1.0          # wheel / arrow step, in raw units (fine mode)
+    START_ANGLE = 270.0      # minimum pointer sits at 6 o'clock
+    SWEEP_DEGREES = 240.0    # synth-style arc; deliberately not a full turn
+    ARC_STEP_DEGREES = 5.0   # fewer canvas points keeps Windows dragging light
+    DRAG_PIXELS_PER_RANGE = 180.0
 
     def __init__(self, parent, *, label: str, minimum: int = 0, maximum: int = 127,
                  diameter: int = 58, on_change=None, on_reset=None,
@@ -171,12 +175,13 @@ class Knob(tk.Canvas):
     def _drag(self, event) -> str:
         if self._drag_last is None:
             return "break"
-        dx = event.x_root - self._drag_last[0]
+        # Synth/VST-style control: vertical movement is the single source of
+        # drag delta. Mixing dx and dy made diagonal/vertical motions feel
+        # inconsistent and could reverse/halve a movement unexpectedly.
         dy = self._drag_last[1] - event.y_root
-        delta = max(dx, dy) if (abs(dx) >= abs(dy)) else (dx + dy) / 2.0
-        fine = bool(event.state & 0x0001)          # Shift held
-        step = 0.004 if fine else 0.012
-        self._emit_norm(self._norm + delta * step)
+        fine = bool(event.state & 0x0001)          # Shift held = precision
+        pixels_per_range = self.DRAG_PIXELS_PER_RANGE * (4.0 if fine else 1.0)
+        self._emit_norm(self._norm + dy / pixels_per_range)
         self._drag_last = (event.x_root, event.y_root)
         return "break"
 
@@ -254,10 +259,11 @@ class Knob(tk.Canvas):
                 font=("TkDefaultFont", 8, "bold"))
         ring = ACCENT if self._focused else ("#55718D" if self._hover else "#2A3A4F")
         self.itemconfigure(self._ring_item, outline=ring)
-        # Map the complete 0..maximum range to one complete revolution.
-        # This is a 360-degree control, not the previous 270-degree arc.
-        a0, a1 = 135.0, 135.0 - 360.0 * self._norm
-        steps = max(2, int(abs(a1 - a0) / 4.0))
+        # Map minimum to 6 o'clock and maximum across a 240-degree sweep.
+        # A bounded arc matches familiar VST controls and leaves a clear gap.
+        a0 = self.START_ANGLE
+        a1 = self.START_ANGLE - self.SWEEP_DEGREES * self._norm
+        steps = max(2, int(abs(a1 - a0) / self.ARC_STEP_DEGREES))
         pts: list[float] = []
         for i in range(steps + 1):
             ang = math.radians(a0 + (a1 - a0) * i / steps)

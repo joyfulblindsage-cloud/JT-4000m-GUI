@@ -115,9 +115,9 @@ def test_knob_gesture_transmits_cc_through_existing_bridge(loaded,
     _drag_gesture(knob, steps=1)                    # one moved value
 
     raw = loaded.editor.get_patch(1).get_raw("osc_balance")
-    expected = [bytes([0xB0, cc, value])
-                for value in range(previous + 1, raw + 1)]
-    assert fake_backend.tx_log == expected
+    # One fast pointer gesture is coalesced to its latest value, not every
+    # skipped integer between pointer events. Release always flushes final CC.
+    assert fake_backend.tx_log == [bytes([0xB0, cc, raw])]
     # No-op guard: dragging back to the current value sends nothing extra.
     n = len(fake_backend.tx_log)
     knob._press(_FakeEvent(x_root=50, y_root=50))
@@ -128,13 +128,111 @@ def test_knob_gesture_transmits_cc_through_existing_bridge(loaded,
 
 # -------------------------------------------------------- 3b. full rotation
 @gui_test
-def test_knob_full_range_completes_a_360_degree_arc(loaded):
+def test_vertical_slider_drag_coalesces_cc_and_flushes_final_value(
+        loaded, fake_transport, fake_backend):
+    loaded.connect_midi(fake_transport, channel=1)
+    fake_backend.tx_log.clear()
+    before = loaded.editor.get_patch(1).get_raw("filter_cutoff")
+
+    loaded._begin_parameter_drag("filter_cutoff")
+    loaded.vars["filter_cutoff"].set(40)
+    loaded._scale_changed("filter_cutoff")
+    loaded.vars["filter_cutoff"].set(90)
+    loaded._scale_changed("filter_cutoff")
+    loaded._end_parameter_drag("filter_cutoff")
+
+    assert loaded.editor.get_patch(1).get_raw("filter_cutoff") == 90
+    assert fake_backend.tx_log == [bytes([0xB0, 74, 90])]
+    assert len(loaded._history._undo) >= 1
+    assert before != 90
+
+
+@gui_test
+def test_knob_drag_down_decreases_value_and_ignores_horizontal_only_motion(loaded):
     knob = loaded._knobs["osc_balance"]
+    start = loaded.editor.get_patch(1).get_raw("osc_balance")
+
+    # Vertical downward movement decreases the value.
+    knob._press(_FakeEvent(x_root=100, y_root=100))
+    knob._drag(_FakeEvent(x_root=100, y_root=120, state=0))
+    knob._release(_FakeEvent())
+    down = loaded.editor.get_patch(1).get_raw("osc_balance")
+    assert down < start
+
+    # A purely horizontal movement is intentionally ignored by a vertical knob.
+    knob._press(_FakeEvent(x_root=100, y_root=100))
+    knob._drag(_FakeEvent(x_root=140, y_root=100, state=0))
+    knob._release(_FakeEvent())
+    assert loaded.editor.get_patch(1).get_raw("osc_balance") == down
+
+
+@gui_test
+def test_portamento_time_is_live_cc5_and_does_not_mutate_patch(
+        loaded, fake_transport, fake_backend):
+    loaded.connect_midi(fake_transport, channel=1)
+    fake_backend.tx_log.clear()
+    assert "portamento_time" in loaded._midi_only_scales
+    before = loaded.editor.bank.to_sysex()
+
+    loaded._midi_only_changed("portamento_time", 100)
+
+    assert fake_backend.tx_log == [bytes([0xB0, 5, 100])]
+    assert loaded.editor.bank.to_sysex() == before
+    assert "live CC only" in loaded.status_var.get()
+
+
+@gui_test
+def test_modulation_is_live_cc1_and_does_not_mutate_patch(
+        loaded, fake_transport, fake_backend):
+    loaded.connect_midi(fake_transport, channel=1)
+    fake_backend.tx_log.clear()
+    before = loaded.editor.bank.to_sysex()
+
+    loaded._midi_only_changed("modulation", 73)
+
+    assert fake_backend.tx_log == [bytes([0xB0, 1, 73])]
+    assert loaded.editor.bank.to_sysex() == before
+
+
+@pytest.mark.parametrize(
+    "key,cc,value",
+    [("portamento_time", 5, 88), ("modulation", 1, 42)],
+)
+@gui_test
+def test_live_only_cc_rx_updates_control_without_patch_mutation_or_echo(
+        loaded, fake_transport, fake_backend, key, cc, value):
+    loaded.connect_midi(fake_transport, channel=1)
+    fake_backend.tx_log.clear()
+    before = loaded.editor.bank.to_sysex()
+
+    loaded._midi_rx_packet(bytes([0xB0, cc, value]))
+
+    assert loaded._midi_only_vars[key].get() == value
+    assert loaded._midi_only_value_vars[key].get() == str(value)
+    assert loaded.editor.bank.to_sysex() == before
+    assert fake_backend.tx_log == []
+    assert loaded.midi_events[-1]["direction"] == "rx"
+    assert loaded.midi_events[-1]["mutated"] is False
+
+
+@gui_test
+def test_knob_range_uses_240_degree_arc_with_minimum_at_bottom(loaded):
+    knob = loaded._knobs["osc_balance"]
+    cx, cy, radius = knob._cx, knob._cy, knob._r - 1
+
+    knob.set_value(knob.minimum)
+    coords_min = knob.coords(knob._arc_item)
+    assert len(coords_min) == 6  # two-point minimum arc (start and end coincide)
+
+    # At the minimum, the arc starts at 6 o'clock.
+    assert coords_min[1] == pytest.approx(cy + radius, abs=0.1)
+
     knob.set_value(knob.maximum)
-    coords = knob.coords(knob._arc_item)
-    assert len(coords) > 170                 # full 360-degree polyline
-    assert ((coords[0] - coords[-2]) ** 2
-            + (coords[1] - coords[-1]) ** 2) ** 0.5 < 1.0
+    coords_max = knob.coords(knob._arc_item)
+    assert 90 <= len(coords_max) <= 102  # ~240° at 5° per segment
+    # Maximum ends at 30°: upper-right, not a full revolution back to start.
+    assert coords_max[-2] > cx
+    assert coords_max[-1] < cy
 
 
 @gui_test

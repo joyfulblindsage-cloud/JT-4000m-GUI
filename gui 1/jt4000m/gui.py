@@ -27,7 +27,6 @@ from tkinter import filedialog, messagebox, ttk
 from .analyzer import cross_bank
 from .diff import format_change, semantic_diff
 from .editor_model import EditorHistory, EditorModel
-from .gesture_steps import intermediate_raw_values
 from .model import BY_KEY, PARAMETERS, display_value, enum_options
 from .patch import Bank, JTProgram, program_to_single
 from .syx import SysExFile, field_name, parse as parse_sysex, parse_file, semantic_value
@@ -98,6 +97,16 @@ class Editor(tk.Tk):
         # Slider edits are live during a gesture, but form one undo step.
         self._parameter_drag_key: str | None = None
         self._parameter_drag_changed = False
+        # Coalesce high-frequency pointer motion into the latest MIDI CC value
+        # at most every 16 ms; always flush the final value on mouse release.
+        self._gesture_tx_after_id = None
+        self._pending_gesture_tx: dict[str, int] = {}
+        self._gesture_last_sent: dict[str, int] = {}
+        self._midi_only_drag_key: str | None = None
+        self._midi_only_values: dict[str, int] = {}
+        self._midi_only_vars: dict[str, tk.IntVar] = {}
+        self._midi_only_value_vars: dict[str, tk.StringVar] = {}
+        self._midi_only_scales: dict[str, tk.Scale] = {}
         # Live references allow the slider geometry to follow the workspace
         # width without replacing widgets or changing their MIDI/model path.
         self._parameter_scales: list[tk.Scale] = []
@@ -458,24 +467,45 @@ class Editor(tk.Tk):
         self.lfo2_tile.draw()
         for key in ("lfo2_wave", "lfo2_rate", "lfo2_amount"):
             self._parameter_row(lfo2, specs[key])
-        tk.Label(lfo2, text="LFO2 destination: values not established",
-                 bg="#131D2B", fg="#8CA2BA").pack(anchor="w", pady=(2, 0))
+        tk.Label(
+            lfo2,
+            text="No LFO2 destination in the documented CC map (CC 56 = LFO1)",
+            bg="#131D2B", fg="#8CA2BA", anchor="w", justify="left",
+        ).pack(anchor="w", pady=(2, 0))
 
         # ---- MODULATION / PORTAMENTO (bottom) -----------------------------
         _, mod = self._synth_box(self.controls, "MODULATION / PORTAMENTO", 4, 2, columnspan=2)
-        for key in ("portamento_mode", "portamento_amount"):
-            self._parameter_row(mod, specs[key])
+        # OFF is the only observed value for the SysEx Portamento Mode byte.
+        # Keep this registry parameter represented for model/UI consistency,
+        # but make its one-item control explicitly informational and disabled:
+        # an ON value has not been verified. CC 5 below controls time only.
+        self._parameter_row(mod, specs["portamento_mode"])
+        portamento_mode_combo = getattr(self, "combo_portamento_mode", None)
+        if portamento_mode_combo is not None:
+            portamento_mode_combo.configure(state="disabled")
+        self.section_labels["portamento_mode"].configure(
+            text="Portamento Mode (ON unverified)"
+        )
+        tk.Label(
+            mod,
+            text="Enable mapping unverified — Portamento Time below is live CC 5",
+            bg="#131D2B", fg="#8CA2BA", anchor="w", justify="left",
+        ).pack(fill="x", pady=(2, 4))
+        self._parameter_row(mod, specs["portamento_amount"])
         # CC-only parameters: real MIDI CC numbers are documented externally,
         # but their SysEx offsets are not yet established.  On SYNTH they use
         # musical names (no "CC ONLY" wording); mapping/registry untouched.
         for spec in PARAMETERS:
             if spec.offset is None:
-                row = tk.Frame(mod, bg="#131D2B")
-                row.pack(fill="x", pady=2)
-                lbl = tk.Label(row, text=f"{_synth_label(spec)}: CC {spec.cc}",
-                               bg="#131D2B", fg="#8CA2BA", anchor="w")
-                lbl.pack(side="left")
-                self.section_labels[spec.key] = lbl
+                if spec.key in ("modulation", "portamento_time"):
+                    self._midi_only_parameter_row(mod, spec)
+                else:
+                    row = tk.Frame(mod, bg="#131D2B")
+                    row.pack(fill="x", pady=2)
+                    lbl = tk.Label(row, text=f"{_synth_label(spec)}: CC {spec.cc}",
+                                   bg="#131D2B", fg="#8CA2BA", anchor="w")
+                    lbl.pack(side="left")
+                    self.section_labels[spec.key] = lbl
 
     def _on_synth_resize(self, event) -> None:
         """P1.26 polish: SYNTH workspace width on resize.
@@ -555,8 +585,8 @@ class Editor(tk.Tk):
         self._refresh_visualizations(changed_key=param_key)
         self.status_var.set(
             f"P{self.selected_index:02d}  {_synth_label(BY_KEY[param_key])} = {display_value(param_key, raw)}")
-        for midi_raw in intermediate_raw_values(previous_raw, raw):
-            self._midi_tx(param_key, midi_raw)
+        # Share the same latest-value MIDI coalescer as knobs and sliders.
+        self._queue_gesture_midi_tx(param_key, raw)
 
     def _bind_env_release(self, view) -> None:
         """Close the live ADSR gesture as one undoable action."""
@@ -566,10 +596,18 @@ class Editor(tk.Tk):
         """Close the ADSR gesture and refresh the full GUI projection once."""
         if not self._dragging_env:
             return
-        changed = bool(self._dragging_env_keys)
+        changed_keys = set(self._dragging_env_keys)
         self._dragging_env = False
         self._dragging_env_keys.clear()
-        if changed:
+        if changed_keys:
+            # Flush the latest value for each edited ADSR segment on release;
+            # no segment is left at an intermediate value if the timer lags.
+            self._flush_gesture_midi_tx()
+            for key in changed_keys:
+                raw = int(self.vars[key].get())
+                if self._gesture_last_sent.get(key) != raw:
+                    self._midi_tx(key, raw)
+                self._gesture_last_sent.pop(key, None)
             self._after_mutation()
     # ---------------------------------------------------- P1.26: PRESETS tab
     def _build_presets_tab(self, frame) -> None:
@@ -875,6 +913,74 @@ class Editor(tk.Tk):
         self.vars[key].set(int(raw))
         self._scale_changed(key)
 
+    def _midi_only_parameter_row(self, parent, spec) -> None:
+        """Live CC control for parameters with no confirmed SysEx byte offset.
+
+        These controls transmit CC only; they do not alter or dirty the saved
+        patch because the editor cannot serialize their values into a bank.
+        """
+        row = tk.Frame(parent, bg="#131D2B")
+        row.pack(fill="x", pady=2)
+        label = tk.Label(
+            row, text=f"{_synth_label(spec)} · CC {spec.cc} · live only",
+            bg="#131D2B", fg="#A8BDD3", width=30, anchor="w",
+        )
+        label.pack(side="left")
+        self.section_labels[spec.key] = label
+
+        var = tk.IntVar(value=spec.default)
+        value_var = tk.StringVar(value=str(spec.default))
+        self._midi_only_vars[spec.key] = var
+        self._midi_only_value_vars[spec.key] = value_var
+        self._midi_only_values[spec.key] = spec.default
+
+        scale = tk.Scale(
+            row, from_=spec.minimum, to=spec.maximum, orient="horizontal",
+            variable=var, showvalue=False, resolution=1, bg="#131D2B",
+            fg="#B6C8DC", troughcolor="#0D1521", highlightthickness=0, bd=0,
+            sliderrelief="flat", length=155,
+            command=lambda raw, key=spec.key: self._midi_only_changed(
+                key, int(float(raw))),
+        )
+        scale.pack(side="left", fill="x", expand=True, padx=5)
+        scale.bind("<ButtonPress-1>",
+                   lambda _e, key=spec.key: self._begin_midi_only_drag(key))
+        scale.bind("<ButtonRelease-1>",
+                   lambda _e, key=spec.key: self._end_midi_only_drag(key))
+        self._midi_only_scales[spec.key] = scale
+        tk.Label(row, textvariable=value_var, bg="#131D2B", fg="#F3F7FF",
+                 width=4, anchor="e").pack(side="right", padx=(4, 0))
+
+    def _midi_only_changed(self, key: str, raw: int) -> None:
+        if self._syncing:
+            return
+        raw = max(0, min(127, int(raw)))
+        self._midi_only_vars[key].set(raw)
+        self._midi_only_value_vars[key].set(str(raw))
+        previous = self._midi_only_values.get(key)
+        self._midi_only_values[key] = raw
+        if previous == raw:
+            return
+        self.status_var.set(f"{_synth_label(BY_KEY[key])} = {raw} (live CC only)")
+        if self._midi_only_drag_key == key:
+            self._queue_gesture_midi_tx(key, raw)
+        else:
+            self._midi_tx(key, raw)
+
+    def _begin_midi_only_drag(self, key: str) -> None:
+        self._midi_only_drag_key = key
+        self._gesture_last_sent.pop(key, None)
+
+    def _end_midi_only_drag(self, key: str) -> None:
+        if self._midi_only_drag_key != key:
+            return
+        raw = self._midi_only_values.get(key, 0)
+        self._flush_gesture_midi_tx()
+        if self._gesture_last_sent.get(key) != raw:
+            self._midi_tx(key, raw)
+        self._gesture_last_sent.pop(key, None)
+        self._midi_only_drag_key = None
+
     def _parameter_column(self, parent, spec, *, col: int) -> None:
         """Compact vertical ADSR control: name, slider, live value and reset.
 
@@ -1056,6 +1162,23 @@ class Editor(tk.Tk):
         if update is None:
             return                        # other channels / unknown CCs ignored
         spec = BY_KEY[update.key]
+        if update.key in self._midi_only_vars:
+            # CC 1 / CC 5 have no confirmed SysEx byte offsets, so they must
+            # update their live-only controls without entering EditorModel.
+            # Calling apply_update here would try to read a nonexistent patch
+            # field; echoing the packet would also create a MIDI feedback loop.
+            self._midi_only_values[update.key] = update.value
+            self._midi_only_vars[update.key].set(update.value)
+            self._midi_only_value_vars[update.key].set(str(update.value))
+            self.status_var.set(
+                f"{_synth_label(spec)} = {update.value} (received live CC only)")
+            self.midi_events.append({
+                "direction": "rx", "key": update.key,
+                "channel": update.channel, "cc": spec.cc,
+                "value": update.value, "mutated": False,
+                "message": "live-only CC; patch unchanged",
+            })
+            return
         self._rx_applying = True          # feedback-loop guard for this mutation
         try:
             mutated = bridge.apply_update(self.editor, update)
@@ -2177,10 +2300,29 @@ class Editor(tk.Tk):
         self._refresh_visualizations(changed_key=key)
         self.status_var.set(f"P{self.selected_index:02d}  "
                             f"{_synth_label(spec)} = {display_value(key, raw)}")
-        # This path is shared by the custom Knob and all tk.Scale controls.
-        # Send each intermediate CC in order, including the final target.
-        for midi_raw in intermediate_raw_values(previous_raw, raw):
-            self._midi_tx(key, midi_raw)
+        # Mouse events can outpace MIDI and Tk redraw. Keep the UI/model live,
+        # but coalesce outgoing CC to the newest value at ~60 Hz; intermediate
+        # integer values are not needed for a continuous control to reach its
+        # target and were flooding the transport during fast pointer motion.
+        self._queue_gesture_midi_tx(key, raw)
+
+    def _queue_gesture_midi_tx(self, key: str, raw: int) -> None:
+        self._pending_gesture_tx[key] = int(raw)
+        if self._gesture_tx_after_id is None:
+            self._gesture_tx_after_id = self.after(16, self._flush_gesture_midi_tx)
+
+    def _flush_gesture_midi_tx(self) -> None:
+        if self._gesture_tx_after_id is not None:
+            try:
+                self.after_cancel(self._gesture_tx_after_id)
+            except Exception:
+                pass
+            self._gesture_tx_after_id = None
+        pending = dict(self._pending_gesture_tx)
+        self._pending_gesture_tx.clear()
+        for key, raw in pending.items():
+            self._midi_tx(key, raw)
+            self._gesture_last_sent[key] = raw
 
     def _end_parameter_drag(self, key: str) -> None:
         """Finish a slider gesture and refresh the full GUI projection once."""
@@ -2190,6 +2332,13 @@ class Editor(tk.Tk):
         self._parameter_drag_key = None
         self._parameter_drag_changed = False
         if changed:
+            # Release must deliver the exact final target even if the timer
+            # hasn't fired yet, without sending a duplicate if it already did.
+            self._flush_gesture_midi_tx()
+            raw = int(self.vars[key].get())
+            if self._gesture_last_sent.get(key) != raw:
+                self._midi_tx(key, raw)
+            self._gesture_last_sent.pop(key, None)
             self._after_mutation()
 
     def _combo_apply(self, key: str, combo) -> None:
