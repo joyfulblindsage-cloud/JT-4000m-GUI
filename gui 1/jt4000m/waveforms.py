@@ -126,11 +126,16 @@ class WaveTile:
 
     # ---------------------------------------------------------------- animation
     def start(self, interval_ms: int = 60) -> None:
-        if self._running:
-            return
-        self._running = True
-        self._tick_state = 0
-        self._animate(interval_ms)
+        """Render a stable preview without a perpetual redraw timer.
+
+        These tiles are UI illustrations, not audio-rate oscilloscopes. The
+        old 60 ms timer repeatedly rebuilt hundreds of canvas coordinates on
+        three separate widgets, competing with parameter drags on slower PCs.
+        Keep the waveform shape visible but static for a responsive editor.
+        The interval argument remains for compatibility with existing calls.
+        """
+        self._running = False
+        self.draw(phase=0.0)
 
     def stop(self) -> None:
         self._running = False
