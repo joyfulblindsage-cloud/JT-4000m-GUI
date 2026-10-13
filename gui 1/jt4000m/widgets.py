@@ -239,30 +239,35 @@ class Knob(tk.Canvas):
         return _cb
 
     def _paint(self) -> None:
-        self.delete("all")
+        """Paint in-place; dragging must not delete/recreate every canvas item."""
         cx, cy, r = self._cx, self._cy, self._r
-        ring = "#2A3A4F"
-        if self._focused:
-            ring = ACCENT
-        elif self._hover:
-            ring = "#55718D"
-        self.create_oval(cx - r, cy - r, cx + r, cy + r, outline=ring, width=2,
-                         fill="#0D1521")
-        # active arc from start angle to current position
-        a0, a1 = 135.0, 135.0 - 270.0 * self._norm
+        if not hasattr(self, "_ring_item"):
+            self._ring_item = self.create_oval(
+                cx - r, cy - r, cx + r, cy + r,
+                outline="#2A3A4F", width=2, fill="#0D1521)
+            self._arc_item = self.create_line(
+                cx, cy, cx, cy, fill=ACCENT, width=3, cap="butt")
+            self._pointer_item = self.create_line(
+                cx, cy, cx, cy, fill="#F3F7FF", width=2)
+            self._label_item = self.create_text(
+                cx, cy + r + 12, text=self.label, fill=MUTED,
+                font=("TkDefaultFont", 8, "bold"))
+        ring = ACCENT if self._focused else ("#55718D" if self._hover else "#2A3A4F")
+        self.itemconfigure(self._ring_item, outline=ring)
+        # Map the complete 0..maximum range to one complete revolution.
+        # This is a 360-degree control, not the previous 270-degree arc.
+        a0, a1 = 135.0, 135.0 - 360.0 * self._norm
         steps = max(2, int(abs(a1 - a0)))
         pts: list[float] = []
         for i in range(steps + 1):
             ang = math.radians(a0 + (a1 - a0) * i / steps)
-            pts += [cx + (r - 1) * math.cos(ang), cy - (r - 1) * math.sin(ang)]
-        if len(pts) >= 4:
-            self.create_line(*pts, fill=ACCENT, width=3, cap="butt")
-        # pointer line
-        ang = math.radians(135.0 - 270.0 * self._norm)
-        self.create_line(cx, cy, cx + (r - 8) * math.cos(ang),
-                         cy - (r - 8) * math.sin(ang), fill="#F3F7FF", width=2)
-        self.create_text(cx, cy + r + 12, text=self.label, fill=MUTED,
-                         font=("TkDefaultFont", 8, "bold"))
+            pts.extend((cx + (r - 1) * math.cos(ang),
+                        cy - (r - 1) * math.sin(ang)))
+        self.coords(self._arc_item, *pts)
+        ang = math.radians(a1)
+        self.coords(self._pointer_item, cx, cy,
+                     cx + (r - 8) * math.cos(ang),
+                     cy - (r - 8) * math.sin(ang))
 
 
 class EnvelopeView(tk.Canvas):
