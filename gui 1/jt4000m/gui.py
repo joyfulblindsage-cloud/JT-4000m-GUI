@@ -578,8 +578,8 @@ class Editor(tk.Tk):
         self._refresh_visualizations(changed_key=param_key)
         self.status_var.set(
             f"P{self.selected_index:02d}  {_synth_label(BY_KEY[param_key])} = {display_value(param_key, raw)}")
-        for midi_raw in intermediate_raw_values(previous_raw, raw):
-            self._midi_tx(param_key, midi_raw)
+        # Share the same latest-value MIDI coalescer as knobs and sliders.
+        self._queue_gesture_midi_tx(param_key, raw)
 
     def _bind_env_release(self, view) -> None:
         """Close the live ADSR gesture as one undoable action."""
@@ -589,10 +589,18 @@ class Editor(tk.Tk):
         """Close the ADSR gesture and refresh the full GUI projection once."""
         if not self._dragging_env:
             return
-        changed = bool(self._dragging_env_keys)
+        changed_keys = set(self._dragging_env_keys)
         self._dragging_env = False
         self._dragging_env_keys.clear()
-        if changed:
+        if changed_keys:
+            # Flush the latest value for each edited ADSR segment on release;
+            # no segment is left at an intermediate value if the timer lags.
+            self._flush_gesture_midi_tx()
+            for key in changed_keys:
+                raw = int(self.vars[key].get())
+                if self._gesture_last_sent.get(key) != raw:
+                    self._midi_tx(key, raw)
+                self._gesture_last_sent.pop(key, None)
             self._after_mutation()
     # ---------------------------------------------------- P1.26: PRESETS tab
     def _build_presets_tab(self, frame) -> None:
