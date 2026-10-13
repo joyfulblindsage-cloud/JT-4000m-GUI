@@ -94,6 +94,7 @@ class Editor(tk.Tk):
         self._loading_bank = False
         self._syncing = False                    # guard: model->widget->event loop
         self._dragging_env = False               # P1.26: envelope-graph drag session
+        self._dragging_env_keys: set[str] = set()  # only commit ADSR segments actually dragged
         # Slider edits are live during a gesture, but form one undo step.
         self._parameter_drag_key: str | None = None
         self._parameter_drag_changed = False
@@ -519,27 +520,55 @@ class Editor(tk.Tk):
         self._osc_tiles[key] = tile
 
     def _env_drag(self, prefix: str, seg_key: str, norm: float) -> None:
-        """Envelope-graph drag -> the SAME parameter path as the sliders."""
+        """Edit an ADSR segment live through the same model/MIDI path as sliders."""
         param_key = f"{prefix}_{seg_key}"
-        spec = BY_KEY.get(param_key)
-        if spec is None or param_key not in self.vars:
+        if (param_key not in BY_KEY or param_key not in self.vars
+                or self.bank is None or self.selected_index is None):
             return
-        self.vars[param_key].set(int(round(norm * 127)))
-        self._value_preview(param_key)
+        raw = max(0, min(127, int(round(norm * 127))))
+        previous_raw = self.editor.get_patch(self.selected_index).get_raw(param_key)
+        if raw == previous_raw:
+            return
         if not self._dragging_env:
-            self._dragging_env = True
             try:
                 self._history.push()
             except Exception:
-                self._dragging_env = False
+                self._dragging_env_keys.clear()
                 raise
+            self._dragging_env = True
+        try:
+            self.editor.set_slot_parameter(self.selected_index, param_key, raw)
+        except Exception as exc:
+            self._history.undo()
+            self._dragging_env = False
+            self._dragging_env_keys.clear()
+            self._after_mutation()
+            messagebox.showerror("Envelope", str(exc))
+            return
+        self._dragging_env_keys.add(param_key)
+        self.bank = self.editor.bank
+        self.vars[param_key].set(raw)
+        self._value_preview(param_key)
+        # Only repaint the envelope currently being manipulated.
+        self._refresh_visualizations(changed_key=param_key)
+        self.status_var.set(
+            f"P{self.selected_index:02d}  {_synth_label(BY_KEY[param_key])} = {display_value(param_key, raw)}")
+        for midi_raw in intermediate_raw_values(previous_raw, raw):
+            self._midi_tx(param_key, midi_raw)
 
     def _bind_env_release(self, view) -> None:
-        """P1.26 polish: commit envelope drags on button release through the
-        existing parameter path (same behavior as slider release).  The
-        widget class itself is untouched — only an extra binding here."""
+        """Close the live ADSR gesture as one undoable action."""
         view.bind("<ButtonRelease-1>", self._env_release, add="+")
 
+    def _env_release(self, _event=None) -> None:
+        """Close the ADSR gesture and refresh the full GUI projection once."""
+        if not self._dragging_env:
+            return
+        changed = bool(self._dragging_env_keys)
+        self._dragging_env = False
+        self._dragging_env_keys.clear()
+        if changed:
+            self._after_mutation()
     # ---------------------------------------------------- P1.26: PRESETS tab
     def _build_presets_tab(self, frame) -> None:
         body = ttk.Panedwindow(frame, orient="horizontal")
@@ -1956,26 +1985,30 @@ class Editor(tk.Tk):
         self._refresh_wave_tiles()
         self._refresh_visualizations()
 
-    def _refresh_visualizations(self) -> None:
-        """P1.26: push current model values into the filter/envelope graphs.
+    def _refresh_visualizations(self, changed_key: str | None = None) -> None:
+        """Refresh only the graph affected by a parameter change.
 
-        Pure presentation sync through the existing widget APIs — no new
-        visualization engine, no raw-byte access.
+        Full model projection calls this with no key. During a drag, redrawing
+        all three canvases for every mouse event made the GUI unnecessarily
+        expensive, especially on slower Windows machines.
         """
         if self.bank is None or self.selected_index is None:
             return
-        patch = self.editor.get_patch(self.selected_index)   # model read API
+        patch = self.editor.get_patch(self.selected_index)
         try:
-            self.filter_view.set_values(patch.get_raw("filter_cutoff"),
-                                        patch.get_raw("filter_resonance"))
-            self.vcf_env_view.set_values(patch.get_raw("vcf_attack"),
-                                         patch.get_raw("vcf_decay"),
-                                         patch.get_raw("vcf_sustain"),
-                                         patch.get_raw("vcf_release"))
-            self.vca_env_view.set_values(patch.get_raw("vca_attack"),
-                                         patch.get_raw("vca_decay"),
-                                         patch.get_raw("vca_sustain"),
-                                         patch.get_raw("vca_release"))
+            if changed_key is None or changed_key in ("filter_cutoff", "filter_resonance"):
+                self.filter_view.set_values(patch.get_raw("filter_cutoff"),
+                                            patch.get_raw("filter_resonance"))
+            if changed_key is None or changed_key.startswith("vcf_"):
+                self.vcf_env_view.set_values(patch.get_raw("vcf_attack"),
+                                             patch.get_raw("vcf_decay"),
+                                             patch.get_raw("vcf_sustain"),
+                                             patch.get_raw("vcf_release"))
+            if changed_key is None or changed_key.startswith("vca_"):
+                self.vca_env_view.set_values(patch.get_raw("vca_attack"),
+                                             patch.get_raw("vca_decay"),
+                                             patch.get_raw("vca_sustain"),
+                                             patch.get_raw("vca_release"))
         except (AttributeError, KeyError):
             pass    # widgets not built yet (early construction/tests)
 
@@ -2139,7 +2172,7 @@ class Editor(tk.Tk):
         self._parameter_drag_changed = True
         self.bank = self.editor.bank
         self.value_vars[key].set(self._formatted(key, raw))
-        self._refresh_visualizations()
+        self._refresh_visualizations(changed_key=key)
         self.status_var.set(f"P{self.selected_index:02d}  "
                             f"{_synth_label(spec)} = {display_value(key, raw)}")
         # This path is shared by the custom Knob and all tk.Scale controls.
@@ -2156,15 +2189,6 @@ class Editor(tk.Tk):
         self._parameter_drag_changed = False
         if changed:
             self._after_mutation()
-
-    def _env_release(self, _event=None) -> None:
-        """Envelope-graph drag end -> commit through the normal parameter path."""
-        if not self._dragging_env:
-            return
-        self._dragging_env = False
-        for key in list(self.vars):
-            if key.startswith(("vcf_", "vca_")):
-                self.apply_parameter(key)
 
     def _combo_apply(self, key: str, combo) -> None:
         if self._syncing:

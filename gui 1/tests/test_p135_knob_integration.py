@@ -126,6 +126,32 @@ def test_knob_gesture_transmits_cc_through_existing_bridge(loaded,
     assert len(fake_backend.tx_log) == n
 
 
+# -------------------------------------------------------- 3b. full rotation
+@gui_test
+def test_knob_full_range_completes_a_360_degree_arc(loaded):
+    knob = loaded._knobs["osc_balance"]
+    knob.set_value(knob.maximum)
+    coords = knob.coords(knob._arc_item)
+    assert len(coords) > 170                 # full 360-degree polyline
+    assert ((coords[0] - coords[-2]) ** 2
+            + (coords[1] - coords[-1]) ** 2) ** 0.5 < 1.0
+
+
+@gui_test
+def test_vcf_graph_drag_commits_only_the_touched_adsr_field(loaded):
+    before = loaded.editor.get_patch(1).get_raw("vcf_decay")
+    target = 0 if before != 0 else 1
+    undo_depth = len(loaded._history._undo)
+
+    # Attack is intentionally untouched; changing decay must not be erased
+    # when the graph commits its edit.
+    loaded._env_drag("vcf", "decay", target / 127.0)
+    loaded._env_release()
+
+    assert loaded.editor.get_patch(1).get_raw("vcf_decay") == target
+    assert len(loaded._history._undo) == undo_depth + 1
+
+
 # --------------------------------------------------- 4. external sync (RX etc)
 @gui_test
 def test_external_model_update_moves_the_knob_without_echo(loaded,
