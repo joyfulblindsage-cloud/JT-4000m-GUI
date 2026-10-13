@@ -128,6 +128,26 @@ def test_knob_gesture_transmits_cc_through_existing_bridge(loaded,
 
 # -------------------------------------------------------- 3b. full rotation
 @gui_test
+def test_vertical_slider_drag_coalesces_cc_and_flushes_final_value(
+        loaded, fake_transport, fake_backend):
+    loaded.connect_midi(fake_transport, channel=1)
+    fake_backend.tx_log.clear()
+    before = loaded.editor.get_patch(1).get_raw("filter_cutoff")
+
+    loaded._begin_parameter_drag("filter_cutoff")
+    loaded.vars["filter_cutoff"].set(40)
+    loaded._scale_changed("filter_cutoff")
+    loaded.vars["filter_cutoff"].set(90)
+    loaded._scale_changed("filter_cutoff")
+    loaded._end_parameter_drag("filter_cutoff")
+
+    assert loaded.editor.get_patch(1).get_raw("filter_cutoff") == 90
+    assert fake_backend.tx_log == [bytes([0xB0, 74, 90])]
+    assert len(loaded._history._undo) >= 1
+    assert before != 90
+
+
+@gui_test
 def test_knob_drag_down_decreases_value_and_ignores_horizontal_only_motion(loaded):
     knob = loaded._knobs["osc_balance"]
     start = loaded.editor.get_patch(1).get_raw("osc_balance")
@@ -150,6 +170,7 @@ def test_knob_drag_down_decreases_value_and_ignores_horizontal_only_motion(loade
 def test_portamento_time_is_live_cc5_and_does_not_mutate_patch(
         loaded, fake_transport, fake_backend):
     loaded.connect_midi(fake_transport, channel=1)
+    fake_backend.tx_log.clear()
     assert "portamento_time" in loaded._midi_only_scales
     before = loaded.editor.bank.to_sysex()
 
@@ -164,6 +185,7 @@ def test_portamento_time_is_live_cc5_and_does_not_mutate_patch(
 def test_modulation_is_live_cc1_and_does_not_mutate_patch(
         loaded, fake_transport, fake_backend):
     loaded.connect_midi(fake_transport, channel=1)
+    fake_backend.tx_log.clear()
     before = loaded.editor.bank.to_sysex()
 
     loaded._midi_only_changed("modulation", 73)
