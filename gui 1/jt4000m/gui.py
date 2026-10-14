@@ -294,6 +294,29 @@ class Editor(tk.Tk):
             btn.pack(side="left")
             self.tab_buttons[tab_name] = btn
 
+        # P1.40 — top utility bar: patch selector + MIDI device controls.
+        utility = tk.Frame(self, bg="#080D14")
+        utility.pack(fill="x", side="top", padx=0, pady=(0, 2))
+        nav = tk.Frame(utility, bg="#080D14")
+        nav.pack(side="left", fill="y", padx=(8, 12), pady=3)
+        ttk.Button(nav, text="◀", width=3,
+                   command=lambda: self._nav_step(-1)).pack(side="left", padx=(0, 5))
+        tk.Label(nav, textvariable=self.nav_slot_var, bg="#080D14", fg="#42D9FF",
+                 font=("TkDefaultFont", 11, "bold")).pack(side="left", padx=(0, 5))
+        self.nav_query_var = tk.StringVar(value="")
+        self.nav_query_entry = ttk.Entry(nav, textvariable=self.nav_query_var, width=24)
+        self.nav_query_entry.pack(side="left", padx=4)
+        self.nav_query_entry.bind("<Return>", self._apply_nav_query)
+        self.nav_query_entry.bind("<FocusOut>", self._apply_nav_query)
+        ttk.Button(nav, text="▶", width=3,
+                   command=lambda: self._nav_step(1)).pack(side="left", padx=(5, 0))
+        self._build_midi_panel(parent=utility)
+
+        status = tk.Frame(self, bg="#080D14")
+        status.pack(fill="x", side="top")
+        tk.Label(status, textvariable=self.status_var, bg="#080D14", fg="#91A7C0",
+                 anchor="w").pack(fill="x", padx=10, pady=2)
+
         # Workspace container: exactly one child visible at a time.
         self.workspace = tk.Frame(self, bg="#0B1018")
         self.workspace.pack(fill="both", expand=True)
@@ -301,30 +324,7 @@ class Editor(tk.Tk):
         for tab_name in ("SYNTH", "PRESETS", "RESEARCH"):
             frame = tk.Frame(self.workspace, bg="#0B1018")
             self.tab_frames[tab_name] = frame
-        # SYNTH opens by default.
         self.tab_frames["SYNTH"].place(relx=0.0, rely=0.0, relwidth=1.0, relheight=1.0)
-
-        # ---- permanent bottom panel: preset navigator ------------------
-        nav = tk.Frame(self, bg="#080D14", height=44)
-        nav.pack(fill="x", side="bottom")
-        nav.pack_propagate(False)
-        tk.Frame(nav, bg="#243247", height=1).pack(fill="x")
-        ttk.Button(nav, text="◀", width=3,
-                   command=lambda: self._nav_step(-1)).pack(side="left", padx=(10, 4), pady=6)
-        tk.Label(nav, textvariable=self.nav_slot_var, bg="#080D14", fg="#42D9FF",
-                 font=("TkDefaultFont", 12, "bold")).pack(side="left", padx=4)
-        # P1.26 polish: fixed-width name label keeps the bar stable while
-        # patch names change (no jitter of the ▶ button).
-        tk.Label(nav, textvariable=self.nav_name_var, bg="#080D14", fg="#F3F7FF",
-                 font=("TkDefaultFont", 12, "bold"), width=20, anchor="w").pack(side="left", padx=6)
-        ttk.Button(nav, text="▶", width=3,
-                   command=lambda: self._nav_step(1)).pack(side="left", padx=4, pady=6)
-
-        # P1.29a — compact MIDI Connection & Device Discovery panel, packed
-        # into the SAME permanent bottom area as the navigator, so it is
-        # reachable from every workspace (SYNTH / PRESETS / RESEARCH) without
-        # a separate dialog and without eating vertical workspace height.
-        self._build_midi_panel()
 
         # ============ P1.26 — workspace migration =======================
         # SYNTH    : music controls only (OSC / MIX-RING / FILTER / ENV / LFO
@@ -338,11 +338,6 @@ class Editor(tk.Tk):
         self._build_presets_tab(self.tab_frames["PRESETS"])
         self._build_research_tab(self.tab_frames["RESEARCH"])
 
-        status = tk.Frame(self, bg="#080D14")
-        status.pack(fill="x", side="bottom")
-        tk.Label(status, textvariable=self.status_var, bg="#080D14", fg="#91A7C0",
-                 anchor="w").pack(fill="x", padx=8, pady=3)
-
     # ------------------------------------------------------ P1.26: SYNTH tab
     def _synth_box(self, parent, title: str, row: int, col: int,
                    columnspan: int = 1):
@@ -352,153 +347,138 @@ class Editor(tk.Tk):
         box.grid(row=row, column=col, columnspan=columnspan,
                  sticky="nsew", padx=3, pady=3)
         head = tk.Frame(box, bg="#131D2B")
-        head.pack(fill="x", padx=7, pady=(5, 0))
+        head.pack(fill="x", padx=5, pady=(3, 0))
         tk.Label(head, text=title, bg="#131D2B", fg="#F3F7FF",
                  font=("TkDefaultFont", 10, "bold")).pack(side="left")
         # Full-width signal strip gives each module a consistent visual anchor.
-        tk.Frame(box, bg="#42D9FF", height=2).pack(fill="x", padx=7, pady=(4, 0))
+        tk.Frame(box, bg="#42D9FF", height=2).pack(fill="x", padx=5, pady=(2, 0))
         inner = tk.Frame(box, bg="#131D2B")
-        inner.pack(fill="both", expand=True, padx=7, pady=(5, 6))
+        inner.pack(fill="both", expand=True, padx=5, pady=(3, 4))
         return box, inner
 
     def _build_synth_tab(self, frame) -> None:
-        """Build a fixed, no-scroll synth surface following the compact layout sketch.
+        """Build the reference layout: 3 panels / 2 envelopes / 4 modules.
 
-        The SYNTH workspace is a two-row / three-column instrument panel:
-        OSC 1, OSC 2 and FILTER/VCF EG on top; VCA EG, both LFOs, and the
-        MIX/RING + MOD/PORTAMENTO stack below.  Preset and engineering views
-        stay in their own top-level tabs, so they do not consume synth space.
+        Row 1: OSC 1, OSC 2, FILTER.
+        Row 2: VCA Envelope and VCF Envelope, each with graph + ADSR.
+        Row 3: LFO 1, LFO 2, MIX / RING, MOD / PORTAMENTO.
         """
         self.controls = tk.Frame(frame, bg="#0B1018")
         self.controls.pack(fill="both", expand=True, padx=2, pady=2)
         self.controls.bind("<Configure>", self._on_synth_resize)
-        for col in range(3):
+        for col in range(12):
             self.controls.grid_columnconfigure(col, weight=1, uniform="synth-col")
-        self.controls.grid_rowconfigure(0, weight=1, uniform="synth-row")
-        self.controls.grid_rowconfigure(1, weight=1, uniform="synth-row")
+        for row in range(3):
+            # Tk grid row weights are integers; uniform sizing keeps rows aligned.
+            self.controls.grid_rowconfigure(row, weight=1, uniform="synth-row")
 
         self.section_labels: dict[str, tk.Label] = {}
         self.reset_buttons: dict[str, tuple[tk.Button, tk.Label]] = {}
-
-        specs = {s.key: s for s in PARAMETERS}
+        specs = {spec.key: spec for spec in PARAMETERS}
         self.wave_phase_var = tk.StringVar(value="")
 
-        # ---- Top row: OSC 1 / OSC 2 / FILTER + VCF envelope ---------------
-        _, osc1 = self._synth_box(self.controls, "OSC 1", 0, 0)
+        # Row 1 — oscillators and filter.
+        _, osc1 = self._synth_box(self.controls, "OSC 1", 0, 0, columnspan=3)
         self._build_wave_tile_row(osc1, "osc1_wave", "OSC1 Preview")
         self._parameter_row(osc1, specs["osc1_wave"])
         for key in ("osc1_pwm_fm", "osc1_coarse", "osc1_fine"):
             self._parameter_row(osc1, specs[key])
 
-        _, osc2 = self._synth_box(self.controls, "OSC 2", 0, 1)
+        _, osc2 = self._synth_box(self.controls, "OSC 2", 0, 3, columnspan=3)
         self._build_wave_tile_row(osc2, "osc2_wave", "OSC2 Preview")
         self._parameter_row(osc2, specs["osc2_wave"])
         for key in ("osc2_pwm", "osc2_coarse", "osc2_fine"):
             self._parameter_row(osc2, specs[key])
 
-        _, filt = self._synth_box(self.controls, "FILTER", 0, 2)
-        self.filter_view = FilterView(filt, width=180, height=40)
-        self.filter_view.pack(anchor="center", pady=(0, 4))
-        for key in ("filter_cutoff", "filter_resonance", "filter_env_amount"):
+        _, filt = self._synth_box(self.controls, "FILTER", 0, 6, columnspan=6)
+        self.filter_view = FilterView(filt, width=230, height=42)
+        self.filter_view.pack(anchor="center", pady=(0, 3))
+        for key in ("filter_cutoff", "filter_resonance"):
             self._parameter_row(filt, specs[key])
 
-        tk.Label(filt, text="VCF ENVELOPE", bg="#131D2B", fg="#A8BDD3",
-                 font=("TkDefaultFont", 9, "bold"), anchor="w").pack(fill="x", pady=(3, 1))
-        self.vcf_env_view = EnvelopeView(
-            filt, title="VCF EG", width=180, height=38,
-            on_segment=lambda k, n: self._env_drag("vcf", k, n))
-        self.vcf_env_view.pack(anchor="center", pady=(0, 3))
-        self._bind_env_release(self.vcf_env_view)
-        vcf_adsr = tk.Frame(filt, bg="#131D2B")
-        vcf_adsr.pack(fill="x", expand=True)
-        for col, key in enumerate(("vcf_attack", "vcf_decay", "vcf_sustain", "vcf_release")):
-            self._parameter_column(vcf_adsr, specs[key], col=col)
-
-        # ---- Bottom left: VCA envelope ------------------------------------
-        _, vca = self._synth_box(self.controls, "VCA ENVELOPE", 1, 0)
+        # Row 2 — separate VCA and VCF envelopes.
+        _, vca = self._synth_box(self.controls, "VCA ENVELOPE", 1, 0, columnspan=6)
         self.vca_env_view = EnvelopeView(
-            vca, title="VCA EG", width=200, height=46,
+            vca, title="VCA EG", width=330, height=42,
             on_segment=lambda k, n: self._env_drag("vca", k, n))
-        self.vca_env_view.pack(anchor="center", pady=(0, 4))
+        self.vca_env_view.pack(anchor="center", pady=(0, 3))
         self._bind_env_release(self.vca_env_view)
         vca_adsr = tk.Frame(vca, bg="#131D2B")
         vca_adsr.pack(fill="x", expand=True)
         for col, key in enumerate(("vca_attack", "vca_decay", "vca_sustain", "vca_release")):
             self._parameter_column(vca_adsr, specs[key], col=col)
 
-        # ---- Bottom middle: compact stacked LFO 1 / LFO 2 -----------------
-        _, lfo = self._synth_box(self.controls, "LFO", 1, 1)
-        for lfo_title, keys in (
-            ("LFO 1", ("lfo1_wave", "lfo1_destination", "lfo1_rate", "lfo1_amount")),
-            ("LFO 2", ("lfo2_wave", "lfo2_rate", "lfo2_amount")),
-        ):
-            sub = tk.Frame(lfo, bg="#131D2B")
-            sub.pack(fill="x", expand=True, pady=(0, 3))
-            tk.Label(sub, text=lfo_title, bg="#131D2B", fg="#F3F7FF",
-                     font=("TkDefaultFont", 9, "bold"), anchor="w").pack(fill="x")
-            for key in keys:
-                self._parameter_row(sub, specs[key])
-            if lfo_title == "LFO 2":
-                tk.Label(
-                    sub, text="Destination not documented (CC 56 = LFO1)",
-                    bg="#131D2B", fg="#8CA2BA", anchor="w", justify="left",
-                ).pack(anchor="w", pady=(0, 1))
+        _, vcf = self._synth_box(self.controls, "VCF ENVELOPE", 1, 6, columnspan=6)
+        self.vcf_env_view = EnvelopeView(
+            vcf, title="VCF EG", width=330, height=42,
+            on_segment=lambda k, n: self._env_drag("vcf", k, n))
+        self.vcf_env_view.pack(anchor="center", pady=(0, 3))
+        self._bind_env_release(self.vcf_env_view)
+        self._parameter_row(vcf, specs["filter_env_amount"])
+        vcf_adsr = tk.Frame(vcf, bg="#131D2B")
+        vcf_adsr.pack(fill="x", expand=True)
+        for col, key in enumerate(("vcf_attack", "vcf_decay", "vcf_sustain", "vcf_release")):
+            self._parameter_column(vcf_adsr, specs[key], col=col)
 
-        # ---- Bottom right: MIX/RING above MOD/PORTAMENTO ------------------
-        right = tk.Frame(self.controls, bg="#0B1018")
-        right.grid(row=1, column=2, sticky="nsew")
-        right.grid_columnconfigure(0, weight=1)
-        right.grid_rowconfigure(0, weight=1)
-        right.grid_rowconfigure(1, weight=1)
+        # Row 3 — four compact modules.
+        _, lfo1 = self._synth_box(self.controls, "LFO 1", 2, 0, columnspan=3)
+        self._build_wave_tile_row(lfo1, "lfo1_wave", "LFO1 Preview")
+        for key in ("lfo1_wave", "lfo1_destination", "lfo1_rate", "lfo1_amount"):
+            self._parameter_row(lfo1, specs[key])
 
-        _, mix = self._synth_box(right, "MIX / RING", 0, 0)
-        mix_rows = tk.Frame(mix, bg="#131D2B")
-        mix_rows.pack(fill="x")
-        mix_rows.grid_columnconfigure(0, weight=1)
-        mix_rows.grid_columnconfigure(1, weight=1)
-        self._knob_row(mix_rows, specs["osc_balance"], row=0, col=0)
-        self._parameter_row(mix_rows, specs["ring_mod_toggle"], grid=True, row=0, col=1)
-        self._parameter_row(mix_rows, specs["ring_mod_amount"], grid=True, row=1, col=0)
+        _, lfo2 = self._synth_box(self.controls, "LFO 2", 2, 3, columnspan=3)
+        self._build_wave_tile_row(lfo2, "lfo2_wave", "LFO2 Preview")
+        for key in ("lfo2_wave", "lfo2_rate", "lfo2_amount"):
+            self._parameter_row(lfo2, specs[key])
+        tk.Label(lfo2, text="Destination not documented (CC 56 = LFO1)",
+                 bg="#131D2B", fg="#8CA2BA", anchor="w", justify="left").pack(
+                     anchor="w", pady=(0, 1))
 
-        _, mod = self._synth_box(right, "MOD / PORTAMENTO", 1, 0)
-        self._parameter_row(mod, specs["portamento_mode"])
-        portamento_mode_combo = getattr(self, "combo_portamento_mode", None)
-        if portamento_mode_combo is not None:
-            portamento_mode_combo.configure(state="disabled")
-        self.section_labels["portamento_mode"].configure(
-            text="Portamento Mode (ON unverified)"
-        )
+        _, mix = self._synth_box(self.controls, "MIX / RING", 2, 6, columnspan=3)
+        self._knob_row(mix, specs["osc_balance"])
+        self._parameter_row(mix, specs["ring_mod_toggle"])
+        self._parameter_row(mix, specs["ring_mod_amount"])
+
+        _, mod = self._synth_box(self.controls, "MOD / PORTAMENTO", 2, 9, columnspan=3)
         for spec in PARAMETERS:
             if spec.offset is None:
                 if spec.key in ("modulation", "portamento_time"):
                     self._midi_only_parameter_row(mod, spec)
                 else:
-                    lbl = tk.Label(
-                        mod, text=f"{_synth_label(spec)}: CC {spec.cc}",
-                        bg="#131D2B", fg="#8CA2BA", anchor="w")
+                    lbl = tk.Label(mod, text=f"{_synth_label(spec)}: CC {spec.cc}",
+                                   bg="#131D2B", fg="#8CA2BA", anchor="w")
                     lbl.pack(fill="x", pady=1)
                     self.section_labels[spec.key] = lbl
         self._parameter_row(mod, specs["portamento_amount"])
-        tk.Label(
-            mod, text="Portamento ON/OFF mapping unverified",
-            bg="#131D2B", fg="#8CA2BA", anchor="w", justify="left",
-        ).pack(fill="x", pady=(1, 0))
+        self._parameter_row(mod, specs["portamento_mode"])
+        portamento_mode_combo = getattr(self, "combo_portamento_mode", None)
+        if portamento_mode_combo is not None:
+            portamento_mode_combo.configure(state="disabled")
+        self.section_labels["portamento_mode"].configure(text="Portamento Mode (ON unverified)")
+        tk.Label(mod, text="Portamento ON/OFF mapping unverified",
+                 bg="#131D2B", fg="#8CA2BA", anchor="w", justify="left").pack(
+                     fill="x", pady=(1, 0))
 
     def _on_synth_resize(self, event) -> None:
-        """Adapt control density to the fixed synth workspace without scrolling."""
+        """Adapt labels and sliders to the compact three-row workspace."""
         width = max(1, event.width)
         compact = width < 1180
-        label_width = 14 if compact else 18
+        label_width = 10 if compact else 13
         for label in getattr(self, "section_labels", {}).values():
             try:
-                if int(label.cget("width")) in (14, 16, 18, 22, 30):
+                if int(label.cget("width")) in (10, 12, 14, 16, 18, 22, 30):
                     label.configure(width=label_width)
             except (tk.TclError, ValueError):
                 pass
-        slider_length = max(90, min(155, width // 10))
+        slider_length = max(65, min(145, width // 18))
         for scale in getattr(self, "_parameter_scales", ()):
             try:
                 scale.configure(length=slider_length)
+            except tk.TclError:
+                pass
+        for scale in getattr(self, "_midi_only_scales", {}).values():
+            try:
+                scale.configure(length=max(65, min(130, width // 24)))
             except tk.TclError:
                 pass
 
@@ -712,14 +692,50 @@ class Editor(tk.Tk):
             self.select_program(target)
 
     def _update_nav(self) -> None:
-        """Project the current model selection into the bottom navigator."""
+        """Project current selection into the editable top patch selector."""
         if self.bank is not None and self.selected_index is not None:
             patch = self.editor.get_patch(self.selected_index)
             self.nav_slot_var.set(f"P{self.selected_index:02d}")
+            # Keep the legacy navigator projection in sync for callers/tests,
+            # even though the visible header now uses the editable query field.
             self.nav_name_var.set(patch.name)
+            if hasattr(self, "nav_query_var") and self.focus_get() is not getattr(
+                    self, "nav_query_entry", None):
+                self.nav_query_var.set(patch.name)
         else:
             self.nav_slot_var.set("P--")
             self.nav_name_var.set("—")
+            if hasattr(self, "nav_query_var"):
+                self.nav_query_var.set("")
+
+    def _apply_nav_query(self, _event=None):
+        """Select by patch number (1..32 / P01) or exact full patch name."""
+        if self.bank is None:
+            return "break"
+        query = self.nav_query_var.get().strip()
+        if not query:
+            self._update_nav()
+            return "break"
+        numeric = query.upper().removeprefix("P").strip()
+        target = None
+        if numeric.isdigit():
+            slot = int(numeric)
+            if 1 <= slot <= 32:
+                target = slot
+        else:
+            matches = [
+                i for i in range(1, 33)
+                if self.editor.get_patch(i).name.casefold() == query.casefold()
+            ]
+            if len(matches) == 1:
+                target = matches[0]
+        if target is None:
+            self.status_var.set(
+                "Patch not found: enter slot 1–32 / P01 or an exact patch name")
+            self._update_nav()
+            return "break"
+        self.select_program(target)
+        return "break"
 
     # --------------------------------------------------- waveform previews
     def _refresh_wave_tiles(self) -> None:
@@ -781,7 +797,7 @@ class Editor(tk.Tk):
         else:
             line.pack(fill="x", pady=3)
         label = tk.Label(line, text=_row_label(spec, self.developer_var.get()), bg="#131D2B",
-                         fg="#A8BDD3", width=22, anchor="w")
+                         fg="#A8BDD3", width=12, anchor="w")
         label.pack(side="left")
         self.section_labels[spec.key] = label
         # Initial value = documented default; it is overwritten from the model
@@ -813,7 +829,7 @@ class Editor(tk.Tk):
             scale = tk.Scale(line, from_=spec.minimum, to=spec.maximum, orient="horizontal",
                              variable=var, showvalue=False, resolution=1, bg="#131D2B",
                              fg="#B6C8DC", troughcolor="#0D1521", highlightthickness=0, bd=0,
-                             sliderrelief="flat", length=185,
+                             sliderrelief="flat", length=120,
                              command=lambda _v, key=spec.key: self._scale_changed(key))
             scale.pack(side="left", fill="x", expand=True, padx=5)
             self._parameter_scales.append(scale)
@@ -842,7 +858,9 @@ class Editor(tk.Tk):
         parameter system is introduced; range/limits stay registry-driven.
         """
         line = tk.Frame(parent, bg="#131D2B", padx=2, pady=2)
-        line.grid(row=row, column=col, sticky="ew", padx=(0, 10), pady=3)
+        # This layout stacks the MIX / RING controls with pack; use the same
+        # manager for the knob row (mix's parent) to avoid pack/grid conflicts.
+        line.pack(fill="x", pady=3)
         label = tk.Label(line, text=_row_label(spec, self.developer_var.get()),
                          bg="#131D2B", fg="#A8BDD3", width=22, anchor="w")
         label.pack(side="left")
@@ -890,7 +908,7 @@ class Editor(tk.Tk):
         row.pack(fill="x", pady=2)
         label = tk.Label(
             row, text=f"{_synth_label(spec)} · CC {spec.cc} · live only",
-            bg="#131D2B", fg="#A8BDD3", width=30, anchor="w",
+            bg="#131D2B", fg="#A8BDD3", width=16, anchor="w",
         )
         label.pack(side="left")
         self.section_labels[spec.key] = label
@@ -905,7 +923,7 @@ class Editor(tk.Tk):
             row, from_=spec.minimum, to=spec.maximum, orient="horizontal",
             variable=var, showvalue=False, resolution=1, bg="#131D2B",
             fg="#B6C8DC", troughcolor="#0D1521", highlightthickness=0, bd=0,
-            sliderrelief="flat", length=155,
+            sliderrelief="flat", length=105,
             command=lambda raw, key=spec.key: self._midi_only_changed(
                 key, int(float(raw))),
         )
@@ -1420,23 +1438,24 @@ class Editor(tk.Tk):
             self._midi_transport = MidiTransport()
         return self._midi_transport
 
-    def _build_midi_panel(self) -> None:
-        panel = tk.Frame(self, bg="#080D14")
-        panel.pack(fill="x", side="bottom", before=self._nav_frame_ref())
-        ttk.Label(panel, text="MIDI", style="Muted.TLabel").pack(side="left", padx=(10, 4))
-        ttk.Button(panel, text="Refresh", command=self.refresh_midi_ports)\
-            .pack(side="left", padx=4, pady=4)
-        ttk.Label(panel, text="In:", style="Muted.TLabel").pack(side="left", padx=(8, 2))
-        self.midi_in_combo = ttk.Combobox(panel, state="readonly", width=26, values=[])
+    def _build_midi_panel(self, parent=None) -> None:
+        """Compact top-row MIDI controls; discovery never opens ports."""
+        panel = tk.Frame(parent or self, bg="#080D14")
+        panel.pack(side="right", fill="y", padx=(4, 10), pady=3)
+        ttk.Label(panel, text="USB MIDI", style="Muted.TLabel").pack(side="left", padx=(0, 4))
+        ttk.Button(panel, text="Refresh", command=self.refresh_midi_ports).pack(
+            side="left", padx=3, pady=2)
+        ttk.Label(panel, text="In:", style="Muted.TLabel").pack(side="left", padx=(5, 2))
+        self.midi_in_combo = ttk.Combobox(panel, state="readonly", width=17, values=[])
         self.midi_in_combo.pack(side="left")
-        ttk.Label(panel, text="Out:", style="Muted.TLabel").pack(side="left", padx=(8, 2))
-        self.midi_out_combo = ttk.Combobox(panel, state="readonly", width=26, values=[])
+        ttk.Label(panel, text="Out:", style="Muted.TLabel").pack(side="left", padx=(5, 2))
+        self.midi_out_combo = ttk.Combobox(panel, state="readonly", width=17, values=[])
         self.midi_out_combo.pack(side="left")
         self.midibtn = ttk.Button(panel, text="Connect", command=self.toggle_midi_connection)
-        self.midibtn.pack(side="left", padx=8)
+        self.midibtn.pack(side="left", padx=(6, 3))
         self.status_lbl = tk.Label(panel, text="Status: Offline", bg="#080D14",
                                    fg="#8CA2BA", font=("TkDefaultFont", 9, "bold"))
-        self.status_lbl.pack(side="left", padx=4)
+        self.status_lbl.pack(side="left", padx=3)
         self.refresh_midi_ports()   # initial enumeration (no ports opened)
 
     def _nav_frame_ref(self):
