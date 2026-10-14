@@ -476,6 +476,49 @@ def test_keyboard_navigation_selects_through_model(app):
     assert app.editor.selected == 5                    # model state, not GUI copy
 
 
+@gui_test
+def test_adsr_graph_uses_attack_decay_sustain_and_release(app):
+    """Each ADSR parameter must visibly affect its corresponding curve segment."""
+    from jt4000m.widgets import EnvelopeView
+
+    view = EnvelopeView(app.controls, title="test", width=330, height=70)
+    try:
+        view.set_values(0, 0, 0, 0)
+        base = view._points()
+
+        view.set_values(127, 0, 0, 0)
+        attack = view._points()
+        assert attack[1][0] != base[1][0]  # attack width
+
+        view.set_values(0, 127, 0, 0)
+        decay = view._points()
+        assert decay[2][0] != base[2][0]  # decay width
+
+        view.set_values(0, 0, 127, 0)
+        sustain = view._points()
+        assert sustain[2][1] != base[2][1]  # sustain level
+
+        view.set_values(0, 0, 0, 127)
+        release = view._points()
+        assert release[3][0] != base[3][0]  # release segment width
+    finally:
+        view.destroy()
+
+
+@gui_test
+def test_adsr_slider_edit_refreshes_curve_and_wave_tiles_are_readable(app):
+    app.load_path(FIX / "ALL INIT SAW.syx")
+    assert app._osc_tiles["osc1_wave"].width == 220
+    assert app._osc_tiles["osc2_wave"].width == 220
+
+    before = app.vca_env_view._points()
+    app.vars["vca_attack"].set(127)
+    app.apply_parameter("vca_attack")
+    after = app.vca_env_view._points()
+    assert after != before
+    assert app.vca_env_view._vals["attack"] == pytest.approx(1.0)
+
+
 @pytest.mark.skipif(not _HAS_DISPLAY, reason="no display available")
 def test_synth_workspace_matches_reference_layout_without_scrollbar(app):
     """Three top modules, two separate envelopes, four bottom modules."""
