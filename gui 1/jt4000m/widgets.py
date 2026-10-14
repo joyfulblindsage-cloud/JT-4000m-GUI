@@ -313,28 +313,42 @@ class EnvelopeView(tk.Canvas):
 
     # ------------------------------------------------------------- geometry
     def _points(self):
+        """Return ADSR points with all four values represented visually.
+
+        The actual JT-4000M time curves are not calibrated, so attack/decay/
+        release values control relative segment widths (larger = longer),
+        while sustain controls the held level.  This is a readable schematic,
+        not a claim of hardware-accurate timing.
+        """
         w, h = self.width, self.height
-        pad = 6
-        seg_w = (w - 2 * pad) / 4.0
-        x0 = pad
-        y_base = h - pad
-        y_top = pad
-        p0 = (x0, y_base)
-        p1 = (x0 + seg_w, y_top)                                   # attack peak
-        p2 = (x0 + 2 * seg_w, y_base - (y_base - y_top) * self._vals["sustain"])
-        p3 = (x0 + 3 * seg_w, p2[1])                              # sustain hold
-        p4 = (x0 + 4 * seg_w, y_base)                             # release end
-        return p0, p1, p2, p3, p4
+        pad = 8
+        x0, x_end = pad, max(pad + 4, w - pad)
+        y_base, y_top = h - pad, pad
+        usable = x_end - x0
+        # A non-zero floor keeps every segment visible at parameter value 0.
+        weights = [
+            0.12 + self._vals["attack"],
+            0.12 + self._vals["decay"],
+            1.0,  # visible sustain/hold interval
+            0.12 + self._vals["release"],
+        ]
+        total = sum(weights)
+        widths = [usable * weight / total for weight in weights]
+        x1 = x0 + widths[0]
+        x2 = x1 + widths[1]
+        x3 = x2 + widths[2]
+        level = y_base - (y_base - y_top) * self._vals["sustain"]
+        return ((x0, y_base), (x1, y_top), (x2, level),
+                (x3, level), (x_end, y_base))
 
     def _segment_at(self, x: float, y: float):
-        """Nearest draggable segment for a point, plus its parameter key."""
+        """Return the nearest ADSR segment and its editable parameter."""
         p0, p1, p2, p3, p4 = self._points()
-        mid = (p0[0] + p4[0]) / 2
-        if x < (p0[0] + p1[0]) / 2:
+        if x < p1[0]:
             return "attack", p0, p1
-        if x < (p1[0] + p2[0]) / 2 or (x < mid and y <= p1[1] + 12):
+        if x < p2[0]:
             return "decay", p1, p2
-        if x < (p2[0] + p3[0]) + 2:
+        if x < p3[0]:
             return "sustain", p2, p3
         return "release", p3, p4
 
@@ -348,8 +362,13 @@ class EnvelopeView(tk.Canvas):
     def _motion(self, event) -> None:
         if not self._dragging or self.on_segment is None:
             return
-        key, _a, _b = self._segment_at(event.x, event.y)
-        norm = _clamp((self.height - 6 - event.y) / (self.height - 12))
+        key, a, b = self._segment_at(event.x, event.y)
+        if key == "sustain":
+            norm = _clamp((self.height - 8 - event.y) / max(1, self.height - 16))
+        else:
+            # Time controls are represented horizontally; vertical movement
+            # alone must not accidentally alter Attack/Decay/Release.
+            norm = _clamp((event.x - a[0]) / max(1.0, b[0] - a[0]))
         self._vals[key] = norm
         self._paint()
         self.on_segment(key, norm)

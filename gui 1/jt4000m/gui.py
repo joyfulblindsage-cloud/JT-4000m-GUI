@@ -406,7 +406,7 @@ class Editor(tk.Tk):
         self.vca_env_view.pack(anchor="center", pady=(0, 3))
         self._bind_env_release(self.vca_env_view)
         vca_adsr = tk.Frame(vca, bg="#131D2B")
-        vca_adsr.pack(fill="x", expand=True)
+        vca_adsr.pack(fill="x")
         for col, key in enumerate(("vca_attack", "vca_decay", "vca_sustain", "vca_release")):
             self._parameter_column(vca_adsr, specs[key], col=col)
 
@@ -416,11 +416,14 @@ class Editor(tk.Tk):
             on_segment=lambda k, n: self._env_drag("vcf", k, n))
         self.vcf_env_view.pack(anchor="center", pady=(0, 3))
         self._bind_env_release(self.vcf_env_view)
-        self._parameter_row(vcf, specs["filter_env_amount"])
+        # Keep both ADSR strips directly below their graphs so all eight
+        # sliders share the same vertical baseline. VCF amount is secondary
+        # and sits below the ADSR strip rather than pushing it down.
         vcf_adsr = tk.Frame(vcf, bg="#131D2B")
-        vcf_adsr.pack(fill="x", expand=True)
+        vcf_adsr.pack(fill="x")
         for col, key in enumerate(("vcf_attack", "vcf_decay", "vcf_sustain", "vcf_release")):
             self._parameter_column(vcf_adsr, specs[key], col=col)
+        self._parameter_row(vcf, specs["filter_env_amount"])
 
         # Row 3 — four compact modules.
         _, lfo1 = self._synth_box(self.controls, "LFO 1", 2, 0, columnspan=3)
@@ -484,17 +487,22 @@ class Editor(tk.Tk):
             except tk.TclError:
                 pass
 
-    def _build_wave_tile_row(self, parent, key: str, caption: str) -> None:
-        """Per-OSC waveform preview tile (reuses the existing WaveTile)."""
+    def _build_wave_tile_row(self, parent, key: str, caption: str, *,
+                             width: int | None = None, height: int | None = None) -> None:
+        """Wave preview tile; oscillator displays are larger than compact LFO tiles."""
+        if width is None:
+            width = 220 if key.startswith("osc") else 160
+        if height is None:
+            height = 64 if key.startswith("osc") else 48
         row = tk.Frame(parent, bg="#131D2B")
         row.pack(fill="x", pady=(0, 4))
-        # P1.26 polish: darker inset well + thin border make the preview read
-        # as a display, clearly separated from the sliders below it.
-        canvas = tk.Canvas(row, width=150, height=44, bg="#0D1521",
+        # The larger oscillator tiles make waveform shape legible at a glance;
+        # LFO tiles stay compact to protect the four-column bottom row.
+        canvas = tk.Canvas(row, width=width, height=height, bg="#0D1521",
                            highlightthickness=1, highlightbackground="#2A3A4F")
         canvas.pack(side="left")
-        tile = WaveTile(canvas, self._update_wave_phase, width=150, height=44)
-        canvas.create_text(4, 40, text=caption, anchor="w", fill="#8CA2BA",
+        tile = WaveTile(canvas, self._update_wave_phase, width=width, height=height)
+        canvas.create_text(4, height - 4, text=caption, anchor="w", fill="#8CA2BA",
                            font=("TkDefaultFont", 7, "bold"))
         if not hasattr(self, "_osc_tiles"):
             self._osc_tiles: dict[str, WaveTile] = {}
