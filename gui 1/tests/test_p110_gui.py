@@ -531,7 +531,7 @@ def test_synth_workspace_matches_reference_layout_without_scrollbar(app):
         if child.winfo_manager() == "grid"
     }
     assert {(0, 0, 4), (0, 4, 4), (0, 8, 4),
-            (1, 0, 6), (1, 6, 6),
+            (1, 0, 4), (1, 4, 4), (1, 8, 4),
             (2, 0, 3), (2, 3, 3), (2, 6, 3), (2, 9, 3)} <= cells
     assert app.current_tab.get() == "SYNTH"
     assert hasattr(app, "nav_query_entry")
@@ -541,6 +541,18 @@ def test_synth_workspace_matches_reference_layout_without_scrollbar(app):
             "filter_env_amount"} <= set(app.vars)
     from jt4000m.model import editable_parameters
     assert {spec.key for spec in editable_parameters()} <= set(app.vars)
+
+
+@gui_test
+def test_arpeggiator_panel_documents_native_settings_without_fake_controls(app):
+    """ARP settings are visible, but unmapped device controls must not be faked."""
+    assert hasattr(app, "arp_panel")
+    labels = [child.cget("text") for child in app.arp_panel.winfo_children()
+              if isinstance(child, tk.Label)]
+    assert any("Native engine" in label for label in labels)
+    assert any("MIDI Start/Stop" in label for label in labels)
+    assert { "lfo2_wave", "lfo2_rate", "lfo2_amount" } <= set(app.vars)
+    assert "lfo2_destination" not in app.vars
 
 
 @gui_test
