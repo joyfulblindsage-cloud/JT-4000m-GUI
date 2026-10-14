@@ -406,7 +406,7 @@ class Editor(tk.Tk):
         self.vca_env_view.pack(anchor="center", pady=(0, 3))
         self._bind_env_release(self.vca_env_view)
         vca_adsr = tk.Frame(vca, bg="#131D2B")
-        vca_adsr.pack(fill="x", expand=True)
+        vca_adsr.pack(fill="x")
         for col, key in enumerate(("vca_attack", "vca_decay", "vca_sustain", "vca_release")):
             self._parameter_column(vca_adsr, specs[key], col=col)
 
@@ -420,7 +420,7 @@ class Editor(tk.Tk):
         # sliders share the same vertical baseline. VCF amount is secondary
         # and sits below the ADSR strip rather than pushing it down.
         vcf_adsr = tk.Frame(vcf, bg="#131D2B")
-        vcf_adsr.pack(fill="x", expand=True)
+        vcf_adsr.pack(fill="x")
         for col, key in enumerate(("vcf_attack", "vcf_decay", "vcf_sustain", "vcf_release")):
             self._parameter_column(vcf_adsr, specs[key], col=col)
         self._parameter_row(vcf, specs["filter_env_amount"])
