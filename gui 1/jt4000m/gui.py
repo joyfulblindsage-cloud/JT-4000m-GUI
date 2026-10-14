@@ -347,13 +347,13 @@ class Editor(tk.Tk):
         box.grid(row=row, column=col, columnspan=columnspan,
                  sticky="nsew", padx=3, pady=3)
         head = tk.Frame(box, bg="#131D2B")
-        head.pack(fill="x", padx=5, pady=(3, 0))
+        head.pack(fill="x", padx=3, pady=(2, 0))
         tk.Label(head, text=title, bg="#131D2B", fg="#F3F7FF",
                  font=("TkDefaultFont", 10, "bold")).pack(side="left")
         # Full-width signal strip gives each module a consistent visual anchor.
         tk.Frame(box, bg="#42D9FF", height=2).pack(fill="x", padx=5, pady=(2, 0))
         inner = tk.Frame(box, bg="#131D2B")
-        inner.pack(fill="both", expand=True, padx=5, pady=(3, 4))
+        inner.pack(fill="both", expand=True, padx=3, pady=(2, 3))
         return box, inner
 
     def _build_synth_tab(self, frame) -> None:
@@ -368,9 +368,12 @@ class Editor(tk.Tk):
         self.controls.bind("<Configure>", self._on_synth_resize)
         for col in range(12):
             self.controls.grid_columnconfigure(col, weight=1, uniform="synth-col")
-        for row in range(3):
-            # Tk grid row weights are integers; uniform sizing keeps rows aligned.
-            self.controls.grid_rowconfigure(row, weight=1, uniform="synth-row")
+        # Do not force all three rows to the same height: the OSC/FILTER
+        # row has less content, so let it use its natural height and give the
+        # recovered vertical space to the envelope and modulation rows.
+        self.controls.grid_rowconfigure(0, weight=0, uniform="")
+        self.controls.grid_rowconfigure(1, weight=1, uniform="")
+        self.controls.grid_rowconfigure(2, weight=1, uniform="")
 
         self.section_labels: dict[str, tk.Label] = {}
         self.reset_buttons: dict[str, tuple[tk.Button, tk.Label]] = {}
@@ -463,14 +466,17 @@ class Editor(tk.Tk):
         """Adapt labels and sliders to the compact three-row workspace."""
         width = max(1, event.width)
         compact = width < 1180
-        label_width = 10 if compact else 13
+        # Keep labels short so horizontal scales get the majority of each row.
+        label_width = 8 if compact else 10
         for label in getattr(self, "section_labels", {}).values():
             try:
                 if int(label.cget("width")) in (10, 12, 14, 16, 18, 22, 30):
                     label.configure(width=label_width)
             except (tk.TclError, ValueError):
                 pass
-        slider_length = max(65, min(145, width // 18))
+        # Tk Scale's requested length is a floor; pack(fill='x', expand=True)
+        # lets it grow further inside the available panel width.
+        slider_length = max(130, min(210, width // 7))
         for scale in getattr(self, "_parameter_scales", ()):
             try:
                 scale.configure(length=slider_length)
@@ -478,7 +484,7 @@ class Editor(tk.Tk):
                 pass
         for scale in getattr(self, "_midi_only_scales", {}).values():
             try:
-                scale.configure(length=max(65, min(130, width // 24)))
+                scale.configure(length=max(100, min(180, width // 12)))
             except tk.TclError:
                 pass
 
@@ -797,7 +803,7 @@ class Editor(tk.Tk):
         else:
             line.pack(fill="x", pady=3)
         label = tk.Label(line, text=_row_label(spec, self.developer_var.get()), bg="#131D2B",
-                         fg="#A8BDD3", width=12, anchor="w")
+                         fg="#A8BDD3", width=8, anchor="w")
         label.pack(side="left")
         self.section_labels[spec.key] = label
         # Initial value = documented default; it is overwritten from the model
@@ -810,7 +816,7 @@ class Editor(tk.Tk):
         if spec.kind == "enum":
             options = enum_options(spec.key)
             if options:
-                combo = ttk.Combobox(line, state="readonly", width=16,
+                combo = ttk.Combobox(line, state="readonly", width=12,
                                      values=[name for _v, name in options])
                 combo.pack(side="right")
                 setattr(self, f"combo_{spec.key}", combo)
@@ -829,7 +835,7 @@ class Editor(tk.Tk):
             scale = tk.Scale(line, from_=spec.minimum, to=spec.maximum, orient="horizontal",
                              variable=var, showvalue=False, resolution=1, bg="#131D2B",
                              fg="#B6C8DC", troughcolor="#0D1521", highlightthickness=0, bd=0,
-                             sliderrelief="flat", length=120,
+                             sliderrelief="flat", length=150,
                              command=lambda _v, key=spec.key: self._scale_changed(key))
             scale.pack(side="left", fill="x", expand=True, padx=5)
             self._parameter_scales.append(scale)
@@ -837,7 +843,7 @@ class Editor(tk.Tk):
                        lambda _e, key=spec.key: self._begin_parameter_drag(key))
             scale.bind("<ButtonRelease-1>",
                        lambda _e, key=spec.key: self._end_parameter_drag(key))
-        val_lbl = tk.Label(line, textvariable=value, bg="#131D2B", fg="#F3F7FF", width=11,
+        val_lbl = tk.Label(line, textvariable=value, bg="#131D2B", fg="#F3F7FF", width=7,
                            anchor="e")
         val_lbl.pack(side="right", padx=(4, 0))
         reset = tk.Button(line, text="↺", width=2, relief="flat", bg="#131D2B", fg="#8CA2BA",
@@ -923,7 +929,7 @@ class Editor(tk.Tk):
             row, from_=spec.minimum, to=spec.maximum, orient="horizontal",
             variable=var, showvalue=False, resolution=1, bg="#131D2B",
             fg="#B6C8DC", troughcolor="#0D1521", highlightthickness=0, bd=0,
-            sliderrelief="flat", length=105,
+            sliderrelief="flat", length=135,
             command=lambda raw, key=spec.key: self._midi_only_changed(
                 key, int(float(raw))),
         )
