@@ -491,6 +491,12 @@ def test_synth_workspace_matches_reference_layout_without_scrollbar(app):
             (1, 0, 6), (1, 6, 6),
             (2, 0, 3), (2, 3, 3), (2, 6, 3), (2, 9, 3)} <= cells
     assert app.current_tab.get() == "SYNTH"
+    # Row 1 must not be stretched to match the taller envelope/modulation rows.
+    assert int(app.controls.grid_rowconfigure(0, "weight")) == 0
+    assert int(app.controls.grid_rowconfigure(1, "weight")) == 1
+    assert int(app.controls.grid_rowconfigure(2, "weight")) == 1
+    # OSC/filter parameter sliders should have a comfortable minimum track.
+    assert min(int(scale.cget("length")) for scale in app._parameter_scales) >= 130
     assert hasattr(app, "nav_query_entry")
     assert app.midibtn.cget("text") in ("Connect", "Disconnect")
     # VCF ADSR must remain a complete, editable set.
