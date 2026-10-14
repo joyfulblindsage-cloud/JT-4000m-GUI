@@ -696,11 +696,15 @@ class Editor(tk.Tk):
         if self.bank is not None and self.selected_index is not None:
             patch = self.editor.get_patch(self.selected_index)
             self.nav_slot_var.set(f"P{self.selected_index:02d}")
+            # Keep the legacy navigator projection in sync for callers/tests,
+            # even though the visible header now uses the editable query field.
+            self.nav_name_var.set(patch.name)
             if hasattr(self, "nav_query_var") and self.focus_get() is not getattr(
                     self, "nav_query_entry", None):
                 self.nav_query_var.set(patch.name)
         else:
             self.nav_slot_var.set("P--")
+            self.nav_name_var.set("—")
             if hasattr(self, "nav_query_var"):
                 self.nav_query_var.set("")
 
