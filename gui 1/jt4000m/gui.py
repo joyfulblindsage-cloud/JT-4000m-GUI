@@ -380,19 +380,19 @@ class Editor(tk.Tk):
         self.wave_phase_var = tk.StringVar(value="")
 
         # Row 1 — oscillators and filter.
-        _, osc1 = self._synth_box(self.controls, "OSC 1", 0, 0, columnspan=3)
+        _, osc1 = self._synth_box(self.controls, "OSC 1", 0, 0, columnspan=4)
         self._build_wave_tile_row(osc1, "osc1_wave", "OSC1 Preview")
         self._parameter_row(osc1, specs["osc1_wave"])
         for key in ("osc1_pwm_fm", "osc1_coarse", "osc1_fine"):
             self._parameter_row(osc1, specs[key])
 
-        _, osc2 = self._synth_box(self.controls, "OSC 2", 0, 3, columnspan=3)
+        _, osc2 = self._synth_box(self.controls, "OSC 2", 0, 4, columnspan=4)
         self._build_wave_tile_row(osc2, "osc2_wave", "OSC2 Preview")
         self._parameter_row(osc2, specs["osc2_wave"])
         for key in ("osc2_pwm", "osc2_coarse", "osc2_fine"):
             self._parameter_row(osc2, specs[key])
 
-        _, filt = self._synth_box(self.controls, "FILTER", 0, 6, columnspan=6)
+        _, filt = self._synth_box(self.controls, "FILTER", 0, 8, columnspan=4)
         self.filter_view = FilterView(filt, width=230, height=42)
         self.filter_view.pack(anchor="center", pady=(0, 3))
         for key in ("filter_cutoff", "filter_resonance"):
@@ -831,7 +831,8 @@ class Editor(tk.Tk):
             scale = tk.Scale(line, from_=spec.minimum, to=spec.maximum, orient="horizontal",
                              variable=var, showvalue=False, resolution=1, bg="#131D2B",
                              fg="#B6C8DC", troughcolor="#0D1521", highlightthickness=0, bd=0,
-                             sliderrelief="flat", length=120,
+                             sliderrelief="flat", sliderlength=20, width=16,
+                              activebackground="#42D9FF", length=120,
                              command=lambda _v, key=spec.key: self._scale_changed(key))
             scale.pack(side="left", fill="x", expand=True, padx=5)
             self._parameter_scales.append(scale)
@@ -925,7 +926,8 @@ class Editor(tk.Tk):
             row, from_=spec.minimum, to=spec.maximum, orient="horizontal",
             variable=var, showvalue=False, resolution=1, bg="#131D2B",
             fg="#B6C8DC", troughcolor="#0D1521", highlightthickness=0, bd=0,
-            sliderrelief="flat", length=105,
+            sliderrelief="flat", sliderlength=20, width=16,
+            activebackground="#42D9FF", length=105,
             command=lambda raw, key=spec.key: self._midi_only_changed(
                 key, int(float(raw))),
         )
@@ -993,7 +995,8 @@ class Editor(tk.Tk):
             column, from_=spec.maximum, to=spec.minimum, orient="vertical",
             variable=var, showvalue=False, resolution=1, bg="#131D2B",
             fg="#B6C8DC", troughcolor="#0D1521", highlightthickness=0, bd=0,
-            sliderrelief="flat", length=68, width=12,
+            sliderrelief="flat", sliderlength=20, width=16,
+            activebackground="#42D9FF", length=68,
             command=lambda _v, key=spec.key: self._scale_changed(key))
         scale.pack(anchor="center", fill="y", expand=True)
         self._parameter_scales.append(scale)
