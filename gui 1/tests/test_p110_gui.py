@@ -477,17 +477,36 @@ def test_keyboard_navigation_selects_through_model(app):
 
 
 @pytest.mark.skipif(not _HAS_DISPLAY, reason="no display available")
-def test_synth_workspace_is_compact_and_has_no_vertical_scrollbar(app):
-    """SYNTH uses the fixed six-cell layout; browsing tools stay in other tabs."""
+def test_synth_workspace_matches_reference_layout_without_scrollbar(app):
+    """Three top modules, two separate envelopes, four bottom modules."""
     assert not hasattr(app, "canvas")
     assert app.controls.winfo_manager() == "pack"
     cells = {
-        (int(child.grid_info()["row"]), int(child.grid_info()["column"]))
+        (int(child.grid_info()["row"]), int(child.grid_info()["column"]),
+         int(child.grid_info().get("columnspan", 1)))
         for child in app.controls.winfo_children()
         if child.winfo_manager() == "grid"
     }
-    assert {(0, 0), (0, 1), (0, 2), (1, 0), (1, 1), (1, 2)} <= cells
+    assert {(0, 0, 3), (0, 3, 3), (0, 6, 6),
+            (1, 0, 6), (1, 6, 6),
+            (2, 0, 3), (2, 3, 3), (2, 6, 3), (2, 9, 3)} <= cells
     assert app.current_tab.get() == "SYNTH"
-    # The fixed surface must still expose all registry-backed controls.
+    assert hasattr(app, "nav_query_entry")
+    assert app.midibtn.cget("text") in ("Connect", "Disconnect")
+    # VCF ADSR must remain a complete, editable set.
+    assert {"vcf_attack", "vcf_decay", "vcf_sustain", "vcf_release",
+            "filter_env_amount"} <= set(app.vars)
     from jt4000m.model import editable_parameters
     assert {spec.key for spec in editable_parameters()} <= set(app.vars)
+
+
+@gui_test
+def test_top_patch_selector_accepts_slot_number_and_full_name(app):
+    app.load_path(FIX / "Synthmania-EDM-Soundset-JT-4000.syx")
+    app.nav_query_var.set("5")
+    app._apply_nav_query()
+    assert app.selected_index == 5
+    name = app.editor.get_patch(2).name
+    app.nav_query_var.set(name)
+    app._apply_nav_query()
+    assert app.selected_index == 2
