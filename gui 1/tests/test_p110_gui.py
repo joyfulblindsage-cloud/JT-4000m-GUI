@@ -487,7 +487,7 @@ def test_synth_workspace_matches_reference_layout_without_scrollbar(app):
         for child in app.controls.winfo_children()
         if child.winfo_manager() == "grid"
     }
-    assert {(0, 0, 3), (0, 3, 3), (0, 6, 6),
+    assert {(0, 0, 4), (0, 4, 4), (0, 8, 4),
             (1, 0, 6), (1, 6, 6),
             (2, 0, 3), (2, 3, 3), (2, 6, 3), (2, 9, 3)} <= cells
     assert app.current_tab.get() == "SYNTH"
