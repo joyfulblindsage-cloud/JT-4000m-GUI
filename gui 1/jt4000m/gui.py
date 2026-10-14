@@ -854,7 +854,9 @@ class Editor(tk.Tk):
         parameter system is introduced; range/limits stay registry-driven.
         """
         line = tk.Frame(parent, bg="#131D2B", padx=2, pady=2)
-        line.grid(row=row, column=col, sticky="ew", padx=(0, 10), pady=3)
+        # This layout stacks the MIX / RING controls with pack; use the same
+        # manager for the knob row (mix's parent) to avoid pack/grid conflicts.
+        line.pack(fill="x", pady=3)
         label = tk.Label(line, text=_row_label(spec, self.developer_var.get()),
                          bg="#131D2B", fg="#A8BDD3", width=22, anchor="w")
         label.pack(side="left")
