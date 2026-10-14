@@ -368,9 +368,11 @@ class Editor(tk.Tk):
         self.controls.bind("<Configure>", self._on_synth_resize)
         for col in range(12):
             self.controls.grid_columnconfigure(col, weight=1, uniform="synth-col")
-        for row in range(3):
-            # Tk grid row weights are integers; uniform sizing keeps rows aligned.
-            self.controls.grid_rowconfigure(row, weight=1, uniform="synth-row")
+        # Give the envelope strip more vertical room: top oscillator/filter
+        # row 25%, envelope row 50%, bottom modulation/mix row 25%.
+        # Do not put rows in one uniform group: uniform would force equal heights.
+        for row, weight in enumerate((1, 2, 1)):
+            self.controls.grid_rowconfigure(row, weight=weight, minsize=0)
 
         self.section_labels: dict[str, tk.Label] = {}
         self.reset_buttons: dict[str, tuple[tk.Button, tk.Label]] = {}
