@@ -368,8 +368,9 @@ class Editor(tk.Tk):
         self.controls.bind("<Configure>", self._on_synth_resize)
         for col in range(12):
             self.controls.grid_columnconfigure(col, weight=1, uniform="synth-col")
-        for row, weight in enumerate((1.05, 1.0, 1.0)):
-            self.controls.grid_rowconfigure(row, weight=weight, uniform="synth-row")
+        for row in range(3):
+            # Tk grid row weights are integers; uniform sizing keeps rows aligned.
+            self.controls.grid_rowconfigure(row, weight=1, uniform="synth-row")
 
         self.section_labels: dict[str, tk.Label] = {}
         self.reset_buttons: dict[str, tuple[tk.Button, tk.Label]] = {}
