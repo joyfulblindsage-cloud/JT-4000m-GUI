@@ -393,41 +393,52 @@ class Editor(tk.Tk):
             self._parameter_row(osc2, specs[key])
 
         _, filt = self._synth_box(self.controls, "FILTER", 0, 8, columnspan=4)
-        self.filter_view = FilterView(filt, width=230, height=42)
-        self.filter_view.pack(anchor="center", pady=(0, 3))
-        for key in ("filter_cutoff", "filter_resonance"):
-            self._parameter_row(filt, specs[key])
+        # Filter uses a 2:1:1 vertical split: graph, cutoff, resonance.
+        filter_layout = tk.Frame(filt, bg="#131D2B")
+        filter_layout.pack(fill="both", expand=True)
+        filter_layout.grid_columnconfigure(0, weight=1)
+        for row, weight in enumerate((2, 1, 1)):
+            filter_layout.grid_rowconfigure(row, weight=weight, minsize=0)
+        graph_slot = tk.Frame(filter_layout, bg="#131D2B")
+        graph_slot.grid(row=0, column=0, sticky="nsew", pady=(0, 2))
+        self.filter_view = FilterView(graph_slot, width=300, height=88)
+        self.filter_view.pack(fill="both", expand=True, padx=2)
+        for row, key in enumerate(("filter_cutoff", "filter_resonance"), start=1):
+            control_slot = tk.Frame(filter_layout, bg="#131D2B")
+            control_slot.grid(row=row, column=0, sticky="nsew", pady=1)
+            self._parameter_row(control_slot, specs[key])
 
-        # Row 2 — VCA, VCF and the native arpeggiator.
-        # The three equal-width panels keep the arpeggiator visible without
-        # changing the established 12-column grid or the bottom-row modules.
-        _, vca = self._synth_box(self.controls, "VCA ENVELOPE", 1, 0, columnspan=4)
+        # Row 2 widths are VCA : VCF : ARP = 2:2:1 (5:5:2 grid columns).
+        # Envelope graphs and ADSR controls each receive half the module height.
+        _, vca = self._synth_box(self.controls, "VCA ENVELOPE", 1, 0, columnspan=5)
+        vca_graph_slot = tk.Frame(vca, bg="#131D2B")
+        vca_graph_slot.pack(fill="both", expand=True, pady=(0, 2))
         self.vca_env_view = EnvelopeView(
-            vca, title="VCA EG", width=330, height=42,
+            vca_graph_slot, title="VCA EG", width=360, height=76,
             on_segment=lambda k, n: self._env_drag("vca", k, n))
-        self.vca_env_view.pack(anchor="center", pady=(0, 3))
+        self.vca_env_view.pack(fill="both", expand=True, anchor="center")
         self._bind_env_release(self.vca_env_view)
         vca_adsr = tk.Frame(vca, bg="#131D2B")
-        vca_adsr.pack(fill="x")
+        vca_adsr.pack(fill="both", expand=True)
         for col, key in enumerate(("vca_attack", "vca_decay", "vca_sustain", "vca_release")):
             self._parameter_column(vca_adsr, specs[key], col=col)
 
-        _, vcf = self._synth_box(self.controls, "VCF ENVELOPE", 1, 4, columnspan=4)
+        _, vcf = self._synth_box(self.controls, "VCF ENVELOPE", 1, 5, columnspan=5)
+        vcf_graph_slot = tk.Frame(vcf, bg="#131D2B")
+        vcf_graph_slot.pack(fill="both", expand=True, pady=(0, 2))
         self.vcf_env_view = EnvelopeView(
-            vcf, title="VCF EG", width=330, height=42,
+            vcf_graph_slot, title="VCF EG", width=360, height=76,
             on_segment=lambda k, n: self._env_drag("vcf", k, n))
-        self.vcf_env_view.pack(anchor="center", pady=(0, 3))
+        self.vcf_env_view.pack(fill="both", expand=True, anchor="center")
         self._bind_env_release(self.vcf_env_view)
-        # Keep both ADSR strips directly below their graphs so all eight
-        # sliders share the same vertical baseline. VCF amount is secondary
-        # and sits below the ADSR strip rather than pushing it down.
+        # VCF amount remains with the ADSR controls in the lower half.
         vcf_adsr = tk.Frame(vcf, bg="#131D2B")
-        vcf_adsr.pack(fill="x")
+        vcf_adsr.pack(fill="both", expand=True)
         for col, key in enumerate(("vcf_attack", "vcf_decay", "vcf_sustain", "vcf_release")):
             self._parameter_column(vcf_adsr, specs[key], col=col)
         self._parameter_row(vcf, specs["filter_env_amount"])
 
-        _, arp = self._synth_box(self.controls, "ARPEGGIATOR", 1, 8, columnspan=4)
+        _, arp = self._synth_box(self.controls, "ARPEGGIATOR", 1, 10, columnspan=2)
         self._build_arpeggiator_panel(arp)
 
         # Row 3 — four compact modules.
