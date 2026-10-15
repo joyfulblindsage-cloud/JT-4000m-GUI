@@ -299,7 +299,16 @@ class EnvelopeView(tk.Canvas):
         self.bind("<ButtonPress-1>", self._press)
         self.bind("<B1-Motion>", self._motion)
         self.bind("<ButtonRelease-1>", self._release)
-        self.bind("<Configure>", lambda e: self._paint())
+        self.bind("<Configure>", self._on_resize)
+        self._paint()
+
+    def _on_resize(self, event) -> None:
+        # Draw from the real client area, not the requested constructor size.
+        width = max(80, int(event.width))
+        height = max(42, int(event.height) - 16)
+        if width == self.width and height == self.height:
+            return
+        self.width, self.height = width, height
         self._paint()
 
     def set_values(self, attack: int, decay: int, sustain: int, release: int) -> None:
@@ -406,6 +415,16 @@ class FilterView(tk.Canvas):
         self.height = height
         self._cutoff = 0.5
         self._reso = 0.0
+        self.bind("<Configure>", self._on_resize)
+        self._paint()
+
+    def _on_resize(self, event) -> None:
+        # Canvas includes a fixed caption band below the response curve.
+        width = max(100, int(event.width))
+        height = max(42, int(event.height) - 14)
+        if width == self.width and height == self.height:
+            return
+        self.width, self.height = width, height
         self._paint()
 
     def set_values(self, cutoff: int, resonance: int) -> None:
