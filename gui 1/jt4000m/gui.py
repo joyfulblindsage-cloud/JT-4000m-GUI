@@ -534,7 +534,8 @@ class Editor(tk.Tk):
                     label.configure(width=label_width)
             except (tk.TclError, ValueError):
                 pass
-        slider_length = max(65, min(145, width // 18))
+        # Allow Tk to compress sliders before adjacent labels/buttons get clipped.
+        slider_length = max(42, min(145, width // 20))
         for scale in getattr(self, "_parameter_scales", ()):
             try:
                 scale.configure(length=slider_length)
