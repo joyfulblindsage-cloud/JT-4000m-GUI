@@ -398,8 +398,10 @@ class Editor(tk.Tk):
         for key in ("filter_cutoff", "filter_resonance"):
             self._parameter_row(filt, specs[key])
 
-        # Row 2 — separate VCA and VCF envelopes.
-        _, vca = self._synth_box(self.controls, "VCA ENVELOPE", 1, 0, columnspan=6)
+        # Row 2 — VCA, VCF and the native arpeggiator.
+        # The three equal-width panels keep the arpeggiator visible without
+        # changing the established 12-column grid or the bottom-row modules.
+        _, vca = self._synth_box(self.controls, "VCA ENVELOPE", 1, 0, columnspan=4)
         self.vca_env_view = EnvelopeView(
             vca, title="VCA EG", width=330, height=42,
             on_segment=lambda k, n: self._env_drag("vca", k, n))
@@ -410,7 +412,7 @@ class Editor(tk.Tk):
         for col, key in enumerate(("vca_attack", "vca_decay", "vca_sustain", "vca_release")):
             self._parameter_column(vca_adsr, specs[key], col=col)
 
-        _, vcf = self._synth_box(self.controls, "VCF ENVELOPE", 1, 6, columnspan=6)
+        _, vcf = self._synth_box(self.controls, "VCF ENVELOPE", 1, 4, columnspan=4)
         self.vcf_env_view = EnvelopeView(
             vcf, title="VCF EG", width=330, height=42,
             on_segment=lambda k, n: self._env_drag("vcf", k, n))
@@ -424,6 +426,9 @@ class Editor(tk.Tk):
         for col, key in enumerate(("vcf_attack", "vcf_decay", "vcf_sustain", "vcf_release")):
             self._parameter_column(vcf_adsr, specs[key], col=col)
         self._parameter_row(vcf, specs["filter_env_amount"])
+
+        _, arp = self._synth_box(self.controls, "ARPEGGIATOR", 1, 8, columnspan=4)
+        self._build_arpeggiator_panel(arp)
 
         # Row 3 — four compact modules.
         _, lfo1 = self._synth_box(self.controls, "LFO 1", 2, 0, columnspan=3)
@@ -463,6 +468,49 @@ class Editor(tk.Tk):
         tk.Label(mod, text="Portamento ON/OFF mapping unverified",
                  bg="#131D2B", fg="#8CA2BA", anchor="w", justify="left").pack(
                      fill="x", pady=(1, 0))
+
+    def _build_arpeggiator_panel(self, parent) -> None:
+        """Show documented native ARP settings without inventing remote mappings.
+
+        The manual documents these settings on the hardware, but the current
+        program SysEx/CC map does not establish a way to edit them remotely.
+        They are deliberately presented as reference-only until a MIDI or
+        global-settings protocol is independently verified.
+        """
+        intro = tk.Label(
+            parent,
+            text="Native engine • settings currently configured on the device",
+            bg="#131D2B", fg="#8CA2BA", anchor="w", justify="left",
+            wraplength=320)
+        intro.pack(fill="x", pady=(0, 5))
+
+        grid = tk.Frame(parent, bg="#131D2B")
+        grid.pack(fill="x", expand=True)
+        grid.grid_columnconfigure(0, weight=1)
+        grid.grid_columnconfigure(1, weight=1)
+        items = (
+            ("MOTIF", "Up / Down / Up & Down"),
+            ("BPM", "20–240"),
+            ("SCALE", "1/8 · 1/8T · 1/16 · 1/16T · 1/32"),
+            ("SWING", "50–75%"),
+            ("CLOCK", "Internal / MIDI / USB"),
+        )
+        for row, (name, value) in enumerate(items):
+            tk.Label(grid, text=name, bg="#131D2B", fg="#42D9FF",
+                     anchor="w", font=("TkDefaultFont", 8, "bold")).grid(
+                         row=row, column=0, sticky="nw", padx=(0, 8), pady=3)
+            tk.Label(grid, text=value, bg="#131D2B", fg="#F3F7FF",
+                     anchor="w", justify="left", wraplength=230).grid(
+                         row=row, column=1, sticky="ew", pady=3)
+
+        note = tk.Label(
+            parent,
+            text="USB clock source requires MIDI Start/Stop. Remote editing of "
+                 "Motif / BPM / Scale / Swing / Source is not yet mapped.",
+            bg="#131D2B", fg="#8CA2BA", anchor="w", justify="left",
+            wraplength=320)
+        note.pack(fill="x", pady=(6, 0))
+        self.arp_panel = parent
 
     def _on_synth_resize(self, event) -> None:
         """Adapt labels and sliders to the compact three-row workspace."""
