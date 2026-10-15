@@ -565,3 +565,27 @@ def test_top_patch_selector_accepts_slot_number_and_full_name(app):
     app.nav_query_var.set(name)
     app._apply_nav_query()
     assert app.selected_index == 2
+
+
+# ---------------------------------------------------- P1.46 responsive graphs
+@gui_test
+def test_filter_and_envelope_graph_geometry_tracks_resize(app):
+    """Graph coordinates follow the live canvas dimensions after window resize."""
+    from types import SimpleNamespace
+    from jt4000m.widgets import EnvelopeView, FilterView
+
+    filter_view = FilterView(app.controls, width=150, height=56)
+    envelope_view = EnvelopeView(app.controls, title="test", width=150, height=56)
+    try:
+        filter_view._on_resize(SimpleNamespace(width=520, height=112))
+        envelope_view._on_resize(SimpleNamespace(width=520, height=112))
+        assert filter_view.width == 520
+        assert filter_view.height == 98
+        assert envelope_view.width == 520
+        assert envelope_view.height == 96
+        assert filter_view.find_all()  # redraw happened
+        assert envelope_view.find_all()
+        assert max(p[0] for p in envelope_view._points()) >= 512
+    finally:
+        filter_view.destroy()
+        envelope_view.destroy()
