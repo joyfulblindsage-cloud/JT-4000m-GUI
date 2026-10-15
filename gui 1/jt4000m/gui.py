@@ -71,11 +71,10 @@ class Editor(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title("JT-4000M Studio — Patch Designer")
-        # Start within the available desktop instead of assuming a 1440x900 display.
-        screen_w, screen_h = self.winfo_screenwidth(), self.winfo_screenheight()
-        initial_w = max(800, min(1440, screen_w - 60))
-        initial_h = max(700, min(1000, screen_h - 80))
-        self.geometry(f"{initial_w}x{initial_h}")
+        # 900x700 is the intended working canvas: compact by default, but
+        # still freely resizable. Keep the same minimum so the SYNTH layout
+        # is designed and reviewed against one predictable baseline.
+        self.geometry("900x700")
         self.minsize(900, 700)
         self.configure(bg="#0B1018")
 
@@ -368,10 +367,11 @@ class Editor(tk.Tk):
         self.controls.bind("<Configure>", self._on_synth_resize)
         for col in range(12):
             self.controls.grid_columnconfigure(col, weight=1, uniform="synth-col")
-        # Give the envelope strip more vertical room: top oscillator/filter
-        # row 25%, envelope row 50%, bottom modulation/mix row 25%.
-        # Do not put rows in one uniform group: uniform would force equal heights.
-        for row, weight in enumerate((1, 2, 1)):
+        # Compact 900x700 balance: top oscillator/filter and envelope rows
+        # get equal room; the four-module utility row stays shorter. This
+        # preserves the existing 12-column layout and expands proportionally
+        # when the user resizes the window. Do not use a uniform row group.
+        for row, weight in enumerate((2, 2, 1)):
             self.controls.grid_rowconfigure(row, weight=weight, minsize=0)
 
         self.section_labels: dict[str, tk.Label] = {}
