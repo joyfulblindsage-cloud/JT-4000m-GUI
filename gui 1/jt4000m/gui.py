@@ -421,7 +421,7 @@ class Editor(tk.Tk):
         vca_adsr = tk.Frame(vca, bg="#131D2B")
         vca_adsr.pack(fill="both", expand=True)
         for col, key in enumerate(("vca_attack", "vca_decay", "vca_sustain", "vca_release")):
-            self._parameter_column(vca_adsr, specs[key], col=col)
+            self._parameter_knob_column(vca_adsr, specs[key], col=col)
 
         _, vcf = self._synth_box(self.controls, "VCF ENVELOPE", 1, 5, columnspan=5)
         vcf_graph_slot = tk.Frame(vcf, bg="#131D2B")
@@ -435,7 +435,7 @@ class Editor(tk.Tk):
         vcf_adsr = tk.Frame(vcf, bg="#131D2B")
         vcf_adsr.pack(fill="both", expand=True)
         for col, key in enumerate(("vcf_attack", "vcf_decay", "vcf_sustain", "vcf_release")):
-            self._parameter_column(vcf_adsr, specs[key], col=col)
+            self._parameter_knob_column(vcf_adsr, specs[key], col=col)
         self._parameter_row(vcf, specs["filter_env_amount"])
 
         _, arp = self._synth_box(self.controls, "ARPEGGIATOR", 1, 10, columnspan=2)
@@ -527,18 +527,27 @@ class Editor(tk.Tk):
         """Adapt labels and sliders to the compact three-row workspace."""
         width = max(1, event.width)
         compact = width < 1180
-        label_width = 10 if compact else 13
+        label_width = 9 if width < 1000 else (10 if compact else 13)
+        value_width = 7 if width < 1000 else 11
         for label in getattr(self, "section_labels", {}).values():
             try:
                 if int(label.cget("width")) in (10, 12, 14, 16, 18, 22, 30):
                     label.configure(width=label_width)
             except (tk.TclError, ValueError):
                 pass
-        # Allow Tk to compress sliders before adjacent labels/buttons get clipped.
-        slider_length = max(42, min(145, width // 20))
+        # Only horizontal scales participate in width adaptation. Applying
+        # a width-derived length to vertical scales was shortening their
+        # travel and made them look clipped when the window was compact.
+        slider_length = max(68, min(145, width // 14))
         for scale in getattr(self, "_parameter_scales", ()):
             try:
-                scale.configure(length=slider_length)
+                if str(scale.cget("orient")) == "horizontal":
+                    scale.configure(length=slider_length)
+            except tk.TclError:
+                pass
+        for _reset, value_label in getattr(self, "reset_buttons", {}).values():
+            try:
+                value_label.configure(width=value_width)
             except tk.TclError:
                 pass
         for scale in getattr(self, "_midi_only_scales", {}).values():
@@ -1081,6 +1090,51 @@ class Editor(tk.Tk):
                           bd=0, command=lambda key=spec.key: self.reset_one(key))
         reset.pack(anchor="center", pady=(1, 0))
         self.reset_buttons[spec.key] = (reset, val_lbl)
+
+    def _parameter_knob_column(self, parent, spec, *, col: int) -> None:
+        """Compact ADSR control: rotary knob, value and reset in one column.
+
+        This is the same registry/model/MIDI/undo path as the former vertical
+        Scale, with no change to parameter ranges or stored values.
+        """
+        column = tk.Frame(parent, bg="#131D2B", padx=2, pady=2,
+                          highlightthickness=1, highlightbackground="#2A3A4F")
+        column.grid(row=0, column=col, sticky="nsew", padx=1, pady=1)
+        parent.grid_columnconfigure(col, weight=1, uniform="adsr")
+
+        label = tk.Label(column, text=_row_label(spec, self.developer_var.get()),
+                         bg="#131D2B", fg="#A8BDD3", anchor="center",
+                         font=("TkDefaultFont", 8))
+        label.pack(fill="x", pady=(0, 1))
+        self.section_labels[spec.key] = label
+
+        var = tk.IntVar(value=spec.default)
+        self.vars[spec.key] = var
+        value = tk.StringVar(value=self._formatted(spec.key, spec.default))
+        self.value_vars[spec.key] = value
+
+        knob = Knob(
+            column, label="", minimum=spec.minimum, maximum=spec.maximum,
+            diameter=40, show_entry=False, default_raw=spec.default,
+            start_angle=25.0, sweep_degrees=185.0, angle_direction=1,
+            on_gesture_start=lambda key=spec.key: self._begin_parameter_drag(key),
+            on_gesture_end=lambda key=spec.key: self._end_parameter_drag(key),
+            on_change=lambda raw, key=spec.key: self._knob_changed(key, raw),
+            on_reset=lambda key=spec.key: self.reset_one(key))
+        knob.pack(anchor="center", pady=(0, 1))
+        self._knobs[spec.key] = knob
+        knob.set_value(spec.default, self._formatted(spec.key, spec.default))
+
+        footer = tk.Frame(column, bg="#131D2B")
+        footer.pack(fill="x")
+        tk.Label(footer, textvariable=value, bg="#131D2B", fg="#F3F7FF",
+                 width=6, anchor="center", font=("TkDefaultFont", 8)).pack(
+                     side="left", expand=True)
+        reset = tk.Button(footer, text="↺", width=2, relief="flat",
+                          bg="#131D2B", fg="#8CA2BA", highlightthickness=0,
+                          bd=0, command=lambda key=spec.key: self.reset_one(key))
+        reset.pack(side="right")
+        self.reset_buttons[spec.key] = (reset, footer.winfo_children()[0])
 
     def reset_one(self, key: str) -> None:
         """Reset a single parameter to its documented default value."""
