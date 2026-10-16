@@ -346,8 +346,16 @@ def test_other_parameters_still_work_after_knob_intro(loaded):
     app.vars["ring_mod_amount"].set((before + 10) % 128)
     app.apply_parameter("ring_mod_amount")
     assert app.editor.get_patch(1).get_raw("ring_mod_amount") == (before + 10) % 128
-    # ADSR vertical sliders untouched too.
-    assert any(s.cget("orient") == "vertical" for s in app._parameter_scales)
+    # ADSR controls were intentionally migrated from vertical Scales to knobs.
+    # Keep this regression guard aligned with the new UI contract, while
+    # confirming ring_mod_amount remains on the Scale-based path.
+    from jt4000m.widgets import Knob
+    assert "ring_mod_amount" not in app._knobs
+    assert any(s.cget("orient") == "horizontal" for s in app._parameter_scales)
+    for key in (
+            "vca_attack", "vca_decay", "vca_sustain", "vca_release",
+            "vcf_attack", "vcf_decay", "vcf_sustain", "vcf_release"):
+        assert isinstance(app._knobs[key], Knob)
 
 
 class _FakeEvent:

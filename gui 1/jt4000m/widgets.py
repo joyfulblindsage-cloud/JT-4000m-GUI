@@ -69,7 +69,9 @@ class Knob(tk.Canvas):
     def __init__(self, parent, *, label: str, minimum: int = 0, maximum: int = 127,
                  diameter: int = 58, on_change=None, on_reset=None,
                  default_raw: int = 0, show_entry: bool = True,
-                 on_gesture_start=None, on_gesture_end=None) -> None:
+                 on_gesture_start=None, on_gesture_end=None,
+                 start_angle: float = 270.0, sweep_degrees: float = 240.0,
+                 angle_direction: int = -1) -> None:
         height = diameter + 34 if not show_entry else diameter + 52
         super().__init__(parent, width=diameter + 8, height=height, bg=BG,
                          highlightthickness=0, bd=0)
@@ -81,6 +83,11 @@ class Knob(tk.Canvas):
         self.on_gesture_start = on_gesture_start
         self.on_gesture_end = on_gesture_end
         self.default_raw = default_raw
+        # Configurable arc geometry lets compact ADSR knobs use a top-right
+        # minimum and lower-left maximum without changing existing knob feel.
+        self.start_angle = float(start_angle)
+        self.sweep_degrees = max(1.0, min(300.0, float(sweep_degrees)))
+        self.angle_direction = 1 if angle_direction >= 0 else -1
         self._d = diameter
         self._cx = (diameter + 8) / 2
         self._cy = diameter / 2 + 2
@@ -259,10 +266,10 @@ class Knob(tk.Canvas):
                 font=("TkDefaultFont", 8, "bold"))
         ring = ACCENT if self._focused else ("#55718D" if self._hover else "#2A3A4F")
         self.itemconfigure(self._ring_item, outline=ring)
-        # Map minimum to 6 o'clock and maximum across a 240-degree sweep.
-        # A bounded arc matches familiar VST controls and leaves a clear gap.
-        a0 = self.START_ANGLE
-        a1 = self.START_ANGLE - self.SWEEP_DEGREES * self._norm
+        # Map values across a bounded, configurable arc. Defaults preserve
+        # the original knob geometry; ADSR columns can choose their own arc.
+        a0 = self.start_angle
+        a1 = self.start_angle + self.angle_direction * self.sweep_degrees * self._norm
         steps = max(2, int(abs(a1 - a0) / self.ARC_STEP_DEGREES))
         pts: list[float] = []
         for i in range(steps + 1):

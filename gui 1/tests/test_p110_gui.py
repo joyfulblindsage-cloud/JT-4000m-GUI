@@ -589,3 +589,21 @@ def test_filter_and_envelope_graph_geometry_tracks_resize(app):
     finally:
         filter_view.destroy()
         envelope_view.destroy()
+
+
+
+@gui_test
+def test_adsr_controls_use_compact_knobs_with_requested_arc(app):
+    from jt4000m.widgets import Knob
+
+    for prefix in ("vca", "vcf"):
+        for segment in ("attack", "decay", "sustain", "release"):
+            key = f"{prefix}_{segment}"
+            knob = app._knobs[key]
+            assert isinstance(knob, Knob)
+            assert knob.start_angle == 25.0
+            assert knob.sweep_degrees == 185.0
+            assert knob.angle_direction == 1
+            assert knob.minimum == BY_KEY[key].minimum
+            assert knob.maximum == BY_KEY[key].maximum
+            assert key in app.vars and key in app.value_vars
