@@ -593,6 +593,36 @@ def test_filter_and_envelope_graph_geometry_tracks_resize(app):
 
 
 @gui_test
+def test_redundant_parameter_labels_are_hidden_for_knobs_and_combos(app):
+    """Controls should not repeat their name in a nearby label or inside a knob."""
+    from jt4000m.widgets import Knob
+
+    # OSC Balance keeps its row label, but the knob itself has no caption.
+    balance = app._knobs["osc_balance"]
+    assert isinstance(balance, Knob)
+    assert balance.label == ""
+
+    # Both envelopes use only the four segment names; no VCA/VCF prefix.
+    for prefix in ("vca", "vcf"):
+        for segment in ("attack", "decay", "sustain", "release"):
+            knob = app._knobs[f"{prefix}_{segment}"]
+            assert knob.label == ""
+            assert app.section_labels[f"{prefix}_{segment}"].cget("text") == segment.capitalize()
+    assert app.vca_env_view.title == ""
+    assert app.vcf_env_view.title == ""
+
+    # Enum combobox text is the label; hide the duplicate left label/value.
+    for key in ("osc1_wave", "osc2_wave", "lfo1_wave", "lfo2_wave", "portamento_mode"):
+        combo = getattr(app, f"combo_{key}", None)
+        if combo is None:
+            continue
+        assert app.section_labels[key].winfo_manager() == ""
+        reset, value_label = app.reset_buttons[key]
+        assert value_label.winfo_manager() == ""
+        assert reset.winfo_exists()
+
+
+@gui_test
 def test_adsr_controls_use_compact_knobs_with_requested_arc(app):
     from jt4000m.widgets import Knob
 
