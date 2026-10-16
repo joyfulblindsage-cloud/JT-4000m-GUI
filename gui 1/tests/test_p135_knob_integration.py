@@ -216,23 +216,21 @@ def test_live_only_cc_rx_updates_control_without_patch_mutation_or_echo(
 
 
 @gui_test
-def test_knob_range_uses_240_degree_arc_with_minimum_at_bottom(loaded):
+def test_knob_range_runs_from_left_minimum_to_right_maximum(loaded):
     knob = loaded._knobs["osc_balance"]
     cx, cy, radius = knob._cx, knob._cy, knob._r - 1
 
     knob.set_value(knob.minimum)
     coords_min = knob.coords(knob._arc_item)
     assert len(coords_min) == 6  # two-point minimum arc (start and end coincide)
-
-    # At the minimum, the arc starts at 6 o'clock.
-    assert coords_min[1] == pytest.approx(cy + radius, abs=0.1)
+    assert coords_min[0] == pytest.approx(cx - radius, abs=0.1)
+    assert coords_min[1] == pytest.approx(cy, abs=0.1)
 
     knob.set_value(knob.maximum)
     coords_max = knob.coords(knob._arc_item)
-    assert 90 <= len(coords_max) <= 102  # ~240° at 5° per segment
-    # Maximum ends at 30°: upper-right, not a full revolution back to start.
-    assert coords_max[-2] > cx
-    assert coords_max[-1] < cy
+    assert 66 <= len(coords_max) <= 78  # 180° at ~5° per segment
+    assert coords_max[-2] == pytest.approx(cx + radius, abs=0.1)
+    assert coords_max[-1] == pytest.approx(cy, abs=0.1)
 
 
 @gui_test
