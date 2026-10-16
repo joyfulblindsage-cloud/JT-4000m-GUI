@@ -414,7 +414,7 @@ class Editor(tk.Tk):
         vca_graph_slot = tk.Frame(vca, bg="#131D2B")
         vca_graph_slot.pack(fill="both", expand=True, pady=(0, 2))
         self.vca_env_view = EnvelopeView(
-            vca_graph_slot, title="VCA EG", width=360, height=76,
+            vca_graph_slot, title="", width=360, height=76,
             on_segment=lambda k, n: self._env_drag("vca", k, n))
         self.vca_env_view.pack(fill="both", expand=True, anchor="center")
         self._bind_env_release(self.vca_env_view)
@@ -427,7 +427,7 @@ class Editor(tk.Tk):
         vcf_graph_slot = tk.Frame(vcf, bg="#131D2B")
         vcf_graph_slot.pack(fill="both", expand=True, pady=(0, 2))
         self.vcf_env_view = EnvelopeView(
-            vcf_graph_slot, title="VCF EG", width=360, height=76,
+            vcf_graph_slot, title="", width=360, height=76,
             on_segment=lambda k, n: self._env_drag("vcf", k, n))
         self.vcf_env_view.pack(fill="both", expand=True, anchor="center")
         self._bind_env_release(self.vcf_env_view)
@@ -492,7 +492,7 @@ class Editor(tk.Tk):
             parent,
             text="Native engine • settings currently configured on the device",
             bg="#131D2B", fg="#8CA2BA", anchor="w", justify="left",
-            wraplength=320)
+            wraplength=180, font=("TkDefaultFont", 7))
         intro.pack(fill="x", pady=(0, 5))
 
         grid = tk.Frame(parent, bg="#131D2B")
@@ -508,19 +508,20 @@ class Editor(tk.Tk):
         )
         for row, (name, value) in enumerate(items):
             tk.Label(grid, text=name, bg="#131D2B", fg="#42D9FF",
-                     anchor="w", font=("TkDefaultFont", 8, "bold")).grid(
-                         row=row, column=0, sticky="nw", padx=(0, 8), pady=3)
+                     anchor="w", font=("TkDefaultFont", 7, "bold")).grid(
+                         row=row, column=0, sticky="nw", padx=(0, 4), pady=1)
             tk.Label(grid, text=value, bg="#131D2B", fg="#F3F7FF",
-                     anchor="w", justify="left", wraplength=230).grid(
-                         row=row, column=1, sticky="ew", pady=3)
+                     anchor="w", justify="left", wraplength=135,
+                     font=("TkDefaultFont", 7)).grid(
+                         row=row, column=1, sticky="ew", pady=1)
 
         note = tk.Label(
             parent,
             text="USB clock source requires MIDI Start/Stop. Remote editing of "
                  "Motif / BPM / Scale / Swing / Source is not yet mapped.",
             bg="#131D2B", fg="#8CA2BA", anchor="w", justify="left",
-            wraplength=320)
-        note.pack(fill="x", pady=(6, 0))
+            wraplength=180, font=("TkDefaultFont", 7))
+        note.pack(fill="x", pady=(3, 0))
         self.arp_panel = parent
 
     def _on_synth_resize(self, event) -> None:
@@ -875,9 +876,13 @@ class Editor(tk.Tk):
             line.grid(row=row, column=col, sticky="ew", padx=(0, 10), pady=3)
         else:
             line.pack(fill="x", pady=3)
+        # Enum controls already display their selected option in the combobox;
+        # omit the duplicate left label and separate value readout for them.
+        has_enum_options = spec.kind == "enum" and bool(enum_options(spec.key))
         label = tk.Label(line, text=_row_label(spec, self.developer_var.get()), bg="#131D2B",
                          fg="#A8BDD3", width=12, anchor="w")
-        label.pack(side="left")
+        if not has_enum_options:
+            label.pack(side="left")
         self.section_labels[spec.key] = label
         # Initial value = documented default; it is overwritten from the model
         # as soon as a bank is loaded (_sync_widgets_from_model).
@@ -891,7 +896,7 @@ class Editor(tk.Tk):
             if options:
                 combo = ttk.Combobox(line, state="readonly", width=16,
                                      values=[name for _v, name in options])
-                combo.pack(side="right")
+                combo.pack(side="left", fill="x", expand=True)
                 setattr(self, f"combo_{spec.key}", combo)
                 combo.bind("<<ComboboxSelected>>",
                            lambda _e, key=spec.key, w=combo: self._combo_apply(key, w))
@@ -919,7 +924,8 @@ class Editor(tk.Tk):
                        lambda _e, key=spec.key: self._end_parameter_drag(key))
         val_lbl = tk.Label(line, textvariable=value, bg="#131D2B", fg="#F3F7FF", width=11,
                            anchor="e")
-        val_lbl.pack(side="right", padx=(4, 0))
+        if not has_enum_options:
+            val_lbl.pack(side="right", padx=(4, 0))
         reset = tk.Button(line, text="↺", width=2, relief="flat", bg="#131D2B", fg="#8CA2BA",
                           highlightthickness=0, bd=0,
                           command=lambda key=spec.key: self.reset_one(key))
@@ -951,7 +957,7 @@ class Editor(tk.Tk):
         value = tk.StringVar(value=self._formatted(spec.key, spec.default))
         self.value_vars[spec.key] = value
 
-        knob = Knob(line, label=_synth_label(spec), minimum=spec.minimum,
+        knob = Knob(line, label="", minimum=spec.minimum,
                     maximum=spec.maximum, default_raw=spec.default, diameter=54,
                     show_entry=False,
                     on_gesture_start=lambda key=spec.key: self._begin_parameter_drag(key),
@@ -1102,7 +1108,8 @@ class Editor(tk.Tk):
         column.grid(row=0, column=col, sticky="nsew", padx=1, pady=1)
         parent.grid_columnconfigure(col, weight=1, uniform="adsr")
 
-        label = tk.Label(column, text=_row_label(spec, self.developer_var.get()),
+        segment_label = spec.key.rsplit("_", 1)[-1].capitalize()
+        label = tk.Label(column, text=segment_label,
                          bg="#131D2B", fg="#A8BDD3", anchor="center",
                          font=("TkDefaultFont", 8))
         label.pack(fill="x", pady=(0, 1))
@@ -1116,7 +1123,7 @@ class Editor(tk.Tk):
         knob = Knob(
             column, label="", minimum=spec.minimum, maximum=spec.maximum,
             diameter=40, show_entry=False, default_raw=spec.default,
-            start_angle=25.0, sweep_degrees=185.0, angle_direction=1,
+            start_angle=180.0, sweep_degrees=180.0, angle_direction=-1,
             on_gesture_start=lambda key=spec.key: self._begin_parameter_drag(key),
             on_gesture_end=lambda key=spec.key: self._end_parameter_drag(key),
             on_change=lambda raw, key=spec.key: self._knob_changed(key, raw),
