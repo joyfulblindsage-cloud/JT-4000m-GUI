@@ -1123,7 +1123,7 @@ class Editor(tk.Tk):
         knob = Knob(
             column, label="", minimum=spec.minimum, maximum=spec.maximum,
             diameter=40, show_entry=False, default_raw=spec.default,
-            start_angle=25.0, sweep_degrees=185.0, angle_direction=1,
+            start_angle=180.0, sweep_degrees=180.0, angle_direction=-1,
             on_gesture_start=lambda key=spec.key: self._begin_parameter_drag(key),
             on_gesture_end=lambda key=spec.key: self._end_parameter_drag(key),
             on_change=lambda raw, key=spec.key: self._knob_changed(key, raw),
