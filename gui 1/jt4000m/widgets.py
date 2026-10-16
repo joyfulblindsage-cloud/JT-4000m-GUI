@@ -61,8 +61,8 @@ class Knob(tk.Canvas):
 
     STEP_COARSE = 4          # wheel / arrow step, in normalized units
     STEP_FINE = 1.0          # wheel / arrow step, in raw units (fine mode)
-    START_ANGLE = 270.0      # minimum pointer sits at 6 o'clock
-    SWEEP_DEGREES = 240.0    # synth-style arc; deliberately not a full turn
+    START_ANGLE = 180.0      # minimum pointer sits at the left endpoint
+    SWEEP_DEGREES = 180.0    # left-to-right upper semicircle; deliberately not a full turn
     ARC_STEP_DEGREES = 5.0   # fewer canvas points keeps Windows dragging light
     DRAG_PIXELS_PER_RANGE = 180.0
 
@@ -70,7 +70,7 @@ class Knob(tk.Canvas):
                  diameter: int = 58, on_change=None, on_reset=None,
                  default_raw: int = 0, show_entry: bool = True,
                  on_gesture_start=None, on_gesture_end=None,
-                 start_angle: float = 270.0, sweep_degrees: float = 240.0,
+                 start_angle: float = 180.0, sweep_degrees: float = 180.0,
                  angle_direction: int = -1) -> None:
         height = diameter + 34 if not show_entry else diameter + 52
         super().__init__(parent, width=diameter + 8, height=height, bg=BG,
