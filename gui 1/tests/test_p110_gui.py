@@ -534,7 +534,10 @@ def test_synth_workspace_matches_reference_layout_without_scrollbar(app):
             (1, 0, 5), (1, 5, 5), (1, 10, 2),
             (2, 0, 3), (2, 3, 3), (2, 6, 3), (2, 9, 3)} <= cells
     assert app.current_tab.get() == "SYNTH"
-    assert [app.controls.grid_rowconfigure(i)["weight"] for i in range(3)] == [0, 0, 1]
+    assert [app.controls.grid_rowconfigure(i)["weight"] for i in range(3)] == [1, 1, 1]
+    assert [app.controls.grid_rowconfigure(i)["uniform"] for i in range(3)] == [
+        "synth-row", "synth-row", "synth-row"
+    ]
     assert hasattr(app, "nav_query_entry")
     assert app.midibtn.cget("text") in ("Connect", "Disconnect")
     # Global history commands remain in Edit; the PRESETS toolbar does not
@@ -559,23 +562,23 @@ def test_synth_workspace_matches_reference_layout_without_scrollbar(app):
 
 
 @gui_test
-def test_synth_rows_target_6_5cm_and_bottom_row_gets_remainder(app):
-    """Rows 1/2 stay equal at 6.5 cm when possible and shrink together."""
+def test_all_three_synth_rows_share_equal_adaptive_height(app):
+    """All three grid rows use one uniform sizing group at every height."""
     from types import SimpleNamespace
 
-    target = app._synth_row_target_px
-    app._on_synth_resize(SimpleNamespace(width=900, height=target * 2 + 120))
-    assert app._synth_row_height_px == target
-    assert app._synth_row_bottom_height_px == 120
-    assert app.controls.grid_rowconfigure(0)["minsize"] == target
-    assert app.controls.grid_rowconfigure(1)["minsize"] == target
-    assert app.controls.grid_rowconfigure(2)["weight"] == 1
+    for height in (900, 600, 420):
+        app._on_synth_resize(SimpleNamespace(width=900, height=height))
+        assert app._synth_row_height_px == height // 3
+        assert app._synth_row_remainder_px == height - 3 * (height // 3)
+        for row in range(3):
+            config = app.controls.grid_rowconfigure(row)
+            assert config["weight"] == 1
+            assert config["uniform"] == "synth-row"
+            assert config["minsize"] == 0
 
-    # Adaptive fallback for a shorter viewport: equal main rows, no negative
-    # remainder and no attempt to preserve a physically impossible 6.5 cm.
-    app._on_synth_resize(SimpleNamespace(width=900, height=target + 80))
-    assert app._synth_row_height_px == (target + 80) // 2
-    assert app._synth_row_bottom_height_px == 0
+    # Width adaptation remains independent from the vertical row geometry.
+    app._on_synth_resize(SimpleNamespace(width=800, height=600))
+    assert app._synth_row_height_px == 200
 
 
 @gui_test
