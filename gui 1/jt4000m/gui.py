@@ -866,23 +866,25 @@ class Editor(tk.Tk):
                 tile.start()
 
     def _parameter_row(self, parent, spec, *, grid: bool = False,
-                       row: int = 0, col: int = 0) -> None:
+                       row: int = 0, col: int = 0, compact: bool = False) -> None:
         """One parameter line: label | control(s) | value | reset.
 
         P1.26 polish: fixed label width and consistent vertical rhythm keep
         every section aligned; `grid=True` lets compact strips (MIX / RING)
         place several rows side by side instead of stacking dead space.
         """
-        line = tk.Frame(parent, bg="#131D2B", padx=2, pady=2)
+        line = tk.Frame(parent, bg="#131D2B", padx=1 if compact else 2,
+                        pady=0 if compact else 2)
         if grid:
-            line.grid(row=row, column=col, sticky="ew", padx=(0, 10), pady=3)
+            line.grid(row=row, column=col, sticky="ew",
+                      padx=(0, 4 if compact else 10), pady=0 if compact else 3)
         else:
-            line.pack(fill="x", pady=3)
+            line.pack(fill="x", pady=0 if compact else 3)
         # Enum controls already display their selected option in the combobox;
         # omit the duplicate left label and separate value readout for them.
         has_enum_options = spec.kind == "enum" and bool(enum_options(spec.key))
         label = tk.Label(line, text=_row_label(spec, self.developer_var.get()), bg="#131D2B",
-                         fg="#A8BDD3", width=12, anchor="w")
+                         fg="#A8BDD3", width=8 if compact else 12, anchor="w")
         if not has_enum_options:
             label.pack(side="left")
         self.section_labels[spec.key] = label
@@ -896,7 +898,7 @@ class Editor(tk.Tk):
         if spec.kind == "enum":
             options = enum_options(spec.key)
             if options:
-                combo = ttk.Combobox(line, state="readonly", width=16,
+                combo = ttk.Combobox(line, state="readonly", width=11 if compact else 16,
                                      values=[name for _v, name in options])
                 combo.pack(side="left", fill="x", expand=True)
                 setattr(self, f"combo_{spec.key}", combo)
@@ -915,10 +917,11 @@ class Editor(tk.Tk):
             scale = tk.Scale(line, from_=spec.minimum, to=spec.maximum, orient="horizontal",
                              variable=var, showvalue=False, resolution=1, bg="#42D9FF",
                              fg="#B6C8DC", troughcolor="#0D1521", highlightthickness=0, bd=0,
-                             sliderrelief="flat", sliderlength=20,
-                             width=16, activebackground="#42D9FF", length=120,
+                             sliderrelief="flat", sliderlength=16 if compact else 20,
+                             width=12 if compact else 16,
+                             activebackground="#42D9FF", length=92 if compact else 120,
                              command=lambda _v, key=spec.key: self._scale_changed(key))
-            scale.pack(side="left", fill="x", expand=True, padx=5)
+            scale.pack(side="left", fill="x", expand=True, padx=2 if compact else 5)
             self._parameter_scales.append(scale)
             scale.bind("<ButtonPress-1>",
                        lambda _e, key=spec.key: self._begin_parameter_drag(key))
