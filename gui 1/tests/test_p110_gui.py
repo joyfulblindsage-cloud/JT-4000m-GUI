@@ -534,8 +534,22 @@ def test_synth_workspace_matches_reference_layout_without_scrollbar(app):
             (1, 0, 5), (1, 5, 5), (1, 10, 2),
             (2, 0, 3), (2, 3, 3), (2, 6, 3), (2, 9, 3)} <= cells
     assert app.current_tab.get() == "SYNTH"
+    assert [app.controls.grid_rowconfigure(i)["weight"] for i in range(3)] == [3, 2, 1]
     assert hasattr(app, "nav_query_entry")
     assert app.midibtn.cget("text") in ("Connect", "Disconnect")
+    # Global history commands remain in Edit; the PRESETS toolbar does not
+    # duplicate Undo/Redo buttons.
+    visible_history_buttons = [
+        child.cget("text")
+        for child in app.tab_frames["PRESETS"].winfo_children()
+        if child.winfo_class() == "TFrame"
+    ]
+    assert app._edit_menu.entrycget(0, "label") == "Undo"
+    assert app._edit_menu.entrycget(1, "label") == "Redo"
+    assert not any(
+        child.winfo_class() == "TButton" and child.cget("text") in ("Undo", "Redo")
+        for child in app.tab_frames["PRESETS"].winfo_children()
+    )
     # VCF ADSR must remain a complete, editable set.
     assert {"vcf_attack", "vcf_decay", "vcf_sustain", "vcf_release",
             "filter_env_amount"} <= set(app.vars)
