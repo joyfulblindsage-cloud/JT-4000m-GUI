@@ -529,7 +529,6 @@ class Editor(tk.Tk):
         width = max(1, event.width)
         compact = width < 1180
         label_width = 8 if width < 1000 else (9 if compact else 13)
-        value_width = 0
         for label in getattr(self, "section_labels", {}).values():
             try:
                 if int(label.cget("width")) in (10, 12, 14, 16, 18, 22, 30):
@@ -546,11 +545,8 @@ class Editor(tk.Tk):
                     scale.configure(length=slider_length)
             except tk.TclError:
                 pass
-        for _reset, value_label in getattr(self, "reset_buttons", {}).values():
-            try:
-                value_label.configure(width=value_width)
-            except tk.TclError:
-                pass
+        # Numeric readouts are deliberately un-packed; do not reserve layout
+        # width for them. Reset buttons remain in each control row.
         for scale in getattr(self, "_midi_only_scales", {}).values():
             try:
                 scale.configure(length=max(65, min(130, width // 24)))
@@ -913,8 +909,8 @@ class Editor(tk.Tk):
             scale = tk.Scale(line, from_=spec.minimum, to=spec.maximum, orient="horizontal",
                              variable=var, showvalue=False, resolution=1, bg="#131D2B",
                              fg="#B6C8DC", troughcolor="#0D1521", highlightthickness=0, bd=0,
-                             sliderrelief="flat", sliderlength=20, width=16,
-                              activebackground="#42D9FF", length=120,
+                             sliderrelief="flat", sliderlength=20, sliderbackground="#42D9FF",
+                             width=16, activebackground="#42D9FF", length=120,
                              command=lambda _v, key=spec.key: self._scale_changed(key))
             scale.pack(side="left", fill="x", expand=True, padx=5)
             self._parameter_scales.append(scale)
