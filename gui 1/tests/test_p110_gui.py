@@ -539,16 +539,17 @@ def test_synth_workspace_matches_reference_layout_without_scrollbar(app):
     assert app.midibtn.cget("text") in ("Connect", "Disconnect")
     # Global history commands remain in Edit; the PRESETS toolbar does not
     # duplicate Undo/Redo buttons.
-    visible_history_buttons = [
-        child.cget("text")
-        for child in app.tab_frames["PRESETS"].winfo_children()
-        if child.winfo_class() == "TFrame"
-    ]
     assert app._edit_menu.entrycget(0, "label") == "Undo"
     assert app._edit_menu.entrycget(1, "label") == "Redo"
+
+    def descendants(widget):
+        for child in widget.winfo_children():
+            yield child
+            yield from descendants(child)
+
     assert not any(
         child.winfo_class() == "TButton" and child.cget("text") in ("Undo", "Redo")
-        for child in app.tab_frames["PRESETS"].winfo_children()
+        for child in descendants(app.tab_frames["PRESETS"])
     )
     # VCF ADSR must remain a complete, editable set.
     assert {"vcf_attack", "vcf_decay", "vcf_sustain", "vcf_release",
