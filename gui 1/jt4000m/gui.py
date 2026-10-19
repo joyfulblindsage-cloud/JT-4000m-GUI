@@ -528,8 +528,8 @@ class Editor(tk.Tk):
         """Adapt labels and sliders to the compact three-row workspace."""
         width = max(1, event.width)
         compact = width < 1180
-        label_width = 9 if width < 1000 else (10 if compact else 13)
-        value_width = 7 if width < 1000 else 11
+        label_width = 8 if width < 1000 else (9 if compact else 13)
+        value_width = 0
         for label in getattr(self, "section_labels", {}).values():
             try:
                 if int(label.cget("width")) in (10, 12, 14, 16, 18, 22, 30):
@@ -561,9 +561,9 @@ class Editor(tk.Tk):
                              width: int | None = None, height: int | None = None) -> None:
         """Wave preview tile; oscillator displays are larger than compact LFO tiles."""
         if width is None:
-            width = 220 if key.startswith("osc") else 160
+            width = 176 if key.startswith("osc") else 160
         if height is None:
-            height = 64 if key.startswith("osc") else 48
+            height = 48 if key.startswith("osc") else 48
         row = tk.Frame(parent, bg="#131D2B")
         row.pack(fill="x", pady=(0, 4))
         # The larger oscillator tiles make waveform shape legible at a glance;
@@ -924,8 +924,8 @@ class Editor(tk.Tk):
                        lambda _e, key=spec.key: self._end_parameter_drag(key))
         val_lbl = tk.Label(line, textvariable=value, bg="#131D2B", fg="#F3F7FF", width=11,
                            anchor="e")
-        if not has_enum_options:
-            val_lbl.pack(side="right", padx=(4, 0))
+        # Numeric readouts stay registered for model sync but are not shown;
+        # removing them gives sliders the horizontal room they need.
         reset = tk.Button(line, text="↺", width=2, relief="flat", bg="#131D2B", fg="#8CA2BA",
                           highlightthickness=0, bd=0,
                           command=lambda key=spec.key: self.reset_one(key))
@@ -948,7 +948,7 @@ class Editor(tk.Tk):
         # manager for the knob row (mix's parent) to avoid pack/grid conflicts.
         line.pack(fill="x", pady=3)
         label = tk.Label(line, text=_row_label(spec, self.developer_var.get()),
-                         bg="#131D2B", fg="#A8BDD3", width=22, anchor="w")
+                         bg="#131D2B", fg="#A8BDD3", width=14, anchor="w")
         label.pack(side="left")
         self.section_labels[spec.key] = label
 
@@ -970,7 +970,7 @@ class Editor(tk.Tk):
 
         val_lbl = tk.Label(line, textvariable=value, bg="#131D2B", fg="#F3F7FF",
                            width=11, anchor="e")
-        val_lbl.pack(side="right", padx=(4, 0))
+        # Numeric readout intentionally hidden; the reset button remains visible.
         reset = tk.Button(line, text="↺", width=2, relief="flat", bg="#131D2B",
                           fg="#8CA2BA", highlightthickness=0, bd=0,
                           command=lambda key=spec.key: self.reset_one(key))
@@ -1009,7 +1009,7 @@ class Editor(tk.Tk):
             row, from_=spec.minimum, to=spec.maximum, orient="horizontal",
             variable=var, showvalue=False, resolution=1, bg="#131D2B",
             fg="#B6C8DC", troughcolor="#0D1521", highlightthickness=0, bd=0,
-            sliderrelief="flat", sliderlength=20, width=16,
+            sliderrelief="flat", sliderlength=20, sliderbackground="#42D9FF", width=16,
             activebackground="#42D9FF", length=105,
             command=lambda raw, key=spec.key: self._midi_only_changed(
                 key, int(float(raw))),
@@ -1020,8 +1020,9 @@ class Editor(tk.Tk):
         scale.bind("<ButtonRelease-1>",
                    lambda _e, key=spec.key: self._end_midi_only_drag(key))
         self._midi_only_scales[spec.key] = scale
-        tk.Label(row, textvariable=value_var, bg="#131D2B", fg="#F3F7FF",
-                 width=4, anchor="e").pack(side="right", padx=(4, 0))
+        value_label = tk.Label(row, textvariable=value_var, bg="#131D2B", fg="#F3F7FF",
+                               width=4, anchor="e")
+        # MIDI-only readout is intentionally hidden to keep the control row compact.
 
     def _midi_only_changed(self, key: str, raw: int) -> None:
         if self._syncing:
@@ -1078,7 +1079,7 @@ class Editor(tk.Tk):
             column, from_=spec.maximum, to=spec.minimum, orient="vertical",
             variable=var, showvalue=False, resolution=1, bg="#131D2B",
             fg="#B6C8DC", troughcolor="#0D1521", highlightthickness=0, bd=0,
-            sliderrelief="flat", sliderlength=20, width=16,
+            sliderrelief="flat", sliderlength=20, sliderbackground="#42D9FF", width=16,
             activebackground="#42D9FF", length=68,
             command=lambda _v, key=spec.key: self._scale_changed(key))
         scale.pack(anchor="center", fill="y", expand=True)
@@ -1090,7 +1091,7 @@ class Editor(tk.Tk):
 
         val_lbl = tk.Label(column, textvariable=value, bg="#131D2B",
                            fg="#F3F7FF", width=9, anchor="center")
-        val_lbl.pack(fill="x", pady=(1, 0))
+        # Numeric readout intentionally hidden; the reset button remains visible.
         reset = tk.Button(column, text="↺", width=2, relief="flat",
                           bg="#131D2B", fg="#8CA2BA", highlightthickness=0,
                           bd=0, command=lambda key=spec.key: self.reset_one(key))
@@ -1122,7 +1123,7 @@ class Editor(tk.Tk):
 
         knob = Knob(
             column, label="", minimum=spec.minimum, maximum=spec.maximum,
-            diameter=40, show_entry=False, default_raw=spec.default,
+            diameter=44, show_entry=False, default_raw=spec.default,
             start_angle=180.0, sweep_degrees=180.0, angle_direction=-1,
             on_gesture_start=lambda key=spec.key: self._begin_parameter_drag(key),
             on_gesture_end=lambda key=spec.key: self._end_parameter_drag(key),
@@ -1134,14 +1135,14 @@ class Editor(tk.Tk):
 
         footer = tk.Frame(column, bg="#131D2B")
         footer.pack(fill="x")
-        tk.Label(footer, textvariable=value, bg="#131D2B", fg="#F3F7FF",
-                 width=6, anchor="center", font=("TkDefaultFont", 8)).pack(
-                     side="left", expand=True)
+        value_label = tk.Label(footer, textvariable=value, bg="#131D2B", fg="#F3F7FF",
+                               width=6, anchor="center", font=("TkDefaultFont", 8))
+        # Keep a reference for model synchronization, but do not pack a numeric readout.
         reset = tk.Button(footer, text="↺", width=2, relief="flat",
                           bg="#131D2B", fg="#8CA2BA", highlightthickness=0,
                           bd=0, command=lambda key=spec.key: self.reset_one(key))
         reset.pack(side="right")
-        self.reset_buttons[spec.key] = (reset, footer.winfo_children()[0])
+        self.reset_buttons[spec.key] = (reset, value_label)
 
     def reset_one(self, key: str) -> None:
         """Reset a single parameter to its documented default value."""
@@ -1577,16 +1578,16 @@ class Editor(tk.Tk):
         panel = tk.Frame(parent or self, bg="#080D14")
         panel.pack(side="right", fill="y", padx=(4, 10), pady=3)
         ttk.Label(panel, text="USB MIDI", style="Muted.TLabel").pack(side="left", padx=(0, 4))
-        ttk.Button(panel, text="Refresh", command=self.refresh_midi_ports).pack(
-            side="left", padx=3, pady=2)
+        ttk.Button(panel, text="Refresh", width=7, command=self.refresh_midi_ports).pack(
+            side="left", padx=2, pady=2)
         ttk.Label(panel, text="In:", style="Muted.TLabel").pack(side="left", padx=(5, 2))
         self.midi_in_combo = ttk.Combobox(panel, state="readonly", width=17, values=[])
         self.midi_in_combo.pack(side="left")
         ttk.Label(panel, text="Out:", style="Muted.TLabel").pack(side="left", padx=(5, 2))
         self.midi_out_combo = ttk.Combobox(panel, state="readonly", width=17, values=[])
         self.midi_out_combo.pack(side="left")
-        self.midibtn = ttk.Button(panel, text="Connect", command=self.toggle_midi_connection)
-        self.midibtn.pack(side="left", padx=(6, 3))
+        self.midibtn = ttk.Button(panel, text="Connect", width=8, command=self.toggle_midi_connection)
+        self.midibtn.pack(side="left", padx=(4, 2))
         self.status_lbl = tk.Label(panel, text="Status: Offline", bg="#080D14",
                                    fg="#8CA2BA", font=("TkDefaultFont", 9, "bold"))
         self.status_lbl.pack(side="left", padx=3)
