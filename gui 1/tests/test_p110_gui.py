@@ -655,7 +655,7 @@ def test_compact_controls_hide_numeric_readouts_but_keep_reset_buttons(app):
     assert app._osc_tiles["osc2_wave"].width == 176
     assert app.midibtn.cget("width") == 8
     refresh = next(child for child in app.midibtn.master.winfo_children()
-                   if isinstance(child, ttk.Button) and child.cget("text") == "Refresh")
+                   if child.winfo_class() == "TButton" and child.cget("text") == "Refresh")
     assert refresh.cget("width") == 7
 
     # Slider thumb colour is fixed, not only applied on hover.
