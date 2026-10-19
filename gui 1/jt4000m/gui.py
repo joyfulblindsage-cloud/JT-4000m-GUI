@@ -370,15 +370,16 @@ class Editor(tk.Tk):
         self.controls.bind("<Configure>", self._on_synth_resize)
         for col in range(12):
             self.controls.grid_columnconfigure(col, weight=1, uniform="synth-col")
-        # P1.53: first two rows target 6.5 cm each; row 3 receives the
-        # remainder. The target is expressed in Tk physical units so Windows
-        # DPI scaling is respected. On a shorter viewport the two main rows
-        # shrink equally instead of pushing the utility row outside the window.
-        self._synth_row_target_px = max(1, round(self.winfo_fpixels("6.5c")))
-        self._synth_row_height_px = self._synth_row_target_px
-        self._synth_row_bottom_height_px = 0
-        for row, weight in enumerate((0, 0, 1)):
-            self.controls.grid_rowconfigure(row, weight=weight, minsize=0)
+        # P1.54: all three SYNTH rows share one uniform sizing group. Panel
+        # widths remain controlled by column spans, while row heights are equal
+        # and the available workspace is distributed evenly across the rows.
+        # This prevents FILTER or either lower row from becoming a different
+        # visual height just because its contents request less space.
+        self._synth_row_height_px = 1
+        self._synth_row_remainder_px = 0
+        for row in range(3):
+            self.controls.grid_rowconfigure(
+                row, weight=1, minsize=0, uniform="synth-row")
 
         self.section_labels: dict[str, tk.Label] = {}
         self.reset_buttons: dict[str, tuple[tk.Button, tk.Label]] = {}
@@ -539,17 +540,10 @@ class Editor(tk.Tk):
         # Real Tk Configure events include height; older tests/callers may
         # provide width-only event doubles. Fall back to the live workspace.
         height = max(1, getattr(event, "height", self.controls.winfo_height()))
-        target = max(1, getattr(
-            self, "_synth_row_target_px", round(self.winfo_fpixels("6.5c"))))
-        # Equal fixed-height rows when possible; if the viewport is shorter
-        # than 13 cm, scale both rows down equally. Row 3 has weight 1 and
-        # therefore receives every pixel left over after rows 1 and 2.
-        row_height = min(target, max(1, height // 2))
-        self._synth_row_height_px = row_height
-        self._synth_row_bottom_height_px = max(0, height - 2 * row_height)
-        for row in (0, 1):
-            self.controls.grid_rowconfigure(row, weight=0, minsize=row_height)
-        self.controls.grid_rowconfigure(2, weight=1, minsize=0)
+        # Track the equal share for diagnostics/tests. Tk's uniform row group
+        # performs the actual allocation and keeps all three rows the same size.
+        self._synth_row_height_px = max(1, height // 3)
+        self._synth_row_remainder_px = height - 3 * self._synth_row_height_px
 
         compact = width < 1180
         label_width = 8 if width < 1000 else (9 if compact else 13)
