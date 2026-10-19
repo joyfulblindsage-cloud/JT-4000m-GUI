@@ -370,11 +370,14 @@ class Editor(tk.Tk):
         self.controls.bind("<Configure>", self._on_synth_resize)
         for col in range(12):
             self.controls.grid_columnconfigure(col, weight=1, uniform="synth-col")
-        # P1.52: shift vertical space from the envelope row to OSC/FILTER.
-        # The top row gets the strongest share; the envelope row is shorter,
-        # while the utility row keeps its compact allocation. No uniform group:
-        # all rows continue to adapt proportionally when the window is resized.
-        for row, weight in enumerate((3, 2, 1)):
+        # P1.53: first two rows target 6.5 cm each; row 3 receives the
+        # remainder. The target is expressed in Tk physical units so Windows
+        # DPI scaling is respected. On a shorter viewport the two main rows
+        # shrink equally instead of pushing the utility row outside the window.
+        self._synth_row_target_px = max(1, round(self.winfo_fpixels("6.5c")))
+        self._synth_row_height_px = self._synth_row_target_px
+        self._synth_row_bottom_height_px = 0
+        for row, weight in enumerate((0, 0, 1)):
             self.controls.grid_rowconfigure(row, weight=weight, minsize=0)
 
         self.section_labels: dict[str, tk.Label] = {}
@@ -531,8 +534,23 @@ class Editor(tk.Tk):
         self.arp_panel = parent
 
     def _on_synth_resize(self, event) -> None:
-        """Adapt labels and sliders to the compact three-row workspace."""
+        """Adapt row heights, labels and sliders to the available workspace."""
         width = max(1, event.width)
+        # Real Tk Configure events include height; older tests/callers may
+        # provide width-only event doubles. Fall back to the live workspace.
+        height = max(1, getattr(event, "height", self.controls.winfo_height()))
+        target = max(1, getattr(
+            self, "_synth_row_target_px", round(self.winfo_fpixels("6.5c"))))
+        # Equal fixed-height rows when possible; if the viewport is shorter
+        # than 13 cm, scale both rows down equally. Row 3 has weight 1 and
+        # therefore receives every pixel left over after rows 1 and 2.
+        row_height = min(target, max(1, height // 2))
+        self._synth_row_height_px = row_height
+        self._synth_row_bottom_height_px = max(0, height - 2 * row_height)
+        for row in (0, 1):
+            self.controls.grid_rowconfigure(row, weight=0, minsize=row_height)
+        self.controls.grid_rowconfigure(2, weight=1, minsize=0)
+
         compact = width < 1180
         label_width = 8 if width < 1000 else (9 if compact else 13)
         for label in getattr(self, "section_labels", {}).values():
