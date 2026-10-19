@@ -536,7 +536,9 @@ class Editor(tk.Tk):
     def _on_synth_resize(self, event) -> None:
         """Adapt row heights, labels and sliders to the available workspace."""
         width = max(1, event.width)
-        height = max(1, event.height)
+        # Real Tk Configure events include height; older tests/callers may
+        # provide width-only event doubles. Fall back to the live workspace.
+        height = max(1, getattr(event, "height", self.controls.winfo_height()))
         target = max(1, getattr(
             self, "_synth_row_target_px", round(self.winfo_fpixels("6.5c"))))
         # Equal fixed-height rows when possible; if the viewport is shorter
