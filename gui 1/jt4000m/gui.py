@@ -907,9 +907,9 @@ class Editor(tk.Tk):
             check.pack(side="right")
         else:
             scale = tk.Scale(line, from_=spec.minimum, to=spec.maximum, orient="horizontal",
-                             variable=var, showvalue=False, resolution=1, bg="#131D2B",
+                             variable=var, showvalue=False, resolution=1, bg="#42D9FF",
                              fg="#B6C8DC", troughcolor="#0D1521", highlightthickness=0, bd=0,
-                             sliderrelief="flat", sliderlength=20, sliderbackground="#42D9FF",
+                             sliderrelief="flat", sliderlength=20,
                              width=16, activebackground="#42D9FF", length=120,
                              command=lambda _v, key=spec.key: self._scale_changed(key))
             scale.pack(side="left", fill="x", expand=True, padx=5)
@@ -1003,9 +1003,9 @@ class Editor(tk.Tk):
 
         scale = tk.Scale(
             row, from_=spec.minimum, to=spec.maximum, orient="horizontal",
-            variable=var, showvalue=False, resolution=1, bg="#131D2B",
+            variable=var, showvalue=False, resolution=1, bg="#42D9FF",
             fg="#B6C8DC", troughcolor="#0D1521", highlightthickness=0, bd=0,
-            sliderrelief="flat", sliderlength=20, sliderbackground="#42D9FF", width=16,
+            sliderrelief="flat", sliderlength=20, width=16,
             activebackground="#42D9FF", length=105,
             command=lambda raw, key=spec.key: self._midi_only_changed(
                 key, int(float(raw))),
@@ -1073,9 +1073,9 @@ class Editor(tk.Tk):
 
         scale = tk.Scale(
             column, from_=spec.maximum, to=spec.minimum, orient="vertical",
-            variable=var, showvalue=False, resolution=1, bg="#131D2B",
+            variable=var, showvalue=False, resolution=1, bg="#42D9FF",
             fg="#B6C8DC", troughcolor="#0D1521", highlightthickness=0, bd=0,
-            sliderrelief="flat", sliderlength=20, sliderbackground="#42D9FF", width=16,
+            sliderrelief="flat", sliderlength=20, width=16,
             activebackground="#42D9FF", length=68,
             command=lambda _v, key=spec.key: self._scale_changed(key))
         scale.pack(anchor="center", fill="y", expand=True)
