@@ -508,8 +508,8 @@ def test_adsr_graph_uses_attack_decay_sustain_and_release(app):
 @gui_test
 def test_adsr_slider_edit_refreshes_curve_and_wave_tiles_are_readable(app):
     app.load_path(FIX / "ALL INIT SAW.syx")
-    assert app._osc_tiles["osc1_wave"].width == 220
-    assert app._osc_tiles["osc2_wave"].width == 220
+    assert app._osc_tiles["osc1_wave"].width == 176
+    assert app._osc_tiles["osc2_wave"].width == 176
 
     before = app.vca_env_view._points()
     app.vars["vca_attack"].set(127)
@@ -637,3 +637,29 @@ def test_adsr_controls_use_compact_knobs_with_requested_arc(app):
             assert knob.minimum == BY_KEY[key].minimum
             assert knob.maximum == BY_KEY[key].maximum
             assert key in app.vars and key in app.value_vars
+
+
+@gui_test
+def test_compact_controls_hide_numeric_readouts_but_keep_reset_buttons(app):
+    """Free horizontal space for controls while keeping per-parameter reset."""
+    app.load_path(FIX / "ALL INIT SAW.syx")
+    for key in ("osc1_pwm_fm", "osc1_coarse", "osc1_fine",
+                "osc2_pwm", "osc2_coarse", "osc2_fine",
+                "filter_cutoff", "filter_resonance", "vca_attack",
+                "vcf_release", "osc_balance"):
+        reset, value_label = app.reset_buttons[key]
+        assert reset.winfo_manager() != ""
+        assert value_label.winfo_manager() == ""
+
+    assert app._osc_tiles["osc1_wave"].width == 176
+    assert app._osc_tiles["osc2_wave"].width == 176
+    assert app.midibtn.cget("width") == 8
+    refresh = next(child for child in app.midibtn.master.winfo_children()
+                   if child.winfo_class() == "TButton" and child.cget("text") == "Refresh")
+    assert refresh.cget("width") == 7
+
+    # Slider thumb colour is fixed, not only applied on hover.
+    scale = next(s for s in app._parameter_scales
+                 if str(s.cget("orient")) == "horizontal")
+    assert scale.cget("background") == "#42D9FF"
+    assert app._knobs["vca_attack"]._d == 44
