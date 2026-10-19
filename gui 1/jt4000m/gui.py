@@ -339,20 +339,23 @@ class Editor(tk.Tk):
 
     # ------------------------------------------------------ P1.26: SYNTH tab
     def _synth_box(self, parent, title: str, row: int, col: int,
-                   columnspan: int = 1):
-        """One visual section box (consistent padding + header hierarchy)."""
-        box = tk.Frame(parent, bg="#131D2B", highlightthickness=1,
-                       highlightbackground="#2A3A4F", bd=0)
+                   columnspan: int = 1, *, compact: bool = False):
+        """One section; compact top-row sections visually share one workspace."""
+        box = tk.Frame(
+            parent, bg="#131D2B",
+            highlightthickness=0 if compact else 1,
+            highlightbackground="#2A3A4F", bd=0)
         box.grid(row=row, column=col, columnspan=columnspan,
-                 sticky="nsew", padx=3, pady=3)
+                 sticky="nsew", padx=1 if compact else 3, pady=1 if compact else 3)
         head = tk.Frame(box, bg="#131D2B")
-        head.pack(fill="x", padx=5, pady=(3, 0))
+        head.pack(fill="x", padx=2 if compact else 5, pady=(0 if compact else 3, 0))
         tk.Label(head, text=title, bg="#131D2B", fg="#F3F7FF",
-                 font=("TkDefaultFont", 10, "bold")).pack(side="left")
-        # Full-width signal strip gives each module a consistent visual anchor.
-        tk.Frame(box, bg="#42D9FF", height=2).pack(fill="x", padx=5, pady=(2, 0))
+                 font=("TkDefaultFont", 9 if compact else 10, "bold")).pack(side="left")
+        if not compact:
+            tk.Frame(box, bg="#42D9FF", height=2).pack(fill="x", padx=5, pady=(2, 0))
         inner = tk.Frame(box, bg="#131D2B")
-        inner.pack(fill="both", expand=True, padx=5, pady=(3, 4))
+        inner.pack(fill="both", expand=True,
+                   padx=2 if compact else 5, pady=(1, 1) if compact else (3, 4))
         return box, inner
 
     def _build_synth_tab(self, frame) -> None:
