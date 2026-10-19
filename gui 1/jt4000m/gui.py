@@ -370,11 +370,11 @@ class Editor(tk.Tk):
         self.controls.bind("<Configure>", self._on_synth_resize)
         for col in range(12):
             self.controls.grid_columnconfigure(col, weight=1, uniform="synth-col")
-        # Compact 900x700 balance: top oscillator/filter and envelope rows
-        # get equal room; the four-module utility row stays shorter. This
-        # preserves the existing 12-column layout and expands proportionally
-        # when the user resizes the window. Do not use a uniform row group.
-        for row, weight in enumerate((2, 2, 1)):
+        # P1.52: shift vertical space from the envelope row to OSC/FILTER.
+        # The top row gets the strongest share; the envelope row is shorter,
+        # while the utility row keeps its compact allocation. No uniform group:
+        # all rows continue to adapt proportionally when the window is resized.
+        for row, weight in enumerate((3, 2, 1)):
             self.controls.grid_rowconfigure(row, weight=weight, minsize=0)
 
         self.section_labels: dict[str, tk.Label] = {}
@@ -712,8 +712,9 @@ class Editor(tk.Tk):
             ttk.Button(ops, text=text, command=cmd).pack(side="left", padx=4)
         file_ops = ttk.Frame(center, style="Panel.TFrame")
         file_ops.pack(fill="x", pady=(0, 6))
-        for text, cmd in (("Undo", self.undo), ("Redo", self.redo),
-                          ("Save Bank", self.save_bank),
+        # Undo/Redo live in the global Edit menu (Ctrl+Z / Ctrl+Y); avoid
+        # duplicating history controls in the preset workspace.
+        for text, cmd in (("Save Bank", self.save_bank),
                           ("Export Single .syx", self.export_single)):
             ttk.Button(file_ops, text=text, command=cmd).pack(side="left", padx=(0, 4))
         self._presets_buttons_row = ops
