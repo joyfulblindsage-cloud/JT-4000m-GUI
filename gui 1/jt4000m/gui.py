@@ -385,14 +385,14 @@ class Editor(tk.Tk):
         # Row 1 — oscillators and filter.
         _, osc1 = self._synth_box(
             self.controls, "OSC 1", 0, 0, columnspan=4, compact=True)
-        self._build_wave_tile_row(osc1, "osc1_wave", "OSC1", width=112, height=32)
+        self._build_wave_tile_row(osc1, "osc1_wave", "OSC1", width=176, height=32)
         self._parameter_row(osc1, specs["osc1_wave"], compact=True)
         for key in ("osc1_pwm_fm", "osc1_coarse", "osc1_fine"):
             self._parameter_row(osc1, specs[key], compact=True)
 
         _, osc2 = self._synth_box(
             self.controls, "OSC 2", 0, 4, columnspan=4, compact=True)
-        self._build_wave_tile_row(osc2, "osc2_wave", "OSC2", width=112, height=32)
+        self._build_wave_tile_row(osc2, "osc2_wave", "OSC2", width=176, height=32)
         self._parameter_row(osc2, specs["osc2_wave"], compact=True)
         for key in ("osc2_pwm", "osc2_coarse", "osc2_fine"):
             self._parameter_row(osc2, specs[key], compact=True)
