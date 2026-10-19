@@ -339,20 +339,23 @@ class Editor(tk.Tk):
 
     # ------------------------------------------------------ P1.26: SYNTH tab
     def _synth_box(self, parent, title: str, row: int, col: int,
-                   columnspan: int = 1):
-        """One visual section box (consistent padding + header hierarchy)."""
-        box = tk.Frame(parent, bg="#131D2B", highlightthickness=1,
-                       highlightbackground="#2A3A4F", bd=0)
+                   columnspan: int = 1, *, compact: bool = False):
+        """One section; compact top-row sections visually share one workspace."""
+        box = tk.Frame(
+            parent, bg="#131D2B",
+            highlightthickness=0 if compact else 1,
+            highlightbackground="#2A3A4F", bd=0)
         box.grid(row=row, column=col, columnspan=columnspan,
-                 sticky="nsew", padx=3, pady=3)
+                 sticky="nsew", padx=1 if compact else 3, pady=1 if compact else 3)
         head = tk.Frame(box, bg="#131D2B")
-        head.pack(fill="x", padx=5, pady=(3, 0))
+        head.pack(fill="x", padx=2 if compact else 5, pady=(0 if compact else 3, 0))
         tk.Label(head, text=title, bg="#131D2B", fg="#F3F7FF",
-                 font=("TkDefaultFont", 10, "bold")).pack(side="left")
-        # Full-width signal strip gives each module a consistent visual anchor.
-        tk.Frame(box, bg="#42D9FF", height=2).pack(fill="x", padx=5, pady=(2, 0))
+                 font=("TkDefaultFont", 9 if compact else 10, "bold")).pack(side="left")
+        if not compact:
+            tk.Frame(box, bg="#42D9FF", height=2).pack(fill="x", padx=5, pady=(2, 0))
         inner = tk.Frame(box, bg="#131D2B")
-        inner.pack(fill="both", expand=True, padx=5, pady=(3, 4))
+        inner.pack(fill="both", expand=True,
+                   padx=2 if compact else 5, pady=(1, 1) if compact else (3, 4))
         return box, inner
 
     def _build_synth_tab(self, frame) -> None:
@@ -380,33 +383,36 @@ class Editor(tk.Tk):
         self.wave_phase_var = tk.StringVar(value="")
 
         # Row 1 — oscillators and filter.
-        _, osc1 = self._synth_box(self.controls, "OSC 1", 0, 0, columnspan=4)
-        self._build_wave_tile_row(osc1, "osc1_wave", "OSC1 Preview")
-        self._parameter_row(osc1, specs["osc1_wave"])
+        _, osc1 = self._synth_box(
+            self.controls, "OSC 1", 0, 0, columnspan=4, compact=True)
+        self._build_wave_tile_row(osc1, "osc1_wave", "OSC1", width=176, height=32)
+        self._parameter_row(osc1, specs["osc1_wave"], compact=True)
         for key in ("osc1_pwm_fm", "osc1_coarse", "osc1_fine"):
-            self._parameter_row(osc1, specs[key])
+            self._parameter_row(osc1, specs[key], compact=True)
 
-        _, osc2 = self._synth_box(self.controls, "OSC 2", 0, 4, columnspan=4)
-        self._build_wave_tile_row(osc2, "osc2_wave", "OSC2 Preview")
-        self._parameter_row(osc2, specs["osc2_wave"])
+        _, osc2 = self._synth_box(
+            self.controls, "OSC 2", 0, 4, columnspan=4, compact=True)
+        self._build_wave_tile_row(osc2, "osc2_wave", "OSC2", width=176, height=32)
+        self._parameter_row(osc2, specs["osc2_wave"], compact=True)
         for key in ("osc2_pwm", "osc2_coarse", "osc2_fine"):
-            self._parameter_row(osc2, specs[key])
+            self._parameter_row(osc2, specs[key], compact=True)
 
-        _, filt = self._synth_box(self.controls, "FILTER", 0, 8, columnspan=4)
+        _, filt = self._synth_box(
+            self.controls, "FILTER", 0, 8, columnspan=4, compact=True)
         # Filter uses a 2:1:1 vertical split: graph, cutoff, resonance.
         filter_layout = tk.Frame(filt, bg="#131D2B")
         filter_layout.pack(fill="both", expand=True)
         filter_layout.grid_columnconfigure(0, weight=1)
-        for row, weight in enumerate((2, 1, 1)):
+        for row, weight in enumerate((3, 1, 1)):
             filter_layout.grid_rowconfigure(row, weight=weight, minsize=0)
         graph_slot = tk.Frame(filter_layout, bg="#131D2B")
-        graph_slot.grid(row=0, column=0, sticky="nsew", pady=(0, 2))
-        self.filter_view = FilterView(graph_slot, width=300, height=88)
-        self.filter_view.pack(fill="both", expand=True, padx=2)
+        graph_slot.grid(row=0, column=0, sticky="nsew", pady=(0, 1))
+        self.filter_view = FilterView(graph_slot, width=300, height=72)
+        self.filter_view.pack(fill="both", expand=True, padx=1)
         for row, key in enumerate(("filter_cutoff", "filter_resonance"), start=1):
             control_slot = tk.Frame(filter_layout, bg="#131D2B")
-            control_slot.grid(row=row, column=0, sticky="nsew", pady=1)
-            self._parameter_row(control_slot, specs[key])
+            control_slot.grid(row=row, column=0, sticky="nsew", pady=0)
+            self._parameter_row(control_slot, specs[key], compact=True)
 
         # Row 2 widths are VCA : VCF : ARP = 2:2:1 (5:5:2 grid columns).
         # Envelope graphs and ADSR controls each receive half the module height.
@@ -561,7 +567,7 @@ class Editor(tk.Tk):
         if height is None:
             height = 48 if key.startswith("osc") else 48
         row = tk.Frame(parent, bg="#131D2B")
-        row.pack(fill="x", pady=(0, 4))
+        row.pack(fill="x", pady=(0, 2) if key.startswith("osc") else (0, 4))
         # The larger oscillator tiles make waveform shape legible at a glance;
         # LFO tiles stay compact to protect the four-column bottom row.
         canvas = tk.Canvas(row, width=width, height=height, bg="#0D1521",
@@ -860,23 +866,25 @@ class Editor(tk.Tk):
                 tile.start()
 
     def _parameter_row(self, parent, spec, *, grid: bool = False,
-                       row: int = 0, col: int = 0) -> None:
+                       row: int = 0, col: int = 0, compact: bool = False) -> None:
         """One parameter line: label | control(s) | value | reset.
 
         P1.26 polish: fixed label width and consistent vertical rhythm keep
         every section aligned; `grid=True` lets compact strips (MIX / RING)
         place several rows side by side instead of stacking dead space.
         """
-        line = tk.Frame(parent, bg="#131D2B", padx=2, pady=2)
+        line = tk.Frame(parent, bg="#131D2B", padx=1 if compact else 2,
+                        pady=0 if compact else 2)
         if grid:
-            line.grid(row=row, column=col, sticky="ew", padx=(0, 10), pady=3)
+            line.grid(row=row, column=col, sticky="ew",
+                      padx=(0, 4 if compact else 10), pady=0 if compact else 3)
         else:
-            line.pack(fill="x", pady=3)
+            line.pack(fill="x", pady=0 if compact else 3)
         # Enum controls already display their selected option in the combobox;
         # omit the duplicate left label and separate value readout for them.
         has_enum_options = spec.kind == "enum" and bool(enum_options(spec.key))
         label = tk.Label(line, text=_row_label(spec, self.developer_var.get()), bg="#131D2B",
-                         fg="#A8BDD3", width=12, anchor="w")
+                         fg="#A8BDD3", width=8 if compact else 12, anchor="w")
         if not has_enum_options:
             label.pack(side="left")
         self.section_labels[spec.key] = label
@@ -890,7 +898,7 @@ class Editor(tk.Tk):
         if spec.kind == "enum":
             options = enum_options(spec.key)
             if options:
-                combo = ttk.Combobox(line, state="readonly", width=16,
+                combo = ttk.Combobox(line, state="readonly", width=11 if compact else 16,
                                      values=[name for _v, name in options])
                 combo.pack(side="left", fill="x", expand=True)
                 setattr(self, f"combo_{spec.key}", combo)
@@ -909,10 +917,11 @@ class Editor(tk.Tk):
             scale = tk.Scale(line, from_=spec.minimum, to=spec.maximum, orient="horizontal",
                              variable=var, showvalue=False, resolution=1, bg="#42D9FF",
                              fg="#B6C8DC", troughcolor="#0D1521", highlightthickness=0, bd=0,
-                             sliderrelief="flat", sliderlength=20,
-                             width=16, activebackground="#42D9FF", length=120,
+                             sliderrelief="flat", sliderlength=16 if compact else 20,
+                             width=12 if compact else 16,
+                             activebackground="#42D9FF", length=92 if compact else 120,
                              command=lambda _v, key=spec.key: self._scale_changed(key))
-            scale.pack(side="left", fill="x", expand=True, padx=5)
+            scale.pack(side="left", fill="x", expand=True, padx=2 if compact else 5)
             self._parameter_scales.append(scale)
             scale.bind("<ButtonPress-1>",
                        lambda _e, key=spec.key: self._begin_parameter_drag(key))
