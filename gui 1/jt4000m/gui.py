@@ -403,16 +403,16 @@ class Editor(tk.Tk):
         filter_layout = tk.Frame(filt, bg="#131D2B")
         filter_layout.pack(fill="both", expand=True)
         filter_layout.grid_columnconfigure(0, weight=1)
-        for row, weight in enumerate((2, 1, 1)):
+        for row, weight in enumerate((3, 1, 1)):
             filter_layout.grid_rowconfigure(row, weight=weight, minsize=0)
         graph_slot = tk.Frame(filter_layout, bg="#131D2B")
-        graph_slot.grid(row=0, column=0, sticky="nsew", pady=(0, 2))
-        self.filter_view = FilterView(graph_slot, width=300, height=88)
-        self.filter_view.pack(fill="both", expand=True, padx=2)
+        graph_slot.grid(row=0, column=0, sticky="nsew", pady=(0, 1))
+        self.filter_view = FilterView(graph_slot, width=300, height=72)
+        self.filter_view.pack(fill="both", expand=True, padx=1)
         for row, key in enumerate(("filter_cutoff", "filter_resonance"), start=1):
             control_slot = tk.Frame(filter_layout, bg="#131D2B")
-            control_slot.grid(row=row, column=0, sticky="nsew", pady=1)
-            self._parameter_row(control_slot, specs[key])
+            control_slot.grid(row=row, column=0, sticky="nsew", pady=0)
+            self._parameter_row(control_slot, specs[key], compact=True)
 
         # Row 2 widths are VCA : VCF : ARP = 2:2:1 (5:5:2 grid columns).
         # Envelope graphs and ADSR controls each receive half the module height.
@@ -567,7 +567,7 @@ class Editor(tk.Tk):
         if height is None:
             height = 48 if key.startswith("osc") else 48
         row = tk.Frame(parent, bg="#131D2B")
-        row.pack(fill="x", pady=(0, 4))
+        row.pack(fill="x", pady=(0, 2) if key.startswith("osc") else (0, 4))
         # The larger oscillator tiles make waveform shape legible at a glance;
         # LFO tiles stay compact to protect the four-column bottom row.
         canvas = tk.Canvas(row, width=width, height=height, bg="#0D1521",
