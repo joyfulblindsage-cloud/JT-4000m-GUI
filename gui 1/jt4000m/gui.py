@@ -383,19 +383,22 @@ class Editor(tk.Tk):
         self.wave_phase_var = tk.StringVar(value="")
 
         # Row 1 — oscillators and filter.
-        _, osc1 = self._synth_box(self.controls, "OSC 1", 0, 0, columnspan=4)
-        self._build_wave_tile_row(osc1, "osc1_wave", "OSC1 Preview")
-        self._parameter_row(osc1, specs["osc1_wave"])
+        _, osc1 = self._synth_box(
+            self.controls, "OSC 1", 0, 0, columnspan=4, compact=True)
+        self._build_wave_tile_row(osc1, "osc1_wave", "OSC1", width=112, height=32)
+        self._parameter_row(osc1, specs["osc1_wave"], compact=True)
         for key in ("osc1_pwm_fm", "osc1_coarse", "osc1_fine"):
-            self._parameter_row(osc1, specs[key])
+            self._parameter_row(osc1, specs[key], compact=True)
 
-        _, osc2 = self._synth_box(self.controls, "OSC 2", 0, 4, columnspan=4)
-        self._build_wave_tile_row(osc2, "osc2_wave", "OSC2 Preview")
-        self._parameter_row(osc2, specs["osc2_wave"])
+        _, osc2 = self._synth_box(
+            self.controls, "OSC 2", 0, 4, columnspan=4, compact=True)
+        self._build_wave_tile_row(osc2, "osc2_wave", "OSC2", width=112, height=32)
+        self._parameter_row(osc2, specs["osc2_wave"], compact=True)
         for key in ("osc2_pwm", "osc2_coarse", "osc2_fine"):
-            self._parameter_row(osc2, specs[key])
+            self._parameter_row(osc2, specs[key], compact=True)
 
-        _, filt = self._synth_box(self.controls, "FILTER", 0, 8, columnspan=4)
+        _, filt = self._synth_box(
+            self.controls, "FILTER", 0, 8, columnspan=4, compact=True)
         # Filter uses a 2:1:1 vertical split: graph, cutoff, resonance.
         filter_layout = tk.Frame(filt, bg="#131D2B")
         filter_layout.pack(fill="both", expand=True)
