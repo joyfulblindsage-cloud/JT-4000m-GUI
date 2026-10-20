@@ -75,7 +75,7 @@ class Editor(tk.Tk):
         # still freely resizable. Keep the same minimum so the SYNTH layout
         # is designed and reviewed against one predictable baseline.
         self.geometry("900x700")
-        self.minsize(900, 700)
+        self.minsize(900, 500)
         self.configure(bg="#0B1018")
 
         # ----- state -------------------------------------------------------
