@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Capture repeatable Tkinter UI screenshots and widget geometry as JSON.
+"""Capture repeatable Tkinter screenshots and widget geometry as JSON.
 
 Run under a display server, e.g.:
   xvfb-run -a -s "-screen 0 1400x900x24" python tools/capture_ui_review.py
@@ -9,10 +9,8 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-import time
 from pathlib import Path
 import tkinter as tk
-from tkinter import ttk
 
 from PIL import ImageGrab
 
@@ -20,13 +18,26 @@ from jt4000m.gui import Editor
 
 
 SIZES = ((900, 700), (900, 600), (900, 560), (900, 500))
+EDGE_TOLERANCE_PX = 2
+
+
+def bounds(widget: tk.Misc) -> tuple[int, int, int, int]:
+    """Return widget bounds in absolute screen coordinates."""
+    return (
+        widget.winfo_rootx(),
+        widget.winfo_rooty(),
+        widget.winfo_rootx() + widget.winfo_width(),
+        widget.winfo_rooty() + widget.winfo_height(),
+    )
 
 
 def widget_record(widget: tk.Misc, root: tk.Tk) -> dict:
     try:
         widget.update_idletasks()
-        x, y = widget.winfo_rootx() - root.winfo_rootx(), widget.winfo_rooty() - root.winfo_rooty()
-        width, height = widget.winfo_width(), widget.winfo_height()
+        root_x, root_y, right, bottom = bounds(widget)
+        root_left, root_top, root_right, root_bottom = bounds(root)
+        x, y = root_x - root_left, root_y - root_top
+        width, height = right - root_x, bottom - root_y
         mapped = bool(widget.winfo_ismapped())
         record = {
             "path": str(widget),
@@ -35,14 +46,40 @@ def widget_record(widget: tk.Misc, root: tk.Tk) -> dict:
             "mapped": mapped,
             "x": x, "y": y, "width": width, "height": height,
             "right": x + width, "bottom": y + height,
+            "outside_window": bool(
+                mapped and width > 1 and height > 1 and (
+                    x < 0 or y < 0 or x + width > root.winfo_width()
+                    or y + height > root.winfo_height()
+                )
+            ),
+            "clipped_by_ancestors": [],
         }
+
+        # A child may fit inside the top-level window but still be cut off by
+        # an intermediate Frame. Record every mapped ancestor it exceeds.
         if mapped and width > 1 and height > 1:
-            record["outside_window"] = (
-                x < 0 or y < 0 or x + width > root.winfo_width()
-                or y + height > root.winfo_height()
-            )
-        else:
-            record["outside_window"] = False
+            ancestor = widget.winfo_parent()
+            while ancestor:
+                parent = widget.nametowidget(ancestor)
+                if parent == widget:
+                    break
+                if parent.winfo_ismapped() and parent != root:
+                    pl, pt, pr, pb = bounds(parent)
+                    overflow = {
+                        "left": max(0, pl - root_x),
+                        "top": max(0, pt - root_y),
+                        "right": max(0, right - pr),
+                        "bottom": max(0, bottom - pb),
+                    }
+                    if any(value > EDGE_TOLERANCE_PX for value in overflow.values()):
+                        record["clipped_by_ancestors"].append({
+                            "path": str(parent),
+                            "class": parent.winfo_class(),
+                            "overflow_px": overflow,
+                        })
+                if parent == root:
+                    break
+                ancestor = parent.winfo_parent()
         return record
     except tk.TclError as exc:
         return {"path": str(widget), "error": str(exc)}
@@ -70,30 +107,35 @@ def main() -> int:
             app.deiconify()
             app.update()
             app.update_idletasks()
-            # Let Tk finish idle geometry propagation and short animation callbacks.
             app.after(150, app.quit)
             app.mainloop()
             app.update_idletasks()
+
             actual = {"width": app.winfo_width(), "height": app.winfo_height()}
             widgets: list[dict] = []
             collect_widgets(app, app, widgets)
             visible = [w for w in widgets if w.get("mapped") and not w.get("error")]
             outside = [w for w in visible if w.get("outside_window")]
+            clipped = [w for w in visible if w.get("clipped_by_ancestors")]
+
+            # Crop to the actual application window, not the full virtual desktop.
+            left, top, right, bottom = bounds(app)
             screenshot = args.output / f"ui-{width}x{height}.png"
-            ImageGrab.grab().save(screenshot)
-            case = {
+            ImageGrab.grab(bbox=(left, top, right, bottom)).save(screenshot)
+            cases.append({
                 "requested_size": {"width": width, "height": height},
                 "actual_size": actual,
                 "screenshot": screenshot.name,
                 "visible_widget_count": len(visible),
                 "widgets_outside_window_count": len(outside),
                 "widgets_outside_window": outside,
+                "widgets_clipped_by_ancestors_count": len(clipped),
+                "widgets_clipped_by_ancestors": clipped,
                 "widgets": widgets,
-            }
-            cases.append(case)
+            })
+
             if actual != {"width": width, "height": height}:
                 failures.append(f"Requested {width}x{height}, got {actual['width']}x{actual['height']}")
-            # The window has a fixed minimum width; compact-height cases must remain reachable.
             if actual["width"] != 900:
                 failures.append(f"Window width changed unexpectedly at {width}x{height}: {actual['width']}")
             app.withdraw()
@@ -105,7 +147,7 @@ def main() -> int:
             pass
 
     report = {
-        "schema_version": 1,
+        "schema_version": 2,
         "application": "JT-4000M Studio",
         "python": sys.version,
         "display": "virtual display (GitHub Actions)",
@@ -114,6 +156,8 @@ def main() -> int:
             "requested_window_size_reached": not failures,
             "widget_geometry_is_recorded": True,
             "out_of_window_widgets_are_reported_not_yet_fatal": True,
+            "ancestor_clipping_is_reported_not_yet_fatal": True,
+            "screenshots_are_cropped_to_application_window": True,
         },
         "failures": failures,
         "cases": cases,
@@ -127,6 +171,10 @@ def main() -> int:
         "out_of_window_counts": {
             f"{case['requested_size']['width']}x{case['requested_size']['height']}":
                 case["widgets_outside_window_count"] for case in cases
+        },
+        "ancestor_clipping_counts": {
+            f"{case['requested_size']['width']}x{case['requested_size']['height']}":
+                case["widgets_clipped_by_ancestors_count"] for case in cases
         },
     }, indent=2))
     return 1 if failures else 0
