@@ -508,8 +508,8 @@ def test_adsr_graph_uses_attack_decay_sustain_and_release(app):
 @gui_test
 def test_adsr_slider_edit_refreshes_curve_and_wave_tiles_are_readable(app):
     app.load_path(FIX / "ALL INIT SAW.syx")
-    assert app._osc_tiles["osc1_wave"].width == 176
-    assert app._osc_tiles["osc2_wave"].width == 176
+    assert app._osc_tiles["osc1_wave"].width == 136
+    assert app._osc_tiles["osc2_wave"].width == 136
 
     before = app.vca_env_view._points()
     app.vars["vca_attack"].set(127)
@@ -697,8 +697,8 @@ def test_compact_controls_hide_numeric_readouts_but_keep_reset_buttons(app):
         assert reset.winfo_manager() != ""
         assert value_label.winfo_manager() == ""
 
-    assert app._osc_tiles["osc1_wave"].width == 176
-    assert app._osc_tiles["osc2_wave"].width == 176
+    assert app._osc_tiles["osc1_wave"].width == 136
+    assert app._osc_tiles["osc2_wave"].width == 136
     assert app.midibtn.cget("width") == 8
     refresh = next(child for child in app.midibtn.master.winfo_children()
                    if child.winfo_class() == "TButton" and child.cget("text") == "Refresh")

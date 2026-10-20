@@ -389,25 +389,23 @@ class Editor(tk.Tk):
         # Row 1 — oscillators and filter.
         _, osc1 = self._synth_box(
             self.controls, "OSC 1", 0, 0, columnspan=4, compact=True)
-        self._build_wave_tile_row(osc1, "osc1_wave", "OSC1", width=176, height=32)
-        self._parameter_row(osc1, specs["osc1_wave"], compact=True)
+        self._build_oscillator_wave_row(osc1, specs["osc1_wave"], "osc1_wave", "OSC1")
         for key in ("osc1_pwm_fm", "osc1_coarse", "osc1_fine"):
             self._parameter_row(osc1, specs[key], compact=True)
 
         _, osc2 = self._synth_box(
             self.controls, "OSC 2", 0, 4, columnspan=4, compact=True)
-        self._build_wave_tile_row(osc2, "osc2_wave", "OSC2", width=176, height=32)
-        self._parameter_row(osc2, specs["osc2_wave"], compact=True)
+        self._build_oscillator_wave_row(osc2, specs["osc2_wave"], "osc2_wave", "OSC2")
         for key in ("osc2_pwm", "osc2_coarse", "osc2_fine"):
             self._parameter_row(osc2, specs[key], compact=True)
 
         _, filt = self._synth_box(
             self.controls, "FILTER", 0, 8, columnspan=4, compact=True)
-        # Filter uses a 2:1:1 vertical split: graph, cutoff, resonance.
+        # Filter gives half the panel to the graph and a quarter to each control.
         filter_layout = tk.Frame(filt, bg="#131D2B")
         filter_layout.pack(fill="both", expand=True)
         filter_layout.grid_columnconfigure(0, weight=1)
-        for row, weight in enumerate((3, 1, 1)):
+        for row, weight in enumerate((2, 1, 1)):
             filter_layout.grid_rowconfigure(row, weight=weight, minsize=0)
         graph_slot = tk.Frame(filter_layout, bg="#131D2B")
         graph_slot.grid(row=0, column=0, sticky="nsew", pady=(0, 1))
@@ -570,6 +568,28 @@ class Editor(tk.Tk):
                 scale.configure(length=max(65, min(130, width // 24)))
             except tk.TclError:
                 pass
+
+    def _build_oscillator_wave_row(self, parent, spec, key: str, caption: str) -> None:
+        """Place the oscillator preview beside its waveform selector.
+
+        P1.56: this compact horizontal composition saves one control row of
+        vertical space in each oscillator panel without changing parameter
+        bindings, model state, or MIDI behavior.
+        """
+        row = tk.Frame(parent, bg="#131D2B")
+        row.pack(fill="x", pady=(0, 2))
+        width, height = 136, 32
+        canvas = tk.Canvas(
+            row, width=width, height=height, bg="#0D1521",
+            highlightthickness=1, highlightbackground="#2A3A4F")
+        canvas.pack(side="left", padx=(0, 2))
+        tile = WaveTile(canvas, self._update_wave_phase, width=width, height=height)
+        canvas.create_text(4, height - 4, text=caption, anchor="w", fill="#8CA2BA",
+                           font=("TkDefaultFont", 7, "bold"))
+        if not hasattr(self, "_osc_tiles"):
+            self._osc_tiles: dict[str, WaveTile] = {}
+        self._osc_tiles[key] = tile
+        self._parameter_row(row, spec, compact=True)
 
     def _build_wave_tile_row(self, parent, key: str, caption: str, *,
                              width: int | None = None, height: int | None = None) -> None:
