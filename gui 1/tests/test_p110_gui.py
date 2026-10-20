@@ -564,9 +564,8 @@ def test_synth_workspace_matches_reference_layout_without_scrollbar(app):
 @gui_test
 def test_window_keeps_900px_width_but_allows_compact_height(app):
     """900x700 is the baseline; reduced heights must be reachable for review."""
+    assert app.geometry().split("+")[0] == "900x700"
     assert app.minsize() == (900, 500)
-    assert app.winfo_width() >= 900
-    assert app.winfo_height() >= 500
 
 
 @gui_test
