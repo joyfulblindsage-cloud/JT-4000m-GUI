@@ -562,6 +562,14 @@ def test_synth_workspace_matches_reference_layout_without_scrollbar(app):
 
 
 @gui_test
+def test_window_keeps_900px_width_but_allows_compact_height(app):
+    """900x700 is the baseline; reduced heights must be reachable for review."""
+    assert app.minsize() == (900, 500)
+    assert app.winfo_width() >= 900
+    assert app.winfo_height() >= 500
+
+
+@gui_test
 def test_all_three_synth_rows_share_equal_adaptive_height(app):
     """All three grid rows use one uniform sizing group at every height."""
     from types import SimpleNamespace
