@@ -697,8 +697,8 @@ def test_compact_controls_hide_numeric_readouts_but_keep_reset_buttons(app):
         assert reset.winfo_manager() != ""
         assert value_label.winfo_manager() == ""
 
-    assert app._osc_tiles["osc1_wave"].width == 176
-    assert app._osc_tiles["osc2_wave"].width == 176
+    assert app._osc_tiles["osc1_wave"].width == 136
+    assert app._osc_tiles["osc2_wave"].width == 136
     assert app.midibtn.cget("width") == 8
     refresh = next(child for child in app.midibtn.master.winfo_children()
                    if child.winfo_class() == "TButton" and child.cget("text") == "Refresh")
