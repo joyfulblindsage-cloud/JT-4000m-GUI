@@ -1,0 +1,52 @@
+name: GUI visual review
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "gui 1/**"
+      - ".github/workflows/gui-visual-review.yml"
+  push:
+    branches: [main]
+    paths:
+      - "gui 1/**"
+      - ".github/workflows/gui-visual-review.yml"
+  workflow_dispatch:
+
+jobs:
+  visual-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: "gui 1/pyproject.toml"
+      - name: Install virtual display and screenshot tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb python3-tk tk-dev
+      - name: Install app and visual test dependencies
+        working-directory: "gui 1"
+        run: |
+          python -m pip install -e ".[build]"
+          python -m pip install Pillow
+      - name: Run geometry and screenshot capture
+        working-directory: "gui 1"
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          mkdir -p artifacts/ui-visual-review
+          xvfb-run -a -s "-screen 0 1400x900x24" python tools/capture_ui_review.py --output artifacts/ui-visual-review
+      - name: Upload UI screenshots and machine-readable report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: JT4000M-UI-Visual-Review
+          path: "gui 1/artifacts/ui-visual-review/"
+          if-no-files-found: warn
+          retention-days: 14
