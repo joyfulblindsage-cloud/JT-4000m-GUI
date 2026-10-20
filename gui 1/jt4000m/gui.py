@@ -401,11 +401,11 @@ class Editor(tk.Tk):
 
         _, filt = self._synth_box(
             self.controls, "FILTER", 0, 8, columnspan=4, compact=True)
-        # Filter uses a 2:1:1 vertical split: graph, cutoff, resonance.
+        # Filter gives half the panel to the graph and a quarter to each control.
         filter_layout = tk.Frame(filt, bg="#131D2B")
         filter_layout.pack(fill="both", expand=True)
         filter_layout.grid_columnconfigure(0, weight=1)
-        for row, weight in enumerate((3, 1, 1)):
+        for row, weight in enumerate((2, 1, 1)):
             filter_layout.grid_rowconfigure(row, weight=weight, minsize=0)
         graph_slot = tk.Frame(filter_layout, bg="#131D2B")
         graph_slot.grid(row=0, column=0, sticky="nsew", pady=(0, 1))
