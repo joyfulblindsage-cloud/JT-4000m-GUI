@@ -562,9 +562,10 @@ def test_synth_workspace_matches_reference_layout_without_scrollbar(app):
 
 
 @gui_test
-def test_window_keeps_900px_width_but_allows_compact_height(app):
-    """900x700 is the baseline; reduced heights must be reachable for review."""
-    assert app.geometry().split("+")[0] == "900x700"
+def test_window_allows_compact_height(app):
+    """The withdrawn test window must allow reduced-height visual review."""
+    # Tk reports 1x1 for withdrawn windows, so inspect the configured minimum
+    # rather than the realized geometry. Editor.__init__ requests 900x700.
     assert app.minsize() == (900, 500)
 
 
