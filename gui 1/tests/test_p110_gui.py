@@ -562,6 +562,14 @@ def test_synth_workspace_matches_reference_layout_without_scrollbar(app):
 
 
 @gui_test
+def test_window_allows_compact_height(app):
+    """The withdrawn test window must allow reduced-height visual review."""
+    # Tk reports 1x1 for withdrawn windows, so inspect the configured minimum
+    # rather than the realized geometry. Editor.__init__ requests 900x700.
+    assert app.minsize() == (900, 500)
+
+
+@gui_test
 def test_all_three_synth_rows_share_equal_adaptive_height(app):
     """All three grid rows use one uniform sizing group at every height."""
     from types import SimpleNamespace
