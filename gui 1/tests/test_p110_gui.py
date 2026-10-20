@@ -508,8 +508,8 @@ def test_adsr_graph_uses_attack_decay_sustain_and_release(app):
 @gui_test
 def test_adsr_slider_edit_refreshes_curve_and_wave_tiles_are_readable(app):
     app.load_path(FIX / "ALL INIT SAW.syx")
-    assert app._osc_tiles["osc1_wave"].width == 176
-    assert app._osc_tiles["osc2_wave"].width == 176
+    assert app._osc_tiles["osc1_wave"].width == 136
+    assert app._osc_tiles["osc2_wave"].width == 136
 
     before = app.vca_env_view._points()
     app.vars["vca_attack"].set(127)
