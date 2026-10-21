@@ -531,8 +531,8 @@ def test_synth_workspace_matches_reference_layout_without_scrollbar(app):
         if child.winfo_manager() == "grid"
     }
     assert {(0, 0, 4), (0, 4, 4), (0, 8, 4),
-            (1, 0, 5), (1, 5, 5), (1, 10, 2),
-            (2, 0, 3), (2, 3, 3), (2, 6, 3), (2, 9, 3)} <= cells
+            (1, 0, 4), (1, 4, 4), (1, 8, 4),
+            (2, 0, 4), (2, 4, 4), (2, 8, 4)} <= cells
     assert app.current_tab.get() == "SYNTH"
     assert [app.controls.grid_rowconfigure(i)["weight"] for i in range(3)] == [1, 1, 1]
     assert [app.controls.grid_rowconfigure(i)["uniform"] for i in range(3)] == [
@@ -590,14 +590,17 @@ def test_all_three_synth_rows_share_equal_adaptive_height(app):
 
 
 @gui_test
-def test_arpeggiator_panel_documents_native_settings_without_fake_controls(app):
-    """ARP settings are visible, but unmapped device controls must not be faked."""
-    assert hasattr(app, "arp_panel")
-    labels = [child.cget("text") for child in app.arp_panel.winfo_children()
-              if isinstance(child, tk.Label)]
-    assert any("Native engine" in label for label in labels)
-    assert any("MIDI Start/Stop" in label for label in labels)
-    assert { "lfo2_wave", "lfo2_rate", "lfo2_amount" } <= set(app.vars)
+def test_arpeggiator_is_not_part_of_the_synth_workspace(app):
+    """The native ARP settings are deliberately omitted from the editor GUI."""
+    assert not hasattr(app, "arp_panel")
+    cells = {
+        (int(child.grid_info()["row"]), int(child.grid_info()["column"]),
+         int(child.grid_info().get("columnspan", 1)))
+        for child in app.controls.winfo_children()
+        if child.winfo_manager() == "grid"
+    }
+    assert (1, 8, 4) in cells  # MIX / RING occupies the former ARP area.
+    assert {"lfo2_wave", "lfo2_rate", "lfo2_amount"} <= set(app.vars)
     assert "lfo2_destination" not in app.vars
 
 
