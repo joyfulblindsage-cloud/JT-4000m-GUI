@@ -31,6 +31,10 @@ def test_lfo_controls_and_reset_affordances_fit_compact_workspace(height):
         assert expected <= set(app._lfo_controls)
         assert expected <= set(app._lfo_reset_buttons)
 
+        assert all(int(scale.cget("length")) >= 58 for scale in app._lfo_scales)
+        assert all(int(scale.cget("length")) >= 58
+                   for scale in app._midi_only_scales.values())
+
         for key in sorted(expected):
             panel_key = "lfo1_wave" if key.startswith("lfo1") else "lfo2_wave"
             panel = app._lfo_panel_frames[panel_key]
