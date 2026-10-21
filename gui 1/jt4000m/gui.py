@@ -471,10 +471,9 @@ class Editor(tk.Tk):
 
         _, mix = self._synth_box(self.controls, "MIX / RING", 2, 6, columnspan=3)
         self._p160_panel_frames = {"mix_ring": mix}
-        # At the 500 px minimum height, a full-size balance knob consumes
-        # the space needed for Ring Mod controls. Use three compact rows so
-        # every mapped control and reset remains reachable without clipping.
-        self._parameter_row(mix, specs["osc_balance"], compact=True)
+        # Preserve the established rotary control and model/MIDI gesture path,
+        # but reduce its footprint so the two Ring Mod rows fit at 500 px.
+        self._knob_row(mix, specs["osc_balance"], compact=True)
         self._parameter_row(mix, specs["ring_mod_toggle"], compact=True)
         self._parameter_row(mix, specs["ring_mod_amount"], compact=True)
 
@@ -1110,7 +1109,8 @@ class Editor(tk.Tk):
         reset.pack(side="right", padx=(2, 0))
         self.reset_buttons[spec.key] = (reset, val_lbl)
 
-    def _knob_row(self, parent, spec, *, row: int = 0, col: int = 0) -> None:
+    def _knob_row(self, parent, spec, *, row: int = 0, col: int = 0,
+                  compact: bool = False) -> None:
         """P1.35 — one parameter line driven by the custom rotary Knob.
 
         Presentation-only alternative to ``_parameter_row`` (same contract as
@@ -1121,12 +1121,15 @@ class Editor(tk.Tk):
         single-undo-snapshot-per-gesture rule come for free.  No second
         parameter system is introduced; range/limits stay registry-driven.
         """
-        line = tk.Frame(parent, bg="#131D2B", padx=2, pady=2)
+        line = tk.Frame(parent, bg="#131D2B", padx=1 if compact else 2,
+                        pady=0 if compact else 2)
         # This layout stacks the MIX / RING controls with pack; use the same
         # manager for the knob row (mix's parent) to avoid pack/grid conflicts.
-        line.pack(fill="x", pady=3)
+        line.pack(fill="x", pady=0 if compact else 3)
         label = tk.Label(line, text=_row_label(spec, self.developer_var.get()),
-                         bg="#131D2B", fg="#A8BDD3", width=14, anchor="w")
+                         bg="#131D2B", fg="#A8BDD3",
+                         width=8 if compact else 14, anchor="w",
+                         font=("TkDefaultFont", 8 if compact else 9))
         label.pack(side="left")
         self.section_labels[spec.key] = label
 
@@ -1136,7 +1139,8 @@ class Editor(tk.Tk):
         self.value_vars[spec.key] = value
 
         knob = Knob(line, label="", minimum=spec.minimum,
-                    maximum=spec.maximum, default_raw=spec.default, diameter=54,
+                    maximum=spec.maximum, default_raw=spec.default,
+                    diameter=38 if compact else 54,
                     show_entry=False,
                     on_gesture_start=lambda key=spec.key: self._begin_parameter_drag(key),
                     on_gesture_end=lambda key=spec.key: self._end_parameter_drag(key),
