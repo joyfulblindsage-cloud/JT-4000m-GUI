@@ -446,7 +446,7 @@ class Editor(tk.Tk):
         vcf_adsr.grid_columnconfigure(4, weight=1, uniform="adsr")
         self._vcf_amount_column = self._parameter_knob_column(
             vcf_adsr, specs["filter_env_amount"], col=0, row=1,
-            diameter=34, label_text="Amt")
+            diameter=30, label_text="Amt")
 
         _, mix = self._synth_box(
             self.controls, "MIX / RING", 1, 8, columnspan=4)
@@ -669,7 +669,7 @@ class Editor(tk.Tk):
             if knob is not None:
                 try:
                     if key == "filter_env_amount":
-                        knob.configure(height=30 if compact_height else 38)
+                        knob.configure(height=30)
                     else:
                         knob.configure(height=38)
                 except tk.TclError:
