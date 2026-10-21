@@ -84,8 +84,9 @@ def test_gui_shows_reason_when_no_midi_backend_is_available(monkeypatch):
     app = Editor()
     try:
         app.refresh_midi_ports()
-        assert "MIDI unavailable" in app.status_var.get()
-        assert "install python-rtmidi" in app.status_var.get()
+        assert app.status_var.get() == "MIDI unavailable · install python-rtmidi"
+        assert len(app.status_var.get()) <= 48
+        assert "install python-rtmidi" in app._midi_last_error
         assert app.status_lbl.cget("text") == "Status: Error"
     finally:
         app.destroy()
