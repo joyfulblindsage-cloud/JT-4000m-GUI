@@ -527,6 +527,11 @@ class Editor(tk.Tk):
         self._lfo_controls[wave_spec.key] = wave_combo
         wave_reset = self.reset_buttons[wave_spec.key][0]
         wave_reset.configure(width=1, font=("TkDefaultFont", 7), padx=0, pady=0)
+        # Pack the reset first so a growing combobox cannot consume its space.
+        wave_reset.pack_forget()
+        wave_combo.pack_forget()
+        wave_reset.pack(side="right", padx=0)
+        wave_combo.pack(side="left", fill="x", expand=True)
         self._lfo_reset_buttons[wave_spec.key] = wave_reset
         self._lfo_panel_frames[wave_spec.key] = parent
 
@@ -552,6 +557,18 @@ class Editor(tk.Tk):
             self._lfo_controls[spec.key] = control
             reset_button = self.reset_buttons[spec.key][0]
             reset_button.configure(width=1, font=("TkDefaultFont", 7), padx=0, pady=0)
+            if spec.kind == "enum":
+                control.configure(width=7)
+            # The default parameter-row packing lets expanding controls claim
+            # the whole narrow cell before the reset is allocated. Repack the
+            # control after the reset so both stay mapped in compact windows.
+            reset_button.pack_forget()
+            control.pack_forget()
+            reset_button.pack(side="right", padx=0)
+            if spec.kind == "enum":
+                control.pack(side="left", fill="x", expand=True)
+            else:
+                control.pack(side="left", fill="x", expand=True, padx=2)
             self._lfo_reset_buttons[spec.key] = reset_button
 
         if note:
