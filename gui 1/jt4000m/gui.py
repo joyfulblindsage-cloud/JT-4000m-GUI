@@ -359,33 +359,28 @@ class Editor(tk.Tk):
         return box, inner
 
     def _build_synth_tab(self, frame) -> None:
-        """Build the reference layout: 3 panels / 2 envelopes / 4 modules.
+        """Build a balanced three-row synth workspace.
 
         Row 1: OSC 1, OSC 2, FILTER.
-        Row 2: VCA Envelope and VCF Envelope, each with graph + ADSR.
-        Row 3: LFO 1, LFO 2, MIX / RING, MOD / PORTAMENTO.
+        Row 2: VCA Envelope, VCF Envelope, MIX / RING.
+        Row 3: LFO 1, LFO 2, MOD / PORTAMENTO.
         """
         self.controls = tk.Frame(frame, bg="#0B1018")
         self.controls.pack(fill="both", expand=True, padx=2, pady=2)
         self.controls.bind("<Configure>", self._on_synth_resize)
         for col in range(12):
             self.controls.grid_columnconfigure(col, weight=1, uniform="synth-col")
-        # Give the bottom row a little extra vertical budget: it contains
-        # seven compact LFO/MIX/PORTAMENTO controls and must not rely on child
-        # widgets overflowing their panel. Keep the upper rows flexible too.
-        # Tk's grid row weights are integers; 5:5:6 gives the bottom row 20% more share.
-        row_weights = (5, 5, 6)
+        for row in range(3):
+            self.controls.grid_rowconfigure(row, weight=1, minsize=0, uniform="synth-row")
         self._synth_row_height_px = 1
         self._synth_row_remainder_px = 0
-        for row, weight in enumerate(row_weights):
-            self.controls.grid_rowconfigure(row, weight=weight, minsize=0)
 
         self.section_labels: dict[str, tk.Label] = {}
         self.reset_buttons: dict[str, tuple[tk.Button, tk.Label]] = {}
         specs = {spec.key: spec for spec in PARAMETERS}
         self.wave_phase_var = tk.StringVar(value="")
 
-        # Row 1 — oscillators and filter.
+        # Row 1 — equally sized oscillator and filter panels.
         _, osc1 = self._synth_box(
             self.controls, "OSC 1", 0, 0, columnspan=4, compact=True)
         self._build_oscillator_wave_row(osc1, specs["osc1_wave"], "osc1_wave", "OSC1")
@@ -400,30 +395,26 @@ class Editor(tk.Tk):
 
         _, filt = self._synth_box(
             self.controls, "FILTER", 0, 8, columnspan=4, compact=True)
-        # Filter gives half the panel to the graph and a quarter to each control.
+        # Keep the response graph compact so Cutoff and Resonance have room.
         filter_layout = tk.Frame(filt, bg="#131D2B")
         filter_layout.pack(fill="both", expand=True)
-        filter_layout.grid_columnconfigure(0, weight=1)
-        for row, weight in enumerate((2, 1, 1)):
-            filter_layout.grid_rowconfigure(row, weight=weight, minsize=0)
-        graph_slot = tk.Frame(filter_layout, bg="#131D2B")
-        graph_slot.grid(row=0, column=0, sticky="nsew", pady=(0, 1))
-        self.filter_view = FilterView(graph_slot, width=300, height=72)
+        graph_slot = tk.Frame(filter_layout, bg="#131D2B", height=34)
+        graph_slot.pack(fill="x", expand=False, pady=(0, 1))
+        graph_slot.pack_propagate(False)
+        self.filter_view = FilterView(graph_slot, width=300, height=34)
         self.filter_view.pack(fill="both", expand=True, padx=1)
-        for row, key in enumerate(("filter_cutoff", "filter_resonance"), start=1):
-            control_slot = tk.Frame(filter_layout, bg="#131D2B")
-            control_slot.grid(row=row, column=0, sticky="nsew", pady=0)
-            self._parameter_row(control_slot, specs[key], compact=True)
+        for key in ("filter_cutoff", "filter_resonance"):
+            self._parameter_row(filter_layout, specs[key], compact=True)
 
-        # Row 2 widths are VCA : VCF : ARP = 2:2:1 (5:5:2 grid columns).
-        # Envelope graphs and ADSR controls each receive half the module height.
-        _, vca = self._synth_box(self.controls, "VCA ENVELOPE", 1, 0, columnspan=5)
+        # Row 2 — two related envelopes and the smaller MIX / RING module.
+        _, vca = self._synth_box(
+            self.controls, "VCA ENVELOPE", 1, 0, columnspan=4)
         vca_graph_slot = tk.Frame(vca, bg="#131D2B", height=54)
         vca_graph_slot.pack(fill="x", expand=False, pady=(0, 1))
         vca_graph_slot.pack_propagate(False)
         self._envelope_graph_slots = {"vca": vca_graph_slot}
         self.vca_env_view = EnvelopeView(
-            vca_graph_slot, title="", width=360, height=52,
+            vca_graph_slot, title="", width=300, height=52,
             on_segment=lambda k, n: self._env_drag("vca", k, n))
         self.vca_env_view.pack(fill="both", expand=True, anchor="center")
         self._bind_env_release(self.vca_env_view)
@@ -433,18 +424,18 @@ class Editor(tk.Tk):
         for col, key in enumerate(("vca_attack", "vca_decay", "vca_sustain", "vca_release")):
             self._parameter_knob_column(vca_adsr, specs[key], col=col)
 
-        _, vcf = self._synth_box(self.controls, "VCF ENVELOPE", 1, 5, columnspan=5)
+        _, vcf = self._synth_box(
+            self.controls, "VCF ENVELOPE", 1, 4, columnspan=4)
         vcf_graph_slot = tk.Frame(vcf, bg="#131D2B", height=54)
         vcf_graph_slot.pack(fill="x", expand=False, pady=(0, 1))
         vcf_graph_slot.pack_propagate(False)
         self._envelope_graph_slots["vcf"] = vcf_graph_slot
         self.vcf_env_view = EnvelopeView(
-            vcf_graph_slot, title="", width=360, height=52,
+            vcf_graph_slot, title="", width=300, height=52,
             on_segment=lambda k, n: self._env_drag("vcf", k, n))
         self.vcf_env_view.pack(fill="both", expand=True, anchor="center")
         self._bind_env_release(self.vcf_env_view)
-        # Keep all five filter-envelope controls in one compact control band;
-        # a separate amount row needlessly increases the panel's minimum height.
+        # Keep the four ADSR stages aligned and the amount control adjacent.
         vcf_adsr = tk.Frame(vcf, bg="#131D2B")
         vcf_adsr.pack(fill="both", expand=True)
         self._envelope_adsr_frames["vcf"] = vcf_adsr
@@ -452,34 +443,12 @@ class Editor(tk.Tk):
             self._parameter_knob_column(vcf_adsr, specs[key], col=col)
         self._parameter_knob_column(vcf_adsr, specs["filter_env_amount"], col=4)
 
-        _, arp = self._synth_box(self.controls, "ARPEGGIATOR", 1, 10, columnspan=2)
-        self._build_arpeggiator_panel(arp)
-
-        # Row 3 — four compact modules.
-        # LFOs use a compact two-column control grid so all editable controls
-        # remain available when the SYNTH workspace is only 500 px tall.
-        _, lfo1 = self._synth_box(self.controls, "LFO 1", 2, 0, columnspan=3)
-        self._build_lfo_panel(
-            lfo1, specs["lfo1_wave"], "LFO1",
-            (specs["lfo1_destination"], specs["lfo1_rate"], specs["lfo1_amount"]))
-
-        _, lfo2 = self._synth_box(self.controls, "LFO 2", 2, 3, columnspan=3)
-        self._build_lfo_panel(
-            lfo2, specs["lfo2_wave"], "LFO2",
-            (specs["lfo2_rate"], specs["lfo2_amount"]),
-            note="Destination not documented (CC 56 = LFO1)")
-
-        _, mix = self._synth_box(self.controls, "MIX / RING", 2, 6, columnspan=3)
+        _, mix = self._synth_box(
+            self.controls, "MIX / RING", 1, 8, columnspan=4)
         self._p160_panel_frames = {"mix_ring": mix}
-        # Preserve the established rotary control and model/MIDI gesture path,
-        # but reduce its footprint so the two Ring Mod rows fit at 500 px.
         self._knob_row(mix, specs["osc_balance"], compact=True)
-        # Keep grid-managed siblings inside their own child frame: the
-        # surrounding MIX / RING panel uses pack() for its other rows.
         ring_controls = tk.Frame(mix, bg="#131D2B")
         ring_controls.pack(fill="x")
-        # The two Ring Mod controls share a row so both remain visible at
-        # the minimum supported height; normal parameter wiring is unchanged.
         self._parameter_row(ring_controls, specs["ring_mod_toggle"], compact=True,
                             grid=True, row=0, col=0)
         self._parameter_row(ring_controls, specs["ring_mod_amount"], compact=True,
@@ -487,14 +456,25 @@ class Editor(tk.Tk):
         ring_controls.grid_columnconfigure(0, weight=1, uniform="ring-controls")
         ring_controls.grid_columnconfigure(1, weight=1, uniform="ring-controls")
 
-        _, mod = self._synth_box(self.controls, "MOD / PORTAMENTO", 2, 9, columnspan=3)
+        # Row 3 — keep the LFOs and modulation controls equally sized.
+        _, lfo1 = self._synth_box(
+            self.controls, "LFO 1", 2, 0, columnspan=4)
+        self._build_lfo_panel(
+            lfo1, specs["lfo1_wave"], "LFO1",
+            (specs["lfo1_destination"], specs["lfo1_rate"], specs["lfo1_amount"]))
+
+        _, lfo2 = self._synth_box(
+            self.controls, "LFO 2", 2, 4, columnspan=4)
+        self._build_lfo_panel(
+            lfo2, specs["lfo2_wave"], "LFO2",
+            (specs["lfo2_rate"], specs["lfo2_amount"]),
+            note="Destination not documented (CC 56 = LFO1)")
+
+        _, mod = self._synth_box(
+            self.controls, "MOD / PORTAMENTO", 2, 8, columnspan=4)
         self._p160_panel_frames["mod_portamento"] = mod
-        # Keep the grid-managed live CC row in a child frame; Portamento
-        # Amount and Mode continue to be packed as full-width rows below.
         live_controls = tk.Frame(mod, bg="#131D2B")
         live_controls.pack(fill="x")
-        # Live-only CC controls share a compact row; saved-parameter controls
-        # retain their own full-width rows below.
         self._midi_only_parameter_row(live_controls, specs["modulation"], compact=True,
                                       grid=True, row=0, col=0)
         self._midi_only_parameter_row(live_controls, specs["portamento_time"], compact=True,
@@ -506,9 +486,8 @@ class Editor(tk.Tk):
         portamento_mode_combo = getattr(self, "combo_portamento_mode", None)
         if portamento_mode_combo is not None:
             portamento_mode_combo.configure(state="disabled")
-        # The disabled control's label carries the verification caveat;
-        # avoid a duplicate footer that would push it below the compact panel.
-        self.section_labels["portamento_mode"].configure(text="Portamento Mode (ON unverified)")
+        self.section_labels["portamento_mode"].configure(
+            text="Portamento Mode (ON unverified)")
 
     def _build_lfo_panel(self, parent, wave_spec, caption: str, control_specs,
                          *, note: str | None = None) -> None:
@@ -635,8 +614,8 @@ class Editor(tk.Tk):
         # Real Tk Configure events include height; older tests/callers may
         # provide width-only event doubles. Fall back to the live workspace.
         height = max(1, getattr(event, "height", self.controls.winfo_height()))
-        # Track the equal share for diagnostics/tests. Tk's uniform row group
-        # performs the actual allocation and keeps all three rows the same size.
+        # The grid's uniform="synth-row" group allocates the same height to
+        # all three rows. Keep diagnostics in sync with that invariant.
         self._synth_row_height_px = max(1, height // 3)
         self._synth_row_remainder_px = height - 3 * self._synth_row_height_px
 
