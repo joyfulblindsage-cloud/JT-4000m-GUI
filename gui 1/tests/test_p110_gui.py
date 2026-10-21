@@ -672,6 +672,19 @@ def test_redundant_parameter_labels_are_hidden_for_knobs_and_combos(app):
 
 
 @gui_test
+def test_vcf_filter_amount_uses_second_row_only_when_workspace_has_height(app):
+    app.geometry("900x700+0+0")
+    app.update()
+    assert int(app._vcf_amount_column.grid_info()["row"]) == 1
+    assert int(app._vcf_amount_column.grid_info()["column"]) == 0
+
+    app.geometry("900x500+0+0")
+    app.update()
+    assert int(app._vcf_amount_column.grid_info()["row"]) == 0
+    assert int(app._vcf_amount_column.grid_info()["column"]) == 4
+
+
+@gui_test
 def test_adsr_controls_use_compact_knobs_with_requested_arc(app):
     from jt4000m.widgets import Knob
 
