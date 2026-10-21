@@ -370,15 +370,14 @@ class Editor(tk.Tk):
         self.controls.bind("<Configure>", self._on_synth_resize)
         for col in range(12):
             self.controls.grid_columnconfigure(col, weight=1, uniform="synth-col")
-        # Keep the established equal-row grid contract. Uniform sizing is
-        # intentional: it preserves the visual rhythm of the SYNTH workspace.
-        # Compact-height behavior is handled inside the envelope panels instead
-        # of reallocating the outer grid and destabilizing other modules.
+        # Give the bottom row a little extra vertical budget: it contains
+        # seven compact LFO/MIX/PORTAMENTO controls and must not rely on child
+        # widgets overflowing their panel. Keep the upper rows flexible too.
+        row_weights = (1.0, 1.0, 1.22)
         self._synth_row_height_px = 1
         self._synth_row_remainder_px = 0
-        for row in range(3):
-            self.controls.grid_rowconfigure(
-                row, weight=1, minsize=0, uniform="synth-row")
+        for row, weight in enumerate(row_weights):
+            self.controls.grid_rowconfigure(row, weight=weight, minsize=0)
 
         self.section_labels: dict[str, tk.Label] = {}
         self.reset_buttons: dict[str, tuple[tk.Button, tk.Label]] = {}
@@ -573,16 +572,9 @@ class Editor(tk.Tk):
             reset_button.configure(width=1, font=("TkDefaultFont", 7), padx=0, pady=0)
             if spec.kind == "enum":
                 control.configure(width=7)
-            # The default parameter-row packing lets expanding controls claim
-            # the whole narrow cell before the reset is allocated. Repack the
-            # control after the reset so both stay mapped in compact windows.
-            reset_button.pack_forget()
-            control.pack_forget()
-            reset_button.pack(side="right", padx=0)
-            if spec.kind == "enum":
-                control.pack(side="left", fill="x", expand=True)
-            else:
-                control.pack(side="left", fill="x", expand=True, padx=2)
+            # Keep the parameter row's original geometry-manager ownership.
+            # Repacking children after construction caused Scale widgets to
+            # become unmapped in Tk's compact two-column layout.
             self._lfo_reset_buttons[spec.key] = reset_button
 
         if note:
