@@ -43,10 +43,16 @@ def test_mix_ring_and_mod_portamento_controls_fit_workspace(height):
         }
         for key in sorted(expected):
             panel = app._p160_panel_frames[panel_for[key]]
-            widgets = [
-                ("label", app.section_labels[key]),
-                ("reset", app.reset_buttons[key][0]),
-            ]
+            # Enum rows deliberately omit the duplicate left label; the
+            # combobox is the visible label/control. Check that widget instead.
+            combo = getattr(app, f"combo_{key}", None)
+            label = app.section_labels[key]
+            widgets = []
+            if combo is not None:
+                widgets.append(("control", combo))
+            elif label.winfo_manager():
+                widgets.append(("label", label))
+            widgets.append(("reset", app.reset_buttons[key][0]))
             if key in app._midi_only_scales:
                 widgets.append(("slider", app._midi_only_scales[key]))
             if key in app._knobs:
