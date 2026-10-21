@@ -449,12 +449,10 @@ class Editor(tk.Tk):
         self._knob_row(mix, specs["osc_balance"], compact=True)
         ring_controls = tk.Frame(mix, bg="#131D2B")
         ring_controls.pack(fill="x")
-        self._parameter_row(ring_controls, specs["ring_mod_toggle"], compact=True,
-                            grid=True, row=0, col=0)
-        self._parameter_row(ring_controls, specs["ring_mod_amount"], compact=True,
-                            grid=True, row=0, col=1)
-        ring_controls.grid_columnconfigure(0, weight=1, uniform="ring-controls")
-        ring_controls.grid_columnconfigure(1, weight=1, uniform="ring-controls")
+        # These controls need the full panel width: putting both in narrow grid
+        # cells caused their reset affordances to be unmapped by Tk's packer.
+        self._parameter_row(ring_controls, specs["ring_mod_toggle"], compact=True)
+        self._parameter_row(ring_controls, specs["ring_mod_amount"], compact=True)
 
         # Row 3 — keep the LFOs and modulation controls equally sized.
         _, lfo1 = self._synth_box(
