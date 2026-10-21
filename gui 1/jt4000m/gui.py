@@ -657,7 +657,7 @@ class Editor(tk.Tk):
         # Account for the panel's header and inner padding: at 900x700 the
         # available inner height is below the outer row height but still enough
         # for a short graph and the two VCF knob rows.
-        compact_height = envelope_panel_height < 150
+        compact_height = envelope_panel_height < 125
 
         # At short module heights, prioritize editable ADSR controls over the
         # visualization. Restore the graph only when its panel has room again.
