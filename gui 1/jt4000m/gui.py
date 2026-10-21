@@ -744,8 +744,6 @@ class Editor(tk.Tk):
                            highlightthickness=1, highlightbackground="#2A3A4F")
         canvas.pack(side="left")
         tile = WaveTile(canvas, self._update_wave_phase, width=width, height=height)
-        canvas.create_text(4, height - 4, text=caption, anchor="w", fill="#8CA2BA",
-                           font=("TkDefaultFont", 7, "bold"))
         if not hasattr(self, "_osc_tiles"):
             self._osc_tiles: dict[str, WaveTile] = {}
         self._osc_tiles[key] = tile
