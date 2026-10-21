@@ -672,7 +672,7 @@ class Editor(tk.Tk):
             label.configure(
                 text=self._oscillator_short_labels[key] if compact_osc
                 else _row_label(spec, self.developer_var.get()),
-                width=5 if compact_osc else 8)
+                width=5 if compact_osc else 11)
             self._oscillator_control_scales[key].configure(
                 width=8 if compact_osc else 12,
                 sliderlength=12 if compact_osc else 16)
