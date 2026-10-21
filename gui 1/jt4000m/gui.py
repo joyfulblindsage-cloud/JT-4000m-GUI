@@ -387,13 +387,13 @@ class Editor(tk.Tk):
             self.controls, "OSC 1", 0, 0, columnspan=4, compact=False)
         self._build_oscillator_wave_row(osc1, specs["osc1_wave"], "osc1_wave", "OSC1")
         for key in ("osc1_pwm_fm", "osc1_coarse", "osc1_fine"):
-            self._parameter_row(osc1, specs[key], compact=True, row_pady=2)
+            self._parameter_row(osc1, specs[key], compact=True, row_pady=4)
 
         _, osc2 = self._synth_box(
             self.controls, "OSC 2", 0, 4, columnspan=4, compact=False)
         self._build_oscillator_wave_row(osc2, specs["osc2_wave"], "osc2_wave", "OSC2")
         for key in ("osc2_pwm", "osc2_coarse", "osc2_fine"):
-            self._parameter_row(osc2, specs[key], compact=True, row_pady=2)
+            self._parameter_row(osc2, specs[key], compact=True, row_pady=4)
 
         _, filt = self._synth_box(
             self.controls, "FILTER", 0, 8, columnspan=4, compact=False)
@@ -749,7 +749,7 @@ class Editor(tk.Tk):
         bindings, model state, or MIDI behavior.
         """
         row = tk.Frame(parent, bg="#131D2B")
-        row.pack(fill="x", pady=(0, 2))
+        row.pack(fill="x", pady=(0, 4))
         width, height = 136, 32
         canvas = tk.Canvas(
             row, width=width, height=height, bg="#0D1521",
