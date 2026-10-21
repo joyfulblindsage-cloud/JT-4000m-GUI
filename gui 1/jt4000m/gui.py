@@ -370,10 +370,10 @@ class Editor(tk.Tk):
         self.controls.bind("<Configure>", self._on_synth_resize)
         for col in range(12):
             self.controls.grid_columnconfigure(col, weight=1, uniform="synth-col")
-        # Row 2 carries both envelopes and needs a little extra vertical
-        # budget; rows 1 and 3 remain equal and the workspace stays balanced.
-        for row, weight in enumerate((5, 6, 5)):
-            self.controls.grid_rowconfigure(row, weight=weight, minsize=0, uniform="synth-row")
+        # Equal row weights keep the three-row workspace predictable;
+        # each panel adapts internally to its allocated height.
+        for row in range(3):
+            self.controls.grid_rowconfigure(row, weight=1, minsize=0, uniform="synth-row")
         self._synth_row_height_px = 1
         self._synth_row_remainder_px = 0
 
@@ -454,7 +454,9 @@ class Editor(tk.Tk):
         # Keep the two Ring Mod controls side by side, with narrower labels so
         # their reset affordances remain inside each compact cell.
         self._parameter_row(ring_controls, specs["ring_mod_toggle"], compact=True,
-                            grid=True, row=0, col=0, label_width=5)
+                            grid=True, row=0, col=0, label_width=4)
+        self.section_labels["ring_mod_toggle"].configure(text="Ring")
+        self.reset_buttons["ring_mod_toggle"][0].configure(width=1, padx=0)
         self._parameter_row(ring_controls, specs["ring_mod_amount"], compact=True,
                             grid=True, row=0, col=1, label_width=5)
         self._ring_mod_amount_scale = self._parameter_scales[-1]
@@ -620,11 +622,9 @@ class Editor(tk.Tk):
         # Real Tk Configure events include height; older tests/callers may
         # provide width-only event doubles. Fall back to the live workspace.
         height = max(1, getattr(event, "height", self.controls.winfo_height()))
-        # Grid row weights are 5:6:5: the envelope row gets 20% more share.
-        # Track the nominal allocation for diagnostics and layout tests.
-        row_unit = max(1, height // 16)
-        self._synth_row_height_px = row_unit * 5
-        self._synth_row_remainder_px = height - row_unit * 16
+        # The uniform row group gives all three panels the same nominal height.
+        self._synth_row_height_px = max(1, height // 3)
+        self._synth_row_remainder_px = height - 3 * self._synth_row_height_px
 
         # Decide compactness from the envelope module's own allocated height,
         # not the full controls workspace. The latter is taller than 300 px at
