@@ -452,12 +452,12 @@ class Editor(tk.Tk):
         _, mix = self._synth_box(
             self.controls, "MIX / RING", 1, 8, columnspan=4)
         self._p160_panel_frames = {"mix_ring": mix}
-        # One compact three-column control row keeps Balance and both Ring Mod
-        # controls visible even in the 900x500 workspace.
+        # Balance and the Ring Mod switch share the first row; the Amount
+        # slider spans the second row so it remains usable in the narrow panel.
         mix_controls = tk.Frame(mix, bg="#131D2B")
-        mix_controls.pack(fill="x")
+        mix_controls.pack(fill="x", expand=True)
         balance_slot = tk.Frame(mix_controls, bg="#131D2B")
-        balance_slot.grid(row=0, column=0, sticky="ew", padx=(0, 1))
+        balance_slot.grid(row=0, column=0, sticky="ew", padx=(0, 2))
         self._knob_row(balance_slot, specs["osc_balance"], compact=True)
         self.section_labels["osc_balance"].configure(text="Bal", width=4)
         self.reset_buttons["osc_balance"][0].configure(
@@ -469,14 +469,18 @@ class Editor(tk.Tk):
         self.reset_buttons["ring_mod_toggle"][0].configure(
             width=1, padx=0, pady=0, font=("TkDefaultFont", 7))
         self._parameter_row(mix_controls, specs["ring_mod_amount"], compact=True,
-                            grid=True, row=0, col=2, label_width=4)
+                            grid=True, row=1, col=0, label_width=4)
         self.section_labels["ring_mod_amount"].configure(text="Amt")
         self.reset_buttons["ring_mod_amount"][0].configure(
             width=1, padx=0, pady=0, font=("TkDefaultFont", 7))
         self._ring_mod_amount_scale = self._parameter_scales[-1]
-        self._ring_mod_amount_scale.configure(length=30)
-        for col in range(3):
-            mix_controls.grid_columnconfigure(col, weight=1, uniform="mix-controls")
+        self._ring_mod_amount_scale.configure(length=74)
+        mix_controls.grid_columnconfigure(0, weight=1, uniform="mix-controls")
+        mix_controls.grid_columnconfigure(1, weight=1, uniform="mix-controls")
+        mix_controls.grid_columnconfigure(2, weight=0, minsize=0)
+        mix_controls.grid_columnconfigure(0, weight=1, uniform="mix-controls")
+        mix_controls.grid_columnconfigure(1, weight=1, uniform="mix-controls")
+        mix_controls.grid_rowconfigure(1, weight=1)
 
         # Row 3 — keep the LFOs and modulation controls equally sized.
         _, lfo1 = self._synth_box(
@@ -700,11 +704,11 @@ class Editor(tk.Tk):
                     scale.configure(length=slider_length)
             except tk.TclError:
                 pass
-        # Ring Mod Amount lives in a narrow third of the MIX/RING panel.
+        # Ring Mod Amount spans the MIX/RING panel's second row.
         ring_scale = getattr(self, "_ring_mod_amount_scale", None)
         if ring_scale is not None:
             try:
-                ring_scale.configure(length=max(24, min(32, width // 32)))
+                ring_scale.configure(length=max(48, min(110, width // 12)))
             except tk.TclError:
                 pass
         # LFO sliders share narrow two-column cells; shorten only those
