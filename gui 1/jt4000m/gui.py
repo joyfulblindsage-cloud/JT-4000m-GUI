@@ -782,9 +782,17 @@ class Editor(tk.Tk):
             self._parameter_row(
                 controls, spec, grid=True, row=row, col=col,
                 compact=True, label_width=5)
-            self.section_labels[spec.key].configure(
+            label = self.section_labels[spec.key]
+            label.configure(
                 text=short_labels.get(spec.key, _row_label(spec, self.developer_var.get())),
                 width=5)
+            line = label.master
+            scale = next(
+                child for child in line.winfo_children()
+                if isinstance(child, tk.Scale))
+            scale.configure(width=8, sliderlength=12)
+            self.reset_buttons[spec.key][0].configure(
+                width=1, padx=0, pady=0, font=("TkDefaultFont", 7))
 
     def _build_wave_tile_row(self, parent, key: str, caption: str, *,
                              width: int | None = None, height: int | None = None) -> None:
