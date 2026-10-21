@@ -384,19 +384,19 @@ class Editor(tk.Tk):
 
         # Row 1 — equally sized oscillator and filter panels.
         _, osc1 = self._synth_box(
-            self.controls, "OSC 1", 0, 0, columnspan=4, compact=True)
+            self.controls, "OSC 1", 0, 0, columnspan=4, compact=False)
         self._build_oscillator_wave_row(osc1, specs["osc1_wave"], "osc1_wave", "OSC1")
         for key in ("osc1_pwm_fm", "osc1_coarse", "osc1_fine"):
             self._parameter_row(osc1, specs[key], compact=True, row_pady=2)
 
         _, osc2 = self._synth_box(
-            self.controls, "OSC 2", 0, 4, columnspan=4, compact=True)
+            self.controls, "OSC 2", 0, 4, columnspan=4, compact=False)
         self._build_oscillator_wave_row(osc2, specs["osc2_wave"], "osc2_wave", "OSC2")
         for key in ("osc2_pwm", "osc2_coarse", "osc2_fine"):
             self._parameter_row(osc2, specs[key], compact=True, row_pady=2)
 
         _, filt = self._synth_box(
-            self.controls, "FILTER", 0, 8, columnspan=4, compact=True)
+            self.controls, "FILTER", 0, 8, columnspan=4, compact=False)
         # Keep the response graph compact so Cutoff and Resonance have room.
         filter_layout = tk.Frame(filt, bg="#131D2B")
         filter_layout.pack(fill="both", expand=True)
