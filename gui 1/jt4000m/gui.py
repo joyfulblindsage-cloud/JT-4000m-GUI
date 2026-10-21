@@ -400,13 +400,13 @@ class Editor(tk.Tk):
         # Keep the response graph compact so Cutoff and Resonance have room.
         filter_layout = tk.Frame(filt, bg="#131D2B")
         filter_layout.pack(fill="both", expand=True)
-        graph_slot = tk.Frame(filter_layout, bg="#131D2B", height=34)
-        graph_slot.pack(fill="x", expand=False, pady=(0, 1))
+        graph_slot = tk.Frame(filter_layout, bg="#131D2B", height=30)
+        graph_slot.pack(fill="x", expand=False, pady=(0, 2))
         graph_slot.pack_propagate(False)
-        self.filter_view = FilterView(graph_slot, width=300, height=34)
+        self.filter_view = FilterView(graph_slot, width=300, height=30)
         self.filter_view.pack(fill="both", expand=True, padx=1)
         for key in ("filter_cutoff", "filter_resonance"):
-            self._parameter_row(filter_layout, specs[key], compact=True)
+            self._parameter_row(filter_layout, specs[key], compact=True, row_pady=2)
 
         # Row 2 — two related envelopes and the smaller MIX / RING module.
         _, vca = self._synth_box(
