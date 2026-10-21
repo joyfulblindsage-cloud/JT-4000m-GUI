@@ -449,10 +449,14 @@ class Editor(tk.Tk):
         self._knob_row(mix, specs["osc_balance"], compact=True)
         ring_controls = tk.Frame(mix, bg="#131D2B")
         ring_controls.pack(fill="x")
-        # These controls need the full panel width: putting both in narrow grid
-        # cells caused their reset affordances to be unmapped by Tk's packer.
-        self._parameter_row(ring_controls, specs["ring_mod_toggle"], compact=True)
-        self._parameter_row(ring_controls, specs["ring_mod_amount"], compact=True)
+        # Keep the two Ring Mod controls side by side, with narrower labels so
+        # their reset affordances remain inside each compact cell.
+        self._parameter_row(ring_controls, specs["ring_mod_toggle"], compact=True,
+                            grid=True, row=0, col=0, label_width=5)
+        self._parameter_row(ring_controls, specs["ring_mod_amount"], compact=True,
+                            grid=True, row=0, col=1, label_width=5)
+        ring_controls.grid_columnconfigure(0, weight=1, uniform="ring-controls")
+        ring_controls.grid_columnconfigure(1, weight=1, uniform="ring-controls")
 
         # Row 3 — keep the LFOs and modulation controls equally sized.
         _, lfo1 = self._synth_box(
@@ -691,7 +695,10 @@ class Editor(tk.Tk):
         # width for them. Reset buttons remain in each control row.
         for scale in getattr(self, "_midi_only_scales", {}).values():
             try:
-                scale.configure(length=max(65, min(130, width // 24)))
+                # These live-only controls sit in two equal compact columns.
+                # A window-wide minimum of 65 px plus label and reset was wider
+                # than a cell, causing Tk to unmap the reset button.
+                scale.configure(length=max(30, min(70, width // 30)))
             except tk.TclError:
                 pass
 
@@ -1021,7 +1028,8 @@ class Editor(tk.Tk):
                 tile.start()
 
     def _parameter_row(self, parent, spec, *, grid: bool = False,
-                       row: int = 0, col: int = 0, compact: bool = False) -> None:
+                       row: int = 0, col: int = 0, compact: bool = False,
+                       label_width: int | None = None) -> None:
         """One parameter line: label | control(s) | value | reset.
 
         P1.26 polish: fixed label width and consistent vertical rhythm keep
@@ -1039,7 +1047,9 @@ class Editor(tk.Tk):
         # omit the duplicate left label and separate value readout for them.
         has_enum_options = spec.kind == "enum" and bool(enum_options(spec.key))
         label = tk.Label(line, text=_row_label(spec, self.developer_var.get()), bg="#131D2B",
-                         fg="#A8BDD3", width=8 if compact else 12, anchor="w")
+                         fg="#A8BDD3",
+                         width=label_width if label_width is not None else (8 if compact else 12),
+                         anchor="w")
         if not has_enum_options:
             label.pack(side="left")
         self.section_labels[spec.key] = label
