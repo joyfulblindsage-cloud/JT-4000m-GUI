@@ -292,6 +292,7 @@ class Editor(tk.Tk):
                                  command=self._switch_tab)
             btn.pack(side="left")
             self.tab_buttons[tab_name] = btn
+        self._update_tab_button_styles()
 
         # P1.40 — top utility bar: patch selector + MIDI device controls.
         utility = tk.Frame(self, bg="#080D14")
@@ -1018,8 +1019,25 @@ class Editor(tk.Tk):
         self._build_midi_log_view()
 
     # ------------------------------------------------- P1.25a shell helpers
+    def _update_tab_button_styles(self) -> None:
+        """Make the active workspace tab distinct without changing tab behavior."""
+        active = self.current_tab.get()
+        for name, button in self.tab_buttons.items():
+            selected = name == active
+            button.configure(
+                bg="#17465A" if selected else "#080D14",
+                fg="#42D9FF" if selected else "#91A7C0",
+                selectcolor="#17465A" if selected else "#080D14",
+                activebackground="#1D2B3E",
+                activeforeground="#F3F7FF",
+                font=("TkDefaultFont", 9, "bold" if selected else "normal"),
+                relief="flat",
+                highlightthickness=0,
+            )
+
     def _switch_tab(self) -> None:
         """Show exactly one workspace tab (SYNTH | PRESETS | RESEARCH)."""
+        self._update_tab_button_styles()
         for name, frame in self.tab_frames.items():
             if name == self.current_tab.get():
                 frame.place(relx=0.0, rely=0.0, relwidth=1.0, relheight=1.0)
