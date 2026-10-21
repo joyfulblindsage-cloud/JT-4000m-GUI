@@ -1873,7 +1873,7 @@ class Editor(tk.Tk):
             self._set_midi_status("error")
             # Keep the visible status concise; preserve the full backend
             # diagnostic in _midi_last_error for troubleshooting.
-            if "python-rtmidi unavailable" in self._midi_last_error:
+            if "python-rtmidi" in self._midi_last_error.lower():
                 self.status_var.set("MIDI unavailable · install python-rtmidi")
             else:
                 self.status_var.set("MIDI unavailable · check MIDI backend")
