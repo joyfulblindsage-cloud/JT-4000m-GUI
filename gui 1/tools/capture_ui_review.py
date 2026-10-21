@@ -186,16 +186,20 @@ def main() -> int:
             for key in mix_mod_keys:
                 label = app.section_labels.get(key)
                 reset_pair = app.reset_buttons.get(key)
-                critical_widgets = [("label", label)]
+                combo = getattr(app, f"combo_{key}", None)
+                # Enum rows with options intentionally suppress the duplicate
+                # text label; their combobox is the visible control/label.
+                critical_widgets = []
+                if combo is not None:
+                    critical_widgets.append(("control", combo))
+                elif label is not None and label.winfo_manager():
+                    critical_widgets.append(("label", label))
                 if reset_pair:
                     critical_widgets.append(("reset", reset_pair[0]))
                 if key in getattr(app, "_midi_only_scales", {}):
                     critical_widgets.append(("control", app._midi_only_scales[key]))
                 if key in getattr(app, "_knobs", {}):
                     critical_widgets.append(("control", app._knobs[key]))
-                combo = getattr(app, f"combo_{key}", None)
-                if combo is not None:
-                    critical_widgets.append(("control", combo))
                 for part, widget in critical_widgets:
                     if widget is None:
                         failures.append(f"{width}x{height}: missing MIX/MOD {part} for {key}")
