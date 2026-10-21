@@ -474,16 +474,25 @@ class Editor(tk.Tk):
         # Preserve the established rotary control and model/MIDI gesture path,
         # but reduce its footprint so the two Ring Mod rows fit at 500 px.
         self._knob_row(mix, specs["osc_balance"], compact=True)
-        self._parameter_row(mix, specs["ring_mod_toggle"], compact=True)
-        self._parameter_row(mix, specs["ring_mod_amount"], compact=True)
+        # The two Ring Mod controls share a row so both remain visible at
+        # the minimum supported height; normal parameter wiring is unchanged.
+        self._parameter_row(mix, specs["ring_mod_toggle"], compact=True,
+                            grid=True, row=0, col=0)
+        self._parameter_row(mix, specs["ring_mod_amount"], compact=True,
+                            grid=True, row=0, col=1)
+        mix.grid_columnconfigure(0, weight=1, uniform="ring-controls")
+        mix.grid_columnconfigure(1, weight=1, uniform="ring-controls")
 
         _, mod = self._synth_box(self.controls, "MOD / PORTAMENTO", 2, 9, columnspan=3)
         self._p160_panel_frames["mod_portamento"] = mod
-        # Keep this panel focused on its four intended controls. Reference
-        # labels for unrelated parameters without a confirmed SysEx offset
-        # consumed vertical space and hid the Portamento Mode row at 500 px.
-        for key in ("modulation", "portamento_time"):
-            self._midi_only_parameter_row(mod, specs[key], compact=True)
+        # Live-only CC controls share a compact row; saved-parameter controls
+        # retain their own full-width rows below.
+        self._midi_only_parameter_row(mod, specs["modulation"], compact=True,
+                                      grid=True, row=0, col=0)
+        self._midi_only_parameter_row(mod, specs["portamento_time"], compact=True,
+                                      grid=True, row=0, col=1)
+        mod.grid_columnconfigure(0, weight=1, uniform="portamento-live")
+        mod.grid_columnconfigure(1, weight=1, uniform="portamento-live")
         self._parameter_row(mod, specs["portamento_amount"], compact=True)
         self._parameter_row(mod, specs["portamento_mode"], compact=True)
         portamento_mode_combo = getattr(self, "combo_portamento_mode", None)
@@ -1162,18 +1171,24 @@ class Editor(tk.Tk):
         self.vars[key].set(int(raw))
         self._scale_changed(key)
 
-    def _midi_only_parameter_row(self, parent, spec, *, compact: bool = False) -> None:
+    def _midi_only_parameter_row(self, parent, spec, *, compact: bool = False,
+                                  grid: bool = False, row: int = 0, col: int = 0) -> None:
         """Live CC control for parameters with no confirmed SysEx byte offset.
 
         These controls transmit CC only; they do not alter or dirty the saved
         patch because the editor cannot serialize their values into a bank.
         """
-        row = tk.Frame(parent, bg="#131D2B")
-        row.pack(fill="x", pady=0 if compact else 2)
+        line = tk.Frame(parent, bg="#131D2B")
+        if grid:
+            line.grid(row=line, column=col, sticky="ew", padx=(0, 2), pady=0)
+        else:
+            line.pack(fill="x", pady=0 if compact else 2)
+        label_text = (f"{_synth_label(spec)} · CC {spec.cc}" if grid
+                      else f"{_synth_label(spec)} · CC {spec.cc} · live only")
         label = tk.Label(
-            row, text=f"{_synth_label(spec)} · CC {spec.cc} · live only",
-            bg="#131D2B", fg="#A8BDD3", width=13 if compact else 16, anchor="w",
-            font=("TkDefaultFont", 8 if compact else 9),
+            line, text=label_text,
+            bg="#131D2B", fg="#A8BDD3", width=7 if grid else (13 if compact else 16), anchor="w",
+            font=("TkDefaultFont", 7 if grid else (8 if compact else 9)),
         )
         label.pack(side="left")
         self.section_labels[spec.key] = label
@@ -1185,7 +1200,7 @@ class Editor(tk.Tk):
         self._midi_only_values[spec.key] = spec.default
 
         scale = tk.Scale(
-            row, from_=spec.minimum, to=spec.maximum, orient="horizontal",
+            line, from_=spec.minimum, to=spec.maximum, orient="horizontal",
             variable=var, showvalue=False, resolution=1, bg="#42D9FF",
             fg="#B6C8DC", troughcolor="#0D1521", highlightthickness=0, bd=0,
             sliderrelief="flat", sliderlength=16 if compact else 20,
@@ -1200,13 +1215,13 @@ class Editor(tk.Tk):
         scale.bind("<ButtonRelease-1>",
                    lambda _e, key=spec.key: self._end_midi_only_drag(key))
         self._midi_only_scales[spec.key] = scale
-        value_label = tk.Label(row, textvariable=value_var, bg="#131D2B", fg="#F3F7FF",
+        value_label = tk.Label(line, textvariable=value_var, bg="#131D2B", fg="#F3F7FF",
                                width=4, anchor="e")
         # MIDI-only readout is intentionally hidden to keep the control row compact.
         # A live-only CC has no saved patch value to restore, but its reset
         # affordance can safely send the documented default CC value again.
         reset = tk.Button(
-            row, text="↺", width=2, relief="flat", bg="#131D2B", fg="#8CA2BA",
+            line, text="↺", width=2, relief="flat", bg="#131D2B", fg="#8CA2BA",
             highlightthickness=0, bd=0,
             command=lambda key=spec.key, default=spec.default:
                 self._midi_only_changed(key, default),
