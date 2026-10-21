@@ -1871,7 +1871,9 @@ class Editor(tk.Tk):
             self.midi_out_combo.set("")
             self._midi_last_error = t.note or "No MIDI backend is available."
             self._set_midi_status("error")
-            self.status_var.set(f"MIDI unavailable: {self._midi_last_error}")
+            # Keep the persistent status strip readable at compact widths;
+            # the full backend error remains available in _midi_last_error.
+            self.status_var.set("MIDI unavailable — check the MIDI backend/driver")
             return
         # Preserve current selections where possible.
         cur_in = self.midi_in_combo.get()
