@@ -370,14 +370,15 @@ class Editor(tk.Tk):
         self.controls.bind("<Configure>", self._on_synth_resize)
         for col in range(12):
             self.controls.grid_columnconfigure(col, weight=1, uniform="synth-col")
-        # P1.57: the envelope row is the primary control surface and needs
-        # twice the vertical space of the oscillator and utility rows.
-        # Do not use a uniform row group: it overrides the intended 1:2:1
-        # allocation and clips ADSR controls at common window heights.
+        # Keep the established equal-row grid contract. Uniform sizing is
+        # intentional: it preserves the visual rhythm of the SYNTH workspace.
+        # Compact-height behavior is handled inside the envelope panels instead
+        # of reallocating the outer grid and destabilizing other modules.
         self._synth_row_height_px = 1
         self._synth_row_remainder_px = 0
-        for row, weight in enumerate((1, 2, 1)):
-            self.controls.grid_rowconfigure(row, weight=weight, minsize=0)
+        for row in range(3):
+            self.controls.grid_rowconfigure(
+                row, weight=1, minsize=0, uniform="synth-row")
 
         self.section_labels: dict[str, tk.Label] = {}
         self.reset_buttons: dict[str, tuple[tk.Button, tk.Label]] = {}
@@ -417,32 +418,39 @@ class Editor(tk.Tk):
         # Row 2 widths are VCA : VCF : ARP = 2:2:1 (5:5:2 grid columns).
         # Envelope graphs and ADSR controls each receive half the module height.
         _, vca = self._synth_box(self.controls, "VCA ENVELOPE", 1, 0, columnspan=5)
-        vca_graph_slot = tk.Frame(vca, bg="#131D2B")
-        vca_graph_slot.pack(fill="both", expand=True, pady=(0, 2))
+        vca_graph_slot = tk.Frame(vca, bg="#131D2B", height=54)
+        vca_graph_slot.pack(fill="x", expand=False, pady=(0, 1))
+        vca_graph_slot.pack_propagate(False)
+        self._envelope_graph_slots = {"vca": vca_graph_slot}
         self.vca_env_view = EnvelopeView(
-            vca_graph_slot, title="", width=360, height=76,
+            vca_graph_slot, title="", width=360, height=52,
             on_segment=lambda k, n: self._env_drag("vca", k, n))
         self.vca_env_view.pack(fill="both", expand=True, anchor="center")
         self._bind_env_release(self.vca_env_view)
         vca_adsr = tk.Frame(vca, bg="#131D2B")
         vca_adsr.pack(fill="both", expand=True)
+        self._envelope_adsr_frames = {"vca": vca_adsr}
         for col, key in enumerate(("vca_attack", "vca_decay", "vca_sustain", "vca_release")):
             self._parameter_knob_column(vca_adsr, specs[key], col=col)
 
         _, vcf = self._synth_box(self.controls, "VCF ENVELOPE", 1, 5, columnspan=5)
-        vcf_graph_slot = tk.Frame(vcf, bg="#131D2B")
-        vcf_graph_slot.pack(fill="both", expand=True, pady=(0, 2))
+        vcf_graph_slot = tk.Frame(vcf, bg="#131D2B", height=54)
+        vcf_graph_slot.pack(fill="x", expand=False, pady=(0, 1))
+        vcf_graph_slot.pack_propagate(False)
+        self._envelope_graph_slots["vcf"] = vcf_graph_slot
         self.vcf_env_view = EnvelopeView(
-            vcf_graph_slot, title="", width=360, height=76,
+            vcf_graph_slot, title="", width=360, height=52,
             on_segment=lambda k, n: self._env_drag("vcf", k, n))
         self.vcf_env_view.pack(fill="both", expand=True, anchor="center")
         self._bind_env_release(self.vcf_env_view)
-        # VCF amount remains with the ADSR controls in the lower half.
+        # Keep all five filter-envelope controls in one compact control band;
+        # a separate amount row needlessly increases the panel's minimum height.
         vcf_adsr = tk.Frame(vcf, bg="#131D2B")
         vcf_adsr.pack(fill="both", expand=True)
+        self._envelope_adsr_frames["vcf"] = vcf_adsr
         for col, key in enumerate(("vcf_attack", "vcf_decay", "vcf_sustain", "vcf_release")):
             self._parameter_knob_column(vcf_adsr, specs[key], col=col)
-        self._parameter_row(vcf, specs["filter_env_amount"])
+        self._parameter_knob_column(vcf_adsr, specs["filter_env_amount"], col=4)
 
         _, arp = self._synth_box(self.controls, "ARPEGGIATOR", 1, 10, columnspan=2)
         self._build_arpeggiator_panel(arp)
@@ -540,6 +548,26 @@ class Editor(tk.Tk):
         # performs the actual allocation and keeps all three rows the same size.
         self._synth_row_height_px = max(1, height // 3)
         self._synth_row_remainder_px = height - 3 * self._synth_row_height_px
+
+        # At short heights, prioritize directly editable ADSR controls over
+        # the envelope visualization. The graph returns above the controls as
+        # soon as enough vertical space is available.
+        compact_height = height < 300
+        for key, graph_slot in getattr(self, "_envelope_graph_slots", {}).items():
+            adsr_frame = self._envelope_adsr_frames[key]
+            if compact_height and graph_slot.winfo_manager():
+                graph_slot.pack_forget()
+            elif not compact_height and not graph_slot.winfo_manager():
+                graph_slot.pack(fill="x", expand=False, before=adsr_frame, pady=(0, 1))
+        for key in ("vca_attack", "vca_decay", "vca_sustain", "vca_release",
+                    "vcf_attack", "vcf_decay", "vcf_sustain", "vcf_release",
+                    "filter_env_amount"):
+            knob = getattr(self, "_knobs", {}).get(key)
+            if knob is not None:
+                try:
+                    knob.configure(height=52 if compact_height else 78)
+                except tk.TclError:
+                    pass
 
         compact = width < 1180
         label_width = 8 if width < 1000 else (9 if compact else 13)
