@@ -386,14 +386,14 @@ class Editor(tk.Tk):
         _, osc1 = self._synth_box(
             self.controls, "OSC 1", 0, 0, columnspan=4, compact=False)
         self._build_oscillator_wave_row(osc1, specs["osc1_wave"], "osc1_wave", "OSC1")
-        for key in ("osc1_pwm_fm", "osc1_coarse", "osc1_fine"):
-            self._parameter_row(osc1, specs[key], compact=True, row_pady=4)
+        self._build_oscillator_controls(
+            osc1, (specs["osc1_pwm_fm"], specs["osc1_coarse"], specs["osc1_fine"]))
 
         _, osc2 = self._synth_box(
             self.controls, "OSC 2", 0, 4, columnspan=4, compact=False)
         self._build_oscillator_wave_row(osc2, specs["osc2_wave"], "osc2_wave", "OSC2")
-        for key in ("osc2_pwm", "osc2_coarse", "osc2_fine"):
-            self._parameter_row(osc2, specs[key], compact=True, row_pady=4)
+        self._build_oscillator_controls(
+            osc2, (specs["osc2_pwm"], specs["osc2_coarse"], specs["osc2_fine"]))
 
         _, filt = self._synth_box(
             self.controls, "FILTER", 0, 8, columnspan=4, compact=False)
@@ -751,7 +751,7 @@ class Editor(tk.Tk):
         """
         row = tk.Frame(parent, bg="#131D2B")
         row.pack(fill="x", pady=(0, 4))
-        width, height = 136, 32
+        width, height = 112, 24
         canvas = tk.Canvas(
             row, width=width, height=height, bg="#0D1521",
             highlightthickness=1, highlightbackground="#2A3A4F")
@@ -761,6 +761,30 @@ class Editor(tk.Tk):
             self._osc_tiles: dict[str, WaveTile] = {}
         self._osc_tiles[key] = tile
         self._parameter_row(row, spec, compact=True)
+
+    def _build_oscillator_controls(self, parent, control_specs) -> None:
+        """Lay out oscillator controls in two compact columns.
+
+        This preserves access to PWM/FM, Coarse, and Fine when the three-row
+        SYNTH workspace is short, without changing parameter or MIDI wiring.
+        """
+        controls = tk.Frame(parent, bg="#131D2B")
+        controls.pack(fill="both", expand=True)
+        for col in range(2):
+            controls.grid_columnconfigure(col, weight=1, uniform="osc-controls")
+        short_labels = {
+            "osc1_pwm_fm": "PWM/FM", "osc1_pwm": "PWM",
+            "osc1_coarse": "Coarse", "osc2_coarse": "Coarse",
+            "osc1_fine": "Fine", "osc2_fine": "Fine",
+        }
+        for index, spec in enumerate(control_specs):
+            row, col = divmod(index, 2)
+            self._parameter_row(
+                controls, spec, grid=True, row=row, col=col,
+                compact=True, label_width=5)
+            self.section_labels[spec.key].configure(
+                text=short_labels.get(spec.key, _row_label(spec, self.developer_var.get())),
+                width=5)
 
     def _build_wave_tile_row(self, parent, key: str, caption: str, *,
                              width: int | None = None, height: int | None = None) -> None:
