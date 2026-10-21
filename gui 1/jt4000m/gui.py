@@ -1066,6 +1066,12 @@ class Editor(tk.Tk):
         if not has_enum_options:
             label.pack(side="left")
         self.section_labels[spec.key] = label
+        # Reserve reset space before adding an expandable scale/combobox. Tk's
+        # packer otherwise lets the expandable control consume the reset's cell.
+        reset = tk.Button(line, text="↺", width=2, relief="flat", bg="#131D2B", fg="#8CA2BA",
+                          highlightthickness=0, bd=0,
+                          command=lambda key=spec.key: self.reset_one(key))
+        reset.pack(side="right", padx=(2, 0))
         # Initial value = documented default; it is overwritten from the model
         # as soon as a bank is loaded (_sync_widgets_from_model).
         var = tk.IntVar(value=spec.default)
@@ -1109,10 +1115,6 @@ class Editor(tk.Tk):
                            anchor="e")
         # Numeric readouts stay registered for model sync but are not shown;
         # removing them gives sliders the horizontal room they need.
-        reset = tk.Button(line, text="↺", width=2, relief="flat", bg="#131D2B", fg="#8CA2BA",
-                          highlightthickness=0, bd=0,
-                          command=lambda key=spec.key: self.reset_one(key))
-        reset.pack(side="right", padx=(2, 0))
         self.reset_buttons[spec.key] = (reset, val_lbl)
 
     def _knob_row(self, parent, spec, *, row: int = 0, col: int = 0,
@@ -1200,6 +1202,14 @@ class Editor(tk.Tk):
         self._midi_only_value_vars[spec.key] = value_var
         self._midi_only_values[spec.key] = spec.default
 
+        # Reserve the right-hand reset affordance before the expandable scale.
+        reset = tk.Button(
+            line, text="↺", width=2, relief="flat", bg="#131D2B", fg="#8CA2BA",
+            highlightthickness=0, bd=0,
+            command=lambda key=spec.key, default=spec.default:
+                self._midi_only_changed(key, default),
+        )
+        reset.pack(side="right", padx=(2, 0))
         scale = tk.Scale(
             line, from_=spec.minimum, to=spec.maximum, orient="horizontal",
             variable=var, showvalue=False, resolution=1, bg="#42D9FF",
@@ -1221,13 +1231,6 @@ class Editor(tk.Tk):
         # MIDI-only readout is intentionally hidden to keep the control row compact.
         # A live-only CC has no saved patch value to restore, but its reset
         # affordance can safely send the documented default CC value again.
-        reset = tk.Button(
-            line, text="↺", width=2, relief="flat", bg="#131D2B", fg="#8CA2BA",
-            highlightthickness=0, bd=0,
-            command=lambda key=spec.key, default=spec.default:
-                self._midi_only_changed(key, default),
-        )
-        reset.pack(side="right", padx=(2, 0))
         self.reset_buttons[spec.key] = (reset, value_label)
 
     def _midi_only_changed(self, key: str, raw: int) -> None:
