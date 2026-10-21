@@ -456,18 +456,18 @@ class Editor(tk.Tk):
         self._build_arpeggiator_panel(arp)
 
         # Row 3 — four compact modules.
+        # LFOs use a compact two-column control grid so all editable controls
+        # remain available when the SYNTH workspace is only 500 px tall.
         _, lfo1 = self._synth_box(self.controls, "LFO 1", 2, 0, columnspan=3)
-        self._build_wave_tile_row(lfo1, "lfo1_wave", "LFO1 Preview")
-        for key in ("lfo1_wave", "lfo1_destination", "lfo1_rate", "lfo1_amount"):
-            self._parameter_row(lfo1, specs[key])
+        self._build_lfo_panel(
+            lfo1, specs["lfo1_wave"], "LFO1 Preview",
+            (specs["lfo1_destination"], specs["lfo1_rate"], specs["lfo1_amount"]))
 
         _, lfo2 = self._synth_box(self.controls, "LFO 2", 2, 3, columnspan=3)
-        self._build_wave_tile_row(lfo2, "lfo2_wave", "LFO2 Preview")
-        for key in ("lfo2_wave", "lfo2_rate", "lfo2_amount"):
-            self._parameter_row(lfo2, specs[key])
-        tk.Label(lfo2, text="Destination not documented (CC 56 = LFO1)",
-                 bg="#131D2B", fg="#8CA2BA", anchor="w", justify="left").pack(
-                     anchor="w", pady=(0, 1))
+        self._build_lfo_panel(
+            lfo2, specs["lfo2_wave"], "LFO2 Preview",
+            (specs["lfo2_rate"], specs["lfo2_amount"]),
+            note="Destination not documented (CC 56 = LFO1)")
 
         _, mix = self._synth_box(self.controls, "MIX / RING", 2, 6, columnspan=3)
         self._knob_row(mix, specs["osc_balance"])
@@ -493,6 +493,65 @@ class Editor(tk.Tk):
         tk.Label(mod, text="Portamento ON/OFF mapping unverified",
                  bg="#131D2B", fg="#8CA2BA", anchor="w", justify="left").pack(
                      fill="x", pady=(1, 0))
+
+    def _build_lfo_panel(self, parent, wave_spec, caption: str, control_specs,
+                         *, note: str | None = None) -> None:
+        """Build a compact LFO control surface without changing parameter wiring.
+
+        The waveform preview shares a row with its selector. Remaining controls
+        use a two-column grid with short labels; the normal registry, IntVars,
+        reset actions, model updates, and MIDI path are reused unchanged.
+        """
+        wave_row = tk.Frame(parent, bg="#131D2B")
+        wave_row.pack(fill="x", pady=(0, 1))
+        width, height = 64, 28
+        canvas = tk.Canvas(
+            wave_row, width=width, height=height, bg="#0D1521",
+            highlightthickness=1, highlightbackground="#2A3A4F")
+        canvas.pack(side="left", padx=(0, 2))
+        tile = WaveTile(canvas, self._update_wave_phase, width=width, height=height)
+        canvas.create_text(3, height - 3, text=caption, anchor="w", fill="#8CA2BA",
+                           font=("TkDefaultFont", 6, "bold"))
+        tile_attr = "lfo1_tile" if wave_spec.key.startswith("lfo1") else "lfo2_tile"
+        setattr(self, tile_attr, tile)
+        self._parameter_row(wave_row, wave_spec, compact=True)
+
+        if not hasattr(self, "_lfo_controls"):
+            self._lfo_controls: dict[str, tk.Widget] = {}
+            self._lfo_reset_buttons: dict[str, tk.Button] = {}
+            self._lfo_scales: list[tk.Scale] = []
+            self._lfo_panel_frames: dict[str, tk.Widget] = {}
+            self._lfo_notes: dict[str, tk.Label] = {}
+        self._lfo_panel_frames[wave_spec.key] = parent
+
+        grid = tk.Frame(parent, bg="#131D2B")
+        grid.pack(fill="both", expand=True)
+        for col in range(2):
+            grid.grid_columnconfigure(col, weight=1, uniform="lfo-controls-" + wave_spec.key)
+        short_labels = {
+            "lfo1_destination": "Dest", "lfo1_rate": "Rate",
+            "lfo1_amount": "Amt", "lfo2_rate": "Rate", "lfo2_amount": "Amt",
+        }
+        for index, spec in enumerate(control_specs):
+            row, col = divmod(index, 2)
+            self._parameter_row(grid, spec, grid=True, row=row, col=col, compact=True)
+            label = self.section_labels[spec.key]
+            label.configure(width=5, text=short_labels.get(spec.key, _row_label(
+                spec, self.developer_var.get())))
+            if spec.kind == "enum" and hasattr(self, f"combo_{spec.key}"):
+                control = getattr(self, f"combo_{spec.key}")
+            else:
+                control = self._parameter_scales[-1]
+                self._lfo_scales.append(control)
+            self._lfo_controls[spec.key] = control
+            self._lfo_reset_buttons[spec.key] = self.reset_buttons[spec.key][0]
+
+        if note:
+            note_label = tk.Label(
+                parent, text=note, bg="#131D2B", fg="#8CA2BA",
+                anchor="w", justify="left", font=("TkDefaultFont", 7))
+            note_label.pack(fill="x", pady=(0, 1))
+            self._lfo_notes[wave_spec.key] = note_label
 
     def _build_arpeggiator_panel(self, parent) -> None:
         """Show documented native ARP settings without inventing remote mappings.
@@ -596,6 +655,29 @@ class Editor(tk.Tk):
                     scale.configure(length=slider_length)
             except tk.TclError:
                 pass
+        # LFO sliders share narrow two-column cells; shorten only those
+        # tracks to keep labels and reset affordances inside their cells.
+        lfo_slider_length = max(24, min(44, width // 24))
+        for scale in getattr(self, "_lfo_scales", ()):
+            try:
+                scale.configure(length=lfo_slider_length)
+            except tk.TclError:
+                pass
+        # The LFO2 destination is intentionally informational-only. Keep it
+        # visible when the module has room, but reclaim its line at compact
+        # heights so editable controls retain priority.
+        lfo_panels = getattr(self, "_lfo_panel_frames", {})
+        lfo_height = min(
+            (panel.winfo_height() for panel in lfo_panels.values()
+             if panel.winfo_exists()),
+            default=height // 3,
+        )
+        for note_label in getattr(self, "_lfo_notes", {}).values():
+            if lfo_height < 145 and note_label.winfo_manager():
+                note_label.pack_forget()
+            elif lfo_height >= 145 and not note_label.winfo_manager():
+                note_label.pack(fill="x", pady=(0, 1))
+
         # Numeric readouts are deliberately un-packed; do not reserve layout
         # width for them. Reset buttons remain in each control row.
         for scale in getattr(self, "_midi_only_scales", {}).values():
