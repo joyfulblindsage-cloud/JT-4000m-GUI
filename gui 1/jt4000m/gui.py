@@ -411,12 +411,12 @@ class Editor(tk.Tk):
         # Row 2 — two related envelopes and the smaller MIX / RING module.
         _, vca = self._synth_box(
             self.controls, "VCA ENVELOPE", 1, 0, columnspan=4)
-        vca_graph_slot = tk.Frame(vca, bg="#131D2B", height=34)
+        vca_graph_slot = tk.Frame(vca, bg="#131D2B", height=24)
         vca_graph_slot.pack(fill="x", expand=False, pady=(0, 1))
         vca_graph_slot.pack_propagate(False)
         self._envelope_graph_slots = {"vca": vca_graph_slot}
         self.vca_env_view = EnvelopeView(
-            vca_graph_slot, title="", width=300, height=32,
+            vca_graph_slot, title="", width=300, height=22,
             on_segment=lambda k, n: self._env_drag("vca", k, n))
         self.vca_env_view.pack(fill="both", expand=True, anchor="center")
         self._bind_env_release(self.vca_env_view)
@@ -428,12 +428,12 @@ class Editor(tk.Tk):
 
         _, vcf = self._synth_box(
             self.controls, "VCF ENVELOPE", 1, 4, columnspan=4)
-        vcf_graph_slot = tk.Frame(vcf, bg="#131D2B", height=34)
+        vcf_graph_slot = tk.Frame(vcf, bg="#131D2B", height=24)
         vcf_graph_slot.pack(fill="x", expand=False, pady=(0, 1))
         vcf_graph_slot.pack_propagate(False)
         self._envelope_graph_slots["vcf"] = vcf_graph_slot
         self.vcf_env_view = EnvelopeView(
-            vcf_graph_slot, title="", width=300, height=32,
+            vcf_graph_slot, title="", width=300, height=22,
             on_segment=lambda k, n: self._env_drag("vcf", k, n))
         self.vcf_env_view.pack(fill="both", expand=True, anchor="center")
         self._bind_env_release(self.vcf_env_view)
@@ -657,7 +657,7 @@ class Editor(tk.Tk):
         # Account for the panel's header and inner padding: at 900x700 the
         # available inner height is below the outer row height but still enough
         # for a short graph and the two VCF knob rows.
-        compact_height = envelope_panel_height < 170
+        compact_height = envelope_panel_height < 150
 
         # At short module heights, prioritize editable ADSR controls over the
         # visualization. Restore the graph only when its panel has room again.
@@ -674,9 +674,9 @@ class Editor(tk.Tk):
             if knob is not None:
                 try:
                     if key == "filter_env_amount":
-                        knob.configure(height=34 if compact_height else 46)
+                        knob.configure(height=30 if compact_height else 38)
                     else:
-                        knob.configure(height=46)
+                        knob.configure(height=38)
                 except tk.TclError:
                     pass
 
@@ -1347,7 +1347,7 @@ class Editor(tk.Tk):
         self.reset_buttons[spec.key] = (reset, val_lbl)
 
     def _parameter_knob_column(self, parent, spec, *, col: int, row: int = 0,
-                               diameter: int = 44, label_text: str | None = None) -> tk.Frame:
+                               diameter: int = 38, label_text: str | None = None) -> tk.Frame:
         """Compact ADSR control: rotary knob, value and reset in one column.
 
         This is the same registry/model/MIDI/undo path as the former vertical
