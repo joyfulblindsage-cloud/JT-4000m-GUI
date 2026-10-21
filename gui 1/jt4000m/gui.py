@@ -711,7 +711,7 @@ class Editor(tk.Tk):
                 pass
         # LFO controls use two-column cells; give the slider a little more
         # travel while reserving space for the short label and reset button.
-        lfo_slider_length = max(40, min(72, width // 18))
+        lfo_slider_length = max(58, min(88, width // 14))
         for scale in getattr(self, "_lfo_scales", ()):
             try:
                 scale.configure(length=lfo_slider_length)
@@ -738,7 +738,7 @@ class Editor(tk.Tk):
             try:
                 # Live-only Mod and Portamento Time share two equal columns;
                 # retain the reset affordance while giving the scale a usable track.
-                scale.configure(length=max(40, min(85, width // 20)))
+                scale.configure(length=max(58, min(100, width // 12)))
             except tk.TclError:
                 pass
 
@@ -1871,7 +1871,12 @@ class Editor(tk.Tk):
             self.midi_out_combo.set("")
             self._midi_last_error = t.note or "No MIDI backend is available."
             self._set_midi_status("error")
-            self.status_var.set(f"MIDI unavailable: {self._midi_last_error}")
+            # Keep the visible status concise; preserve the full backend
+            # diagnostic in _midi_last_error for troubleshooting.
+            if "python-rtmidi unavailable" in self._midi_last_error:
+                self.status_var.set("MIDI unavailable · install python-rtmidi")
+            else:
+                self.status_var.set("MIDI unavailable · check MIDI backend")
             return
         # Preserve current selections where possible.
         cur_in = self.midi_in_combo.get()
