@@ -428,12 +428,12 @@ class Editor(tk.Tk):
 
         _, vcf = self._synth_box(
             self.controls, "VCF ENVELOPE", 1, 4, columnspan=4)
-        vcf_graph_slot = tk.Frame(vcf, bg="#131D2B", height=24)
+        vcf_graph_slot = tk.Frame(vcf, bg="#131D2B", height=20)
         vcf_graph_slot.pack(fill="x", expand=False, pady=(0, 1))
         vcf_graph_slot.pack_propagate(False)
         self._envelope_graph_slots["vcf"] = vcf_graph_slot
         self.vcf_env_view = EnvelopeView(
-            vcf_graph_slot, title="", width=300, height=22,
+            vcf_graph_slot, title="", width=300, height=18,
             on_segment=lambda k, n: self._env_drag("vcf", k, n))
         self.vcf_env_view.pack(fill="both", expand=True, anchor="center")
         self._bind_env_release(self.vcf_env_view)
@@ -442,11 +442,11 @@ class Editor(tk.Tk):
         vcf_adsr.pack(fill="both", expand=True)
         self._envelope_adsr_frames["vcf"] = vcf_adsr
         for col, key in enumerate(("vcf_attack", "vcf_decay", "vcf_sustain", "vcf_release")):
-            self._parameter_knob_column(vcf_adsr, specs[key], col=col)
+            self._parameter_knob_column(vcf_adsr, specs[key], col=col, diameter=34)
         vcf_adsr.grid_columnconfigure(4, weight=1, uniform="adsr")
         self._vcf_amount_column = self._parameter_knob_column(
             vcf_adsr, specs["filter_env_amount"], col=0, row=1,
-            diameter=30, label_text="Amt")
+            diameter=26, label_text="Amt")
 
         _, mix = self._synth_box(
             self.controls, "MIX / RING", 1, 8, columnspan=4)
@@ -669,7 +669,9 @@ class Editor(tk.Tk):
             if knob is not None:
                 try:
                     if key == "filter_env_amount":
-                        knob.configure(height=30)
+                        knob.configure(height=26)
+                    elif key.startswith("vcf_"):
+                        knob.configure(height=34)
                     else:
                         knob.configure(height=38)
                 except tk.TclError:
