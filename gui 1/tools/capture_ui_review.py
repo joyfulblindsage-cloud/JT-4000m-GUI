@@ -149,6 +149,32 @@ def main() -> int:
                     if record.get("clipped_by_ancestors"):
                         failures.append(f"{width}x{height}: critical {part} for {key} is clipped by an ancestor")
 
+            # LFO waveform selectors, rates, amounts, destination and reset
+            # affordances are also release-critical: geometry alone can pass
+            # while these controls are pushed below the visible workspace.
+            critical_lfo_records = []
+            lfo_keys = (
+                "lfo1_wave", "lfo1_destination", "lfo1_rate", "lfo1_amount",
+                "lfo2_wave", "lfo2_rate", "lfo2_amount",
+            )
+            for key in lfo_keys:
+                control = getattr(app, "_lfo_controls", {}).get(key)
+                reset = getattr(app, "_lfo_reset_buttons", {}).get(key)
+                for part, widget in (("control", control), ("reset", reset)):
+                    if widget is None:
+                        failures.append(f"{width}x{height}: missing LFO {part} for {key}")
+                        continue
+                    record = widget_record(widget, app)
+                    record["parameter"] = key
+                    record["role"] = part
+                    critical_lfo_records.append(record)
+                    if not record.get("mapped"):
+                        failures.append(f"{width}x{height}: LFO {part} for {key} is not mapped")
+                    if record.get("outside_window"):
+                        failures.append(f"{width}x{height}: LFO {part} for {key} is outside window")
+                    if record.get("clipped_by_ancestors"):
+                        failures.append(f"{width}x{height}: LFO {part} for {key} is clipped by an ancestor")
+
             # Crop to the actual application window, not the full virtual desktop.
             left, top, right, bottom = bounds(app)
             screenshot = args.output / f"ui-{width}x{height}.png"
@@ -163,6 +189,7 @@ def main() -> int:
                 "widgets_clipped_by_ancestors_count": len(clipped),
                 "widgets_clipped_by_ancestors": clipped,
                 "critical_adsr_controls": critical_records,
+                "critical_lfo_controls": critical_lfo_records,
                 "widgets": widgets,
             })
 
@@ -190,6 +217,7 @@ def main() -> int:
             "out_of_window_widgets_are_reported_not_yet_fatal": True,
             "ancestor_clipping_is_reported_not_yet_fatal": True,
             "critical_adsr_controls_must_be_mapped_and_unclipped": True,
+            "critical_lfo_controls_must_be_mapped_and_unclipped": True,
             "screenshots_are_cropped_to_application_window": True,
         },
         "failures": failures,
