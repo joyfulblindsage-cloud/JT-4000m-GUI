@@ -387,13 +387,13 @@ class Editor(tk.Tk):
             self.controls, "OSC 1", 0, 0, columnspan=4, compact=True)
         self._build_oscillator_wave_row(osc1, specs["osc1_wave"], "osc1_wave", "OSC1")
         for key in ("osc1_pwm_fm", "osc1_coarse", "osc1_fine"):
-            self._parameter_row(osc1, specs[key], compact=True)
+            self._parameter_row(osc1, specs[key], compact=True, row_pady=2)
 
         _, osc2 = self._synth_box(
             self.controls, "OSC 2", 0, 4, columnspan=4, compact=True)
         self._build_oscillator_wave_row(osc2, specs["osc2_wave"], "osc2_wave", "OSC2")
         for key in ("osc2_pwm", "osc2_coarse", "osc2_fine"):
-            self._parameter_row(osc2, specs[key], compact=True)
+            self._parameter_row(osc2, specs[key], compact=True, row_pady=2)
 
         _, filt = self._synth_box(
             self.controls, "FILTER", 0, 8, columnspan=4, compact=True)
@@ -411,12 +411,12 @@ class Editor(tk.Tk):
         # Row 2 — two related envelopes and the smaller MIX / RING module.
         _, vca = self._synth_box(
             self.controls, "VCA ENVELOPE", 1, 0, columnspan=4)
-        vca_graph_slot = tk.Frame(vca, bg="#131D2B", height=54)
+        vca_graph_slot = tk.Frame(vca, bg="#131D2B", height=34)
         vca_graph_slot.pack(fill="x", expand=False, pady=(0, 1))
         vca_graph_slot.pack_propagate(False)
         self._envelope_graph_slots = {"vca": vca_graph_slot}
         self.vca_env_view = EnvelopeView(
-            vca_graph_slot, title="", width=300, height=52,
+            vca_graph_slot, title="", width=300, height=32,
             on_segment=lambda k, n: self._env_drag("vca", k, n))
         self.vca_env_view.pack(fill="both", expand=True, anchor="center")
         self._bind_env_release(self.vca_env_view)
@@ -428,12 +428,12 @@ class Editor(tk.Tk):
 
         _, vcf = self._synth_box(
             self.controls, "VCF ENVELOPE", 1, 4, columnspan=4)
-        vcf_graph_slot = tk.Frame(vcf, bg="#131D2B", height=54)
+        vcf_graph_slot = tk.Frame(vcf, bg="#131D2B", height=34)
         vcf_graph_slot.pack(fill="x", expand=False, pady=(0, 1))
         vcf_graph_slot.pack_propagate(False)
         self._envelope_graph_slots["vcf"] = vcf_graph_slot
         self.vcf_env_view = EnvelopeView(
-            vcf_graph_slot, title="", width=300, height=52,
+            vcf_graph_slot, title="", width=300, height=32,
             on_segment=lambda k, n: self._env_drag("vcf", k, n))
         self.vcf_env_view.pack(fill="both", expand=True, anchor="center")
         self._bind_env_release(self.vcf_env_view)
@@ -443,7 +443,10 @@ class Editor(tk.Tk):
         self._envelope_adsr_frames["vcf"] = vcf_adsr
         for col, key in enumerate(("vcf_attack", "vcf_decay", "vcf_sustain", "vcf_release")):
             self._parameter_knob_column(vcf_adsr, specs[key], col=col)
-        self._parameter_knob_column(vcf_adsr, specs["filter_env_amount"], col=4)
+        vcf_adsr.grid_columnconfigure(4, weight=1, uniform="adsr")
+        self._vcf_amount_column = self._parameter_knob_column(
+            vcf_adsr, specs["filter_env_amount"], col=0, row=1,
+            diameter=34, label_text="Amt")
 
         _, mix = self._synth_box(
             self.controls, "MIX / RING", 1, 8, columnspan=4)
@@ -667,9 +670,25 @@ class Editor(tk.Tk):
             knob = getattr(self, "_knobs", {}).get(key)
             if knob is not None:
                 try:
-                    knob.configure(height=46 if compact_height else 78)
+                    if key == "filter_env_amount":
+                        knob.configure(height=34 if compact_height else 46)
+                    else:
+                        knob.configure(height=46)
                 except tk.TclError:
                     pass
+
+        # At full height, give Filter Envelope Amount its own compact row under
+        # Attack. In short workspaces, the graphs are hidden and all five knobs
+        # share one row so no editable parameter is pushed below the panel.
+        amount_column = getattr(self, "_vcf_amount_column", None)
+        if amount_column is not None:
+            try:
+                if compact_height:
+                    amount_column.grid_configure(row=0, column=4)
+                else:
+                    amount_column.grid_configure(row=1, column=0)
+            except tk.TclError:
+                pass
 
         compact = width < 1180
         label_width = 8 if width < 1000 else (9 if compact else 13)
@@ -1057,7 +1076,8 @@ class Editor(tk.Tk):
 
     def _parameter_row(self, parent, spec, *, grid: bool = False,
                        row: int = 0, col: int = 0, compact: bool = False,
-                       label_width: int | None = None) -> None:
+                       label_width: int | None = None,
+                       row_pady: int | None = None) -> None:
         """One parameter line: label | control(s) | value | reset.
 
         P1.26 polish: fixed label width and consistent vertical rhythm keep
@@ -1070,7 +1090,8 @@ class Editor(tk.Tk):
             line.grid(row=row, column=col, sticky="ew",
                       padx=(0, 1 if compact else 10), pady=0 if compact else 3)
         else:
-            line.pack(fill="x", pady=0 if compact else 3)
+            pady = row_pady if row_pady is not None else (0 if compact else 3)
+            line.pack(fill="x", pady=pady)
         # Enum controls already display their selected option in the combobox;
         # omit the duplicate left label and separate value readout for them.
         has_enum_options = spec.kind == "enum" and bool(enum_options(spec.key))
@@ -1322,7 +1343,8 @@ class Editor(tk.Tk):
         reset.pack(anchor="center", pady=(1, 0))
         self.reset_buttons[spec.key] = (reset, val_lbl)
 
-    def _parameter_knob_column(self, parent, spec, *, col: int) -> None:
+    def _parameter_knob_column(self, parent, spec, *, col: int, row: int = 0,
+                               diameter: int = 44, label_text: str | None = None) -> tk.Frame:
         """Compact ADSR control: rotary knob, value and reset in one column.
 
         This is the same registry/model/MIDI/undo path as the former vertical
@@ -1330,7 +1352,7 @@ class Editor(tk.Tk):
         """
         column = tk.Frame(parent, bg="#131D2B", padx=2, pady=2,
                           highlightthickness=1, highlightbackground="#2A3A4F")
-        column.grid(row=0, column=col, sticky="nsew", padx=1, pady=1)
+        column.grid(row=row, column=col, sticky="nsew", padx=1, pady=1)
         parent.grid_columnconfigure(col, weight=1, uniform="adsr")
 
         # Put Reset in the header beside the parameter name, not beneath
@@ -1338,7 +1360,7 @@ class Editor(tk.Tk):
         # critical element clipped at short window heights.
         header = tk.Frame(column, bg="#131D2B")
         header.pack(fill="x", pady=(0, 1))
-        segment_label = spec.key.rsplit("_", 1)[-1].capitalize()
+        segment_label = label_text or spec.key.rsplit("_", 1)[-1].capitalize()
         label = tk.Label(header, text=segment_label,
                          bg="#131D2B", fg="#A8BDD3", anchor="center",
                          font=("TkDefaultFont", 8))
@@ -1352,7 +1374,7 @@ class Editor(tk.Tk):
 
         knob = Knob(
             column, label="", minimum=spec.minimum, maximum=spec.maximum,
-            diameter=44, show_entry=False, default_raw=spec.default,
+            diameter=diameter, show_entry=False, default_raw=spec.default,
             start_angle=180.0, sweep_degrees=180.0, angle_direction=-1,
             on_gesture_start=lambda key=spec.key: self._begin_parameter_drag(key),
             on_gesture_end=lambda key=spec.key: self._end_parameter_drag(key),
@@ -1370,6 +1392,7 @@ class Editor(tk.Tk):
                           bd=0, command=lambda key=spec.key: self.reset_one(key))
         reset.pack(side="right")
         self.reset_buttons[spec.key] = (reset, value_label)
+        return column
 
     def reset_one(self, key: str) -> None:
         """Reset a single parameter to its documented default value."""
