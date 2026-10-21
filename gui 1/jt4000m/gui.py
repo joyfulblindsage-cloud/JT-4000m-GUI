@@ -470,22 +470,26 @@ class Editor(tk.Tk):
             note="Destination not documented (CC 56 = LFO1)")
 
         _, mix = self._synth_box(self.controls, "MIX / RING", 2, 6, columnspan=3)
+        self._p160_panel_frames = {"mix_ring": mix}
+        # Keep the balance knob prominent; use compact rows for the two
+        # Ring Mod controls so the block wastes less vertical space.
         self._knob_row(mix, specs["osc_balance"])
-        self._parameter_row(mix, specs["ring_mod_toggle"])
-        self._parameter_row(mix, specs["ring_mod_amount"])
+        self._parameter_row(mix, specs["ring_mod_toggle"], compact=True)
+        self._parameter_row(mix, specs["ring_mod_amount"], compact=True)
 
         _, mod = self._synth_box(self.controls, "MOD / PORTAMENTO", 2, 9, columnspan=3)
+        self._p160_panel_frames["mod_portamento"] = mod
         for spec in PARAMETERS:
             if spec.offset is None:
                 if spec.key in ("modulation", "portamento_time"):
-                    self._midi_only_parameter_row(mod, spec)
+                    self._midi_only_parameter_row(mod, spec, compact=True)
                 else:
                     lbl = tk.Label(mod, text=f"{_synth_label(spec)}: CC {spec.cc}",
                                    bg="#131D2B", fg="#8CA2BA", anchor="w")
                     lbl.pack(fill="x", pady=1)
                     self.section_labels[spec.key] = lbl
-        self._parameter_row(mod, specs["portamento_amount"])
-        self._parameter_row(mod, specs["portamento_mode"])
+        self._parameter_row(mod, specs["portamento_amount"], compact=True)
+        self._parameter_row(mod, specs["portamento_mode"], compact=True)
         portamento_mode_combo = getattr(self, "combo_portamento_mode", None)
         if portamento_mode_combo is not None:
             portamento_mode_combo.configure(state="disabled")
@@ -1158,17 +1162,18 @@ class Editor(tk.Tk):
         self.vars[key].set(int(raw))
         self._scale_changed(key)
 
-    def _midi_only_parameter_row(self, parent, spec) -> None:
+    def _midi_only_parameter_row(self, parent, spec, *, compact: bool = False) -> None:
         """Live CC control for parameters with no confirmed SysEx byte offset.
 
         These controls transmit CC only; they do not alter or dirty the saved
         patch because the editor cannot serialize their values into a bank.
         """
         row = tk.Frame(parent, bg="#131D2B")
-        row.pack(fill="x", pady=2)
+        row.pack(fill="x", pady=0 if compact else 2)
         label = tk.Label(
             row, text=f"{_synth_label(spec)} · CC {spec.cc} · live only",
-            bg="#131D2B", fg="#A8BDD3", width=16, anchor="w",
+            bg="#131D2B", fg="#A8BDD3", width=13 if compact else 16, anchor="w",
+            font=("TkDefaultFont", 8 if compact else 9),
         )
         label.pack(side="left")
         self.section_labels[spec.key] = label
@@ -1183,12 +1188,13 @@ class Editor(tk.Tk):
             row, from_=spec.minimum, to=spec.maximum, orient="horizontal",
             variable=var, showvalue=False, resolution=1, bg="#42D9FF",
             fg="#B6C8DC", troughcolor="#0D1521", highlightthickness=0, bd=0,
-            sliderrelief="flat", sliderlength=20, width=16,
-            activebackground="#42D9FF", length=105,
+            sliderrelief="flat", sliderlength=16 if compact else 20,
+            width=12 if compact else 16,
+            activebackground="#42D9FF", length=78 if compact else 105,
             command=lambda raw, key=spec.key: self._midi_only_changed(
                 key, int(float(raw))),
         )
-        scale.pack(side="left", fill="x", expand=True, padx=5)
+        scale.pack(side="left", fill="x", expand=True, padx=2 if compact else 5)
         scale.bind("<ButtonPress-1>",
                    lambda _e, key=spec.key: self._begin_midi_only_drag(key))
         scale.bind("<ButtonRelease-1>",
