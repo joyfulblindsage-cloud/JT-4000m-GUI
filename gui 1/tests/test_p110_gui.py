@@ -720,6 +720,25 @@ def test_mix_ring_uses_two_rows_with_full_width_amount_control(app):
 
 
 @gui_test
+def test_lfo_and_live_modulation_scales_keep_usable_travel(app):
+    """Two-column LFO/MOD cells should not reduce the slider to a tiny stub."""
+    app.geometry("900x500+0+0")
+    app.update()
+    assert app._lfo_scales
+    assert app._midi_only_scales
+    for scale in app._lfo_scales:
+        assert int(scale.cget("length")) >= 40
+        assert scale.winfo_ismapped()
+    for scale in app._midi_only_scales.values():
+        assert int(scale.cget("length")) >= 40
+        assert scale.winfo_ismapped()
+    for key in ("lfo1_rate", "lfo1_amount", "lfo2_rate", "lfo2_amount",
+                "modulation", "portamento_time"):
+        reset, _value = app.reset_buttons[key]
+        assert reset.winfo_exists()
+
+
+@gui_test
 def test_compact_controls_hide_numeric_readouts_but_keep_reset_buttons(app):
     """Free horizontal space for controls while keeping per-parameter reset."""
     app.load_path(FIX / "ALL INIT SAW.syx")
