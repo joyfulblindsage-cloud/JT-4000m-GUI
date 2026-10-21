@@ -370,8 +370,10 @@ class Editor(tk.Tk):
         self.controls.bind("<Configure>", self._on_synth_resize)
         for col in range(12):
             self.controls.grid_columnconfigure(col, weight=1, uniform="synth-col")
-        for row in range(3):
-            self.controls.grid_rowconfigure(row, weight=1, minsize=0, uniform="synth-row")
+        # Row 2 carries both envelopes and needs a little extra vertical
+        # budget; rows 1 and 3 remain equal and the workspace stays balanced.
+        for row, weight in enumerate((5, 6, 5)):
+            self.controls.grid_rowconfigure(row, weight=weight, minsize=0, uniform="synth-row")
         self._synth_row_height_px = 1
         self._synth_row_remainder_px = 0
 
@@ -455,6 +457,8 @@ class Editor(tk.Tk):
                             grid=True, row=0, col=0, label_width=5)
         self._parameter_row(ring_controls, specs["ring_mod_amount"], compact=True,
                             grid=True, row=0, col=1, label_width=5)
+        self._ring_mod_amount_scale = self._parameter_scales[-1]
+        self._ring_mod_amount_scale.configure(length=38)
         ring_controls.grid_columnconfigure(0, weight=1, uniform="ring-controls")
         ring_controls.grid_columnconfigure(1, weight=1, uniform="ring-controls")
 
@@ -616,10 +620,11 @@ class Editor(tk.Tk):
         # Real Tk Configure events include height; older tests/callers may
         # provide width-only event doubles. Fall back to the live workspace.
         height = max(1, getattr(event, "height", self.controls.winfo_height()))
-        # The grid's uniform="synth-row" group allocates the same height to
-        # all three rows. Keep diagnostics in sync with that invariant.
-        self._synth_row_height_px = max(1, height // 3)
-        self._synth_row_remainder_px = height - 3 * self._synth_row_height_px
+        # Grid row weights are 5:6:5: the envelope row gets 20% more share.
+        # Track the nominal allocation for diagnostics and layout tests.
+        row_unit = max(1, height // 16)
+        self._synth_row_height_px = row_unit * 5
+        self._synth_row_remainder_px = height - row_unit * 16
 
         # Decide compactness from the envelope module's own allocated height,
         # not the full controls workspace. The latter is taller than 300 px at
@@ -666,6 +671,14 @@ class Editor(tk.Tk):
             try:
                 if str(scale.cget("orient")) == "horizontal":
                     scale.configure(length=slider_length)
+            except tk.TclError:
+                pass
+        # Ring Mod Amount shares a narrow two-column row; keep its scale local
+        # to that cell rather than applying the general workspace-wide length.
+        ring_scale = getattr(self, "_ring_mod_amount_scale", None)
+        if ring_scale is not None:
+            try:
+                ring_scale.configure(length=max(30, min(42, width // 24)))
             except tk.TclError:
                 pass
         # LFO sliders share narrow two-column cells; shorten only those
