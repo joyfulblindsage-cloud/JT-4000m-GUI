@@ -707,14 +707,14 @@ def test_mix_ring_uses_two_rows_with_full_width_amount_control(app):
     app.update()
     balance_slot = app._knobs["osc_balance"].master.master
     ring_toggle_line = app.section_labels["ring_mod_toggle"].master
-    ring_amount_line = app.section_labels["ring_mod_amount"].master
+    ring_amount_slot = app.section_labels["ring_mod_amount"].master.master
     assert int(balance_slot.grid_info()["row"]) == 0
     assert int(balance_slot.grid_info()["column"]) == 0
     assert int(ring_toggle_line.grid_info()["row"]) == 0
     assert int(ring_toggle_line.grid_info()["column"]) == 1
-    assert int(ring_amount_line.grid_info()["row"]) == 1
-    assert int(ring_amount_line.grid_info()["column"]) == 0
-    assert int(ring_amount_line.grid_info()["columnspan"]) == 2
+    assert int(ring_amount_slot.grid_info()["row"]) == 1
+    assert int(ring_amount_slot.grid_info()["column"]) == 0
+    assert int(ring_amount_slot.grid_info()["columnspan"]) == 2
     assert app._ring_mod_amount_scale.winfo_ismapped()
     assert int(app._ring_mod_amount_scale.cget("length")) >= 48
 
