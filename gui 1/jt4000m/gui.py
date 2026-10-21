@@ -522,8 +522,12 @@ class Editor(tk.Tk):
             self._lfo_scales: list[tk.Scale] = []
             self._lfo_panel_frames: dict[str, tk.Widget] = {}
             self._lfo_notes: dict[str, tk.Label] = {}
-        self._lfo_controls[wave_spec.key] = getattr(self, "combo_" + wave_spec.key)
-        self._lfo_reset_buttons[wave_spec.key] = self.reset_buttons[wave_spec.key][0]
+        wave_combo = getattr(self, "combo_" + wave_spec.key)
+        wave_combo.configure(width=7)
+        self._lfo_controls[wave_spec.key] = wave_combo
+        wave_reset = self.reset_buttons[wave_spec.key][0]
+        wave_reset.configure(width=1, font=("TkDefaultFont", 7), padx=0, pady=0)
+        self._lfo_reset_buttons[wave_spec.key] = wave_reset
         self._lfo_panel_frames[wave_spec.key] = parent
 
         grid = tk.Frame(parent, bg="#131D2B")
@@ -546,7 +550,9 @@ class Editor(tk.Tk):
                 control = self._parameter_scales[-1]
                 self._lfo_scales.append(control)
             self._lfo_controls[spec.key] = control
-            self._lfo_reset_buttons[spec.key] = self.reset_buttons[spec.key][0]
+            reset_button = self.reset_buttons[spec.key][0]
+            reset_button.configure(width=1, font=("TkDefaultFont", 7), padx=0, pady=0)
+            self._lfo_reset_buttons[spec.key] = reset_button
 
         if note:
             note_label = tk.Label(
