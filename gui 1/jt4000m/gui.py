@@ -1203,6 +1203,16 @@ class Editor(tk.Tk):
         value_label = tk.Label(row, textvariable=value_var, bg="#131D2B", fg="#F3F7FF",
                                width=4, anchor="e")
         # MIDI-only readout is intentionally hidden to keep the control row compact.
+        # A live-only CC has no saved patch value to restore, but its reset
+        # affordance can safely send the documented default CC value again.
+        reset = tk.Button(
+            row, text="↺", width=2, relief="flat", bg="#131D2B", fg="#8CA2BA",
+            highlightthickness=0, bd=0,
+            command=lambda key=spec.key, default=spec.default:
+                self._midi_only_changed(key, default),
+        )
+        reset.pack(side="right", padx=(2, 0))
+        self.reset_buttons[spec.key] = (reset, value_label)
 
     def _midi_only_changed(self, key: str, raw: int) -> None:
         if self._syncing:
