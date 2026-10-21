@@ -471,9 +471,10 @@ class Editor(tk.Tk):
 
         _, mix = self._synth_box(self.controls, "MIX / RING", 2, 6, columnspan=3)
         self._p160_panel_frames = {"mix_ring": mix}
-        # Keep the balance knob prominent; use compact rows for the two
-        # Ring Mod controls so the block wastes less vertical space.
-        self._knob_row(mix, specs["osc_balance"])
+        # At the 500 px minimum height, a full-size balance knob consumes
+        # the space needed for Ring Mod controls. Use three compact rows so
+        # every mapped control and reset remains reachable without clipping.
+        self._parameter_row(mix, specs["osc_balance"], compact=True)
         self._parameter_row(mix, specs["ring_mod_toggle"], compact=True)
         self._parameter_row(mix, specs["ring_mod_amount"], compact=True)
 
@@ -493,10 +494,9 @@ class Editor(tk.Tk):
         portamento_mode_combo = getattr(self, "combo_portamento_mode", None)
         if portamento_mode_combo is not None:
             portamento_mode_combo.configure(state="disabled")
+        # The disabled control's label carries the verification caveat;
+        # avoid a duplicate footer that would push it below the compact panel.
         self.section_labels["portamento_mode"].configure(text="Portamento Mode (ON unverified)")
-        tk.Label(mod, text="Portamento ON/OFF mapping unverified",
-                 bg="#131D2B", fg="#8CA2BA", anchor="w", justify="left").pack(
-                     fill="x", pady=(1, 0))
 
     def _build_lfo_panel(self, parent, wave_spec, caption: str, control_specs,
                          *, note: str | None = None) -> None:
