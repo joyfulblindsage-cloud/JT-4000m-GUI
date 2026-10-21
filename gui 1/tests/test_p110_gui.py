@@ -570,24 +570,23 @@ def test_window_allows_compact_height(app):
 
 
 @gui_test
-def test_synth_rows_use_balanced_adaptive_height_with_envelope_priority(app):
-    """The envelope row gets modest extra room without changing panel widths."""
+def test_all_three_synth_rows_share_equal_adaptive_height(app):
+    """All three grid rows use one uniform sizing group at every height."""
     from types import SimpleNamespace
 
     for height in (900, 600, 420):
         app._on_synth_resize(SimpleNamespace(width=900, height=height))
-        unit = height // 16
-        assert app._synth_row_height_px == unit * 5
-        assert app._synth_row_remainder_px == height - unit * 16
-        assert [app.controls.grid_rowconfigure(row)["weight"] for row in range(3)] == [5, 6, 5]
+        assert app._synth_row_height_px == height // 3
+        assert app._synth_row_remainder_px == height - 3 * (height // 3)
         for row in range(3):
             config = app.controls.grid_rowconfigure(row)
+            assert config["weight"] == 1
             assert config["uniform"] == "synth-row"
             assert config["minsize"] == 0
 
     # Width adaptation remains independent from the vertical row geometry.
     app._on_synth_resize(SimpleNamespace(width=800, height=600))
-    assert app._synth_row_height_px == (600 // 16) * 5
+    assert app._synth_row_height_px == 200
 
 
 @gui_test
