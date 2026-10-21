@@ -479,19 +479,11 @@ class Editor(tk.Tk):
 
         _, mod = self._synth_box(self.controls, "MOD / PORTAMENTO", 2, 9, columnspan=3)
         self._p160_panel_frames["mod_portamento"] = mod
-        for spec in PARAMETERS:
-            if spec.offset is None:
-                if spec.key in ("modulation", "portamento_time"):
-                    self._midi_only_parameter_row(mod, spec, compact=True)
-                elif spec.key not in ("portamento_amount", "portamento_mode"):
-                    # Other unmapped parameters may be shown as reference text.
-                    # Portamento amount/mode get real rows immediately below;
-                    # adding reference labels for them duplicates content and
-                    # pushes the disabled mode selector out of the 500 px view.
-                    lbl = tk.Label(mod, text=f"{_synth_label(spec)}: CC {spec.cc}",
-                                   bg="#131D2B", fg="#8CA2BA", anchor="w")
-                    lbl.pack(fill="x", pady=1)
-                    self.section_labels[spec.key] = lbl
+        # Keep this panel focused on its four intended controls. Reference
+        # labels for unrelated parameters without a confirmed SysEx offset
+        # consumed vertical space and hid the Portamento Mode row at 500 px.
+        for key in ("modulation", "portamento_time"):
+            self._midi_only_parameter_row(mod, specs[key], compact=True)
         self._parameter_row(mod, specs["portamento_amount"], compact=True)
         self._parameter_row(mod, specs["portamento_mode"], compact=True)
         portamento_mode_combo = getattr(self, "combo_portamento_mode", None)
