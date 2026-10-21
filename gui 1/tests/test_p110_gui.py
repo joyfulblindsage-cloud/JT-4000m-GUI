@@ -724,4 +724,4 @@ def test_compact_controls_hide_numeric_readouts_but_keep_reset_buttons(app):
     scale = next(s for s in app._parameter_scales
                  if str(s.cget("orient")) == "horizontal")
     assert scale.cget("background") == "#42D9FF"
-    assert app._knobs["vca_attack"]._d == 44
+    assert app._knobs["vca_attack"]._d == 38
