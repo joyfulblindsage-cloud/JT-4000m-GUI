@@ -370,16 +370,14 @@ class Editor(tk.Tk):
         self.controls.bind("<Configure>", self._on_synth_resize)
         for col in range(12):
             self.controls.grid_columnconfigure(col, weight=1, uniform="synth-col")
-        # P1.54: all three SYNTH rows share one uniform sizing group. Panel
-        # widths remain controlled by column spans, while row heights are equal
-        # and the available workspace is distributed evenly across the rows.
-        # This prevents FILTER or either lower row from becoming a different
-        # visual height just because its contents request less space.
+        # P1.57: the envelope row is the primary control surface and needs
+        # twice the vertical space of the oscillator and utility rows.
+        # Do not use a uniform row group: it overrides the intended 1:2:1
+        # allocation and clips ADSR controls at common window heights.
         self._synth_row_height_px = 1
         self._synth_row_remainder_px = 0
-        for row in range(3):
-            self.controls.grid_rowconfigure(
-                row, weight=1, minsize=0, uniform="synth-row")
+        for row, weight in enumerate((1, 2, 1)):
+            self.controls.grid_rowconfigure(row, weight=weight, minsize=0)
 
         self.section_labels: dict[str, tk.Label] = {}
         self.reset_buttons: dict[str, tuple[tk.Button, tk.Label]] = {}
