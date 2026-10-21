@@ -750,8 +750,8 @@ class Editor(tk.Tk):
         bindings, model state, or MIDI behavior.
         """
         row = tk.Frame(parent, bg="#131D2B")
-        row.pack(fill="x", pady=(0, 4))
-        width, height = 112, 24
+        row.pack(fill="x", pady=0)
+        width, height = 136, 24
         canvas = tk.Canvas(
             row, width=width, height=height, bg="#0D1521",
             highlightthickness=1, highlightbackground="#2A3A4F")
