@@ -118,6 +118,37 @@ def main() -> int:
             outside = [w for w in visible if w.get("outside_window")]
             clipped = [w for w in visible if w.get("clipped_by_ancestors")]
 
+            # Critical ADSR controls are a release gate, unlike low-priority
+            # decorative/read-only content. Check the knob, its label and reset
+            # affordance separately so ancestor clipping cannot silently pass.
+            critical_keys = (
+                "vca_attack", "vca_decay", "vca_sustain", "vca_release",
+                "vcf_attack", "vcf_decay", "vcf_sustain", "vcf_release",
+                "filter_env_amount",
+            )
+            critical_records = []
+            for key in critical_keys:
+                knob = app._knobs.get(key)
+                label = app.section_labels.get(key)
+                reset_pair = app.reset_buttons.get(key)
+                critical_widgets = [("knob", knob), ("label", label)]
+                if reset_pair:
+                    critical_widgets.append(("reset", reset_pair[0]))
+                for part, widget in critical_widgets:
+                    if widget is None:
+                        failures.append(f"{width}x{height}: missing critical {part} for {key}")
+                        continue
+                    record = widget_record(widget, app)
+                    record["parameter"] = key
+                    record["role"] = part
+                    critical_records.append(record)
+                    if not record.get("mapped"):
+                        failures.append(f"{width}x{height}: critical {part} for {key} is not mapped")
+                    if record.get("outside_window"):
+                        failures.append(f"{width}x{height}: critical {part} for {key} is outside window")
+                    if record.get("clipped_by_ancestors"):
+                        failures.append(f"{width}x{height}: critical {part} for {key} is clipped by an ancestor")
+
             # Crop to the actual application window, not the full virtual desktop.
             left, top, right, bottom = bounds(app)
             screenshot = args.output / f"ui-{width}x{height}.png"
@@ -131,6 +162,7 @@ def main() -> int:
                 "widgets_outside_window": outside,
                 "widgets_clipped_by_ancestors_count": len(clipped),
                 "widgets_clipped_by_ancestors": clipped,
+                "critical_adsr_controls": critical_records,
                 "widgets": widgets,
             })
 
@@ -157,6 +189,7 @@ def main() -> int:
             "widget_geometry_is_recorded": True,
             "out_of_window_widgets_are_reported_not_yet_fatal": True,
             "ancestor_clipping_is_reported_not_yet_fatal": True,
+            "critical_adsr_controls_must_be_mapped_and_unclipped": True,
             "screenshots_are_cropped_to_application_window": True,
         },
         "failures": failures,
