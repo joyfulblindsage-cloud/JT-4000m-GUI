@@ -437,15 +437,16 @@ class Editor(tk.Tk):
             on_segment=lambda k, n: self._env_drag("vcf", k, n))
         self.vcf_env_view.pack(fill="both", expand=True, anchor="center")
         self._bind_env_release(self.vcf_env_view)
-        # Keep the four ADSR stages aligned and the amount control adjacent.
+        # Keep all five editable VCF-envelope controls on one stable row.
+        # The second-row variant clipped the Amount knob at the baseline
+        # 900x700 window once the envelope graph and panel padding were counted.
         vcf_adsr = tk.Frame(vcf, bg="#131D2B")
         vcf_adsr.pack(fill="both", expand=True)
         self._envelope_adsr_frames["vcf"] = vcf_adsr
         for col, key in enumerate(("vcf_attack", "vcf_decay", "vcf_sustain", "vcf_release")):
-            self._parameter_knob_column(vcf_adsr, specs[key], col=col, diameter=34)
-        vcf_adsr.grid_columnconfigure(4, weight=1, uniform="adsr")
+            self._parameter_knob_column(vcf_adsr, specs[key], col=col, diameter=30)
         self._vcf_amount_column = self._parameter_knob_column(
-            vcf_adsr, specs["filter_env_amount"], col=0, row=1,
+            vcf_adsr, specs["filter_env_amount"], col=4, row=0,
             diameter=26, label_text="Amt")
 
         _, mix = self._synth_box(
@@ -677,18 +678,9 @@ class Editor(tk.Tk):
                 except tk.TclError:
                     pass
 
-        # At full height, give Filter Envelope Amount its own compact row under
-        # Attack. In short workspaces, the graphs are hidden and all five knobs
-        # share one row so no editable parameter is pushed below the panel.
-        amount_column = getattr(self, "_vcf_amount_column", None)
-        if amount_column is not None:
-            try:
-                if compact_height:
-                    amount_column.grid_configure(row=0, column=4)
-                else:
-                    amount_column.grid_configure(row=1, column=0)
-            except tk.TclError:
-                pass
+        # The five VCF controls stay on one row at every supported height.
+        # This avoids geometry-manager jumps and keeps Filter Envelope Amount
+        # inside its panel when the response graph is visible.
 
         compact = width < 1180
         label_width = 8 if width < 1000 else (9 if compact else 13)
