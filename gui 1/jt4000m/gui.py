@@ -574,7 +574,7 @@ class Editor(tk.Tk):
             knob = getattr(self, "_knobs", {}).get(key)
             if knob is not None:
                 try:
-                    knob.configure(height=52 if compact_height else 78)
+                    knob.configure(height=46 if compact_height else 78)
                 except tk.TclError:
                     pass
 
