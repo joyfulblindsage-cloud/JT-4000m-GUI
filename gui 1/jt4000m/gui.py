@@ -456,11 +456,14 @@ class Editor(tk.Tk):
         self._parameter_row(ring_controls, specs["ring_mod_toggle"], compact=True,
                             grid=True, row=0, col=0, label_width=4)
         self.section_labels["ring_mod_toggle"].configure(text="Ring")
-        self.reset_buttons["ring_mod_toggle"][0].configure(width=1, padx=0)
+        self.reset_buttons["ring_mod_toggle"][0].configure(
+            width=1, padx=0, pady=0, font=("TkDefaultFont", 7))
         self._parameter_row(ring_controls, specs["ring_mod_amount"], compact=True,
                             grid=True, row=0, col=1, label_width=5)
+        self.reset_buttons["ring_mod_amount"][0].configure(
+            width=1, padx=0, pady=0, font=("TkDefaultFont", 7))
         self._ring_mod_amount_scale = self._parameter_scales[-1]
-        self._ring_mod_amount_scale.configure(length=38)
+        self._ring_mod_amount_scale.configure(length=30)
         ring_controls.grid_columnconfigure(0, weight=1, uniform="ring-controls")
         ring_controls.grid_columnconfigure(1, weight=1, uniform="ring-controls")
 
@@ -485,8 +488,14 @@ class Editor(tk.Tk):
         live_controls.pack(fill="x")
         self._midi_only_parameter_row(live_controls, specs["modulation"], compact=True,
                                       grid=True, row=0, col=0)
+        self.section_labels["modulation"].configure(text="Mod", width=4)
+        self.reset_buttons["modulation"][0].configure(
+            width=1, padx=0, pady=0, font=("TkDefaultFont", 7))
         self._midi_only_parameter_row(live_controls, specs["portamento_time"], compact=True,
                                       grid=True, row=0, col=1)
+        self.section_labels["portamento_time"].configure(text="Time", width=4)
+        self.reset_buttons["portamento_time"][0].configure(
+            width=1, padx=0, pady=0, font=("TkDefaultFont", 7))
         live_controls.grid_columnconfigure(0, weight=1, uniform="portamento-live")
         live_controls.grid_columnconfigure(1, weight=1, uniform="portamento-live")
         self._parameter_row(mod, specs["portamento_amount"], compact=True)
@@ -1053,7 +1062,7 @@ class Editor(tk.Tk):
                         pady=0 if compact else 2)
         if grid:
             line.grid(row=row, column=col, sticky="ew",
-                      padx=(0, 4 if compact else 10), pady=0 if compact else 3)
+                      padx=(0, 1 if compact else 10), pady=0 if compact else 3)
         else:
             line.pack(fill="x", pady=0 if compact else 3)
         # Enum controls already display their selected option in the combobox;
@@ -1062,7 +1071,7 @@ class Editor(tk.Tk):
         label = tk.Label(line, text=_row_label(spec, self.developer_var.get()), bg="#131D2B",
                          fg="#A8BDD3",
                          width=label_width if label_width is not None else (8 if compact else 12),
-                         anchor="w")
+                         anchor="w", font=("TkDefaultFont", 8 if compact else 9))
         if not has_enum_options:
             label.pack(side="left")
         self.section_labels[spec.key] = label
@@ -1148,7 +1157,7 @@ class Editor(tk.Tk):
 
         knob = Knob(line, label="", minimum=spec.minimum,
                     maximum=spec.maximum, default_raw=spec.default,
-                    diameter=30 if compact else 54,
+                    diameter=26 if compact else 54,
                     show_entry=False,
                     on_gesture_start=lambda key=spec.key: self._begin_parameter_drag(key),
                     on_gesture_end=lambda key=spec.key: self._end_parameter_drag(key),
@@ -1190,7 +1199,7 @@ class Editor(tk.Tk):
                       else f"{_synth_label(spec)} · CC {spec.cc} · live only")
         label = tk.Label(
             line, text=label_text,
-            bg="#131D2B", fg="#A8BDD3", width=7 if grid else (13 if compact else 16), anchor="w",
+            bg="#131D2B", fg="#A8BDD3", width=5 if grid else (13 if compact else 16), anchor="w",
             font=("TkDefaultFont", 7 if grid else (8 if compact else 9)),
         )
         label.pack(side="left")
