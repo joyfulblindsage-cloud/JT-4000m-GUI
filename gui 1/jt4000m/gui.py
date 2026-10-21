@@ -373,7 +373,8 @@ class Editor(tk.Tk):
         # Give the bottom row a little extra vertical budget: it contains
         # seven compact LFO/MIX/PORTAMENTO controls and must not rely on child
         # widgets overflowing their panel. Keep the upper rows flexible too.
-        row_weights = (1.0, 1.0, 1.22)
+        # Tk's grid row weights are integers; 5:5:6 gives the bottom row 20% more share.
+        row_weights = (5, 5, 6)
         self._synth_row_height_px = 1
         self._synth_row_remainder_px = 0
         for row, weight in enumerate(row_weights):
