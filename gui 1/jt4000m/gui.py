@@ -649,15 +649,10 @@ class Editor(tk.Tk):
         # not the full controls workspace. The latter is taller than 300 px at
         # every target window size, even when the bottom-row panels are clipped.
         graph_slots = getattr(self, "_envelope_graph_slots", {})
-        panel_heights = [
-            slot.master.winfo_height() for slot in graph_slots.values()
-            if slot.winfo_exists()
-        ]
-        envelope_panel_height = min(panel_heights, default=height // 3)
-        # Account for the panel's header and inner padding: at 900x700 the
-        # available inner height is below the outer row height but still enough
-        # for a short graph and the two VCF knob rows.
-        compact_height = envelope_panel_height < 125
+        # The SYNTH workspace is about 100 px shorter than the top-level
+        # window. Below 550 px of workspace height, use the one-row VCF knob
+        # layout; at 900x700 the graph and the separate Amount row fit.
+        compact_height = height < 550
 
         # At short module heights, prioritize editable ADSR controls over the
         # visualization. Restore the graph only when its panel has room again.
