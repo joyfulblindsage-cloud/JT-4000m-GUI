@@ -12,7 +12,7 @@ Each run uploads the `JT4000M-UI-Visual-Review` artifact, containing PNG screens
 ## Reading the report
 
 - `failures` currently covers failure to reach the requested window dimensions.
-- `widgets_outside_window` and `widgets_clipped_by_ancestors` are diagnostic lists for general widgets. Border/padding geometry can create small apparent overlaps; the ancestor check ignores overflows of 2 px or less. The ADSR and LFO control-specific checks are hard failures if a critical control or reset affordance is unmapped, outside the window, or clipped by an ancestor.
+- `widgets_outside_window` and `widgets_clipped_by_ancestors` are diagnostic lists for general widgets. Border/padding geometry can create small apparent overlaps; the ancestor check ignores overflows of 2 px or less. The ADSR, LFO, MIX/RING, and MOD/PORTAMENTO control-specific checks are hard failures if a critical control or reset affordance is unmapped, outside the window, or clipped by an ancestor.
 - These are automated geometry/screenshot artifacts, not a pixel-perfect golden-image test. Font rendering can vary across environments.
 
 ## Local run
