@@ -549,11 +549,20 @@ class Editor(tk.Tk):
         self._synth_row_height_px = max(1, height // 3)
         self._synth_row_remainder_px = height - 3 * self._synth_row_height_px
 
-        # At short heights, prioritize directly editable ADSR controls over
-        # the envelope visualization. The graph returns above the controls as
-        # soon as enough vertical space is available.
-        compact_height = height < 300
-        for key, graph_slot in getattr(self, "_envelope_graph_slots", {}).items():
+        # Decide compactness from the envelope module's own allocated height,
+        # not the full controls workspace. The latter is taller than 300 px at
+        # every target window size, even when the bottom-row panels are clipped.
+        graph_slots = getattr(self, "_envelope_graph_slots", {})
+        panel_heights = [
+            slot.master.winfo_height() for slot in graph_slots.values()
+            if slot.winfo_exists()
+        ]
+        envelope_panel_height = min(panel_heights, default=height // 3)
+        compact_height = envelope_panel_height < 190
+
+        # At short module heights, prioritize editable ADSR controls over the
+        # visualization. Restore the graph only when its panel has room again.
+        for key, graph_slot in graph_slots.items():
             adsr_frame = self._envelope_adsr_frames[key]
             if compact_height and graph_slot.winfo_manager():
                 graph_slot.pack_forget()
