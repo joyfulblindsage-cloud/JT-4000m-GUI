@@ -370,11 +370,10 @@ class Editor(tk.Tk):
         self.controls.bind("<Configure>", self._on_synth_resize)
         for col in range(12):
             self.controls.grid_columnconfigure(col, weight=1, uniform="synth-col")
-        # P1.54: all three SYNTH rows share one uniform sizing group. Panel
-        # widths remain controlled by column spans, while row heights are equal
-        # and the available workspace is distributed evenly across the rows.
-        # This prevents FILTER or either lower row from becoming a different
-        # visual height just because its contents request less space.
+        # Keep the established equal-row grid contract. Uniform sizing is
+        # intentional: it preserves the visual rhythm of the SYNTH workspace.
+        # Compact-height behavior is handled inside the envelope panels instead
+        # of reallocating the outer grid and destabilizing other modules.
         self._synth_row_height_px = 1
         self._synth_row_remainder_px = 0
         for row in range(3):
@@ -419,32 +418,39 @@ class Editor(tk.Tk):
         # Row 2 widths are VCA : VCF : ARP = 2:2:1 (5:5:2 grid columns).
         # Envelope graphs and ADSR controls each receive half the module height.
         _, vca = self._synth_box(self.controls, "VCA ENVELOPE", 1, 0, columnspan=5)
-        vca_graph_slot = tk.Frame(vca, bg="#131D2B")
-        vca_graph_slot.pack(fill="both", expand=True, pady=(0, 2))
+        vca_graph_slot = tk.Frame(vca, bg="#131D2B", height=54)
+        vca_graph_slot.pack(fill="x", expand=False, pady=(0, 1))
+        vca_graph_slot.pack_propagate(False)
+        self._envelope_graph_slots = {"vca": vca_graph_slot}
         self.vca_env_view = EnvelopeView(
-            vca_graph_slot, title="", width=360, height=76,
+            vca_graph_slot, title="", width=360, height=52,
             on_segment=lambda k, n: self._env_drag("vca", k, n))
         self.vca_env_view.pack(fill="both", expand=True, anchor="center")
         self._bind_env_release(self.vca_env_view)
         vca_adsr = tk.Frame(vca, bg="#131D2B")
         vca_adsr.pack(fill="both", expand=True)
+        self._envelope_adsr_frames = {"vca": vca_adsr}
         for col, key in enumerate(("vca_attack", "vca_decay", "vca_sustain", "vca_release")):
             self._parameter_knob_column(vca_adsr, specs[key], col=col)
 
         _, vcf = self._synth_box(self.controls, "VCF ENVELOPE", 1, 5, columnspan=5)
-        vcf_graph_slot = tk.Frame(vcf, bg="#131D2B")
-        vcf_graph_slot.pack(fill="both", expand=True, pady=(0, 2))
+        vcf_graph_slot = tk.Frame(vcf, bg="#131D2B", height=54)
+        vcf_graph_slot.pack(fill="x", expand=False, pady=(0, 1))
+        vcf_graph_slot.pack_propagate(False)
+        self._envelope_graph_slots["vcf"] = vcf_graph_slot
         self.vcf_env_view = EnvelopeView(
-            vcf_graph_slot, title="", width=360, height=76,
+            vcf_graph_slot, title="", width=360, height=52,
             on_segment=lambda k, n: self._env_drag("vcf", k, n))
         self.vcf_env_view.pack(fill="both", expand=True, anchor="center")
         self._bind_env_release(self.vcf_env_view)
-        # VCF amount remains with the ADSR controls in the lower half.
+        # Keep all five filter-envelope controls in one compact control band;
+        # a separate amount row needlessly increases the panel's minimum height.
         vcf_adsr = tk.Frame(vcf, bg="#131D2B")
         vcf_adsr.pack(fill="both", expand=True)
+        self._envelope_adsr_frames["vcf"] = vcf_adsr
         for col, key in enumerate(("vcf_attack", "vcf_decay", "vcf_sustain", "vcf_release")):
             self._parameter_knob_column(vcf_adsr, specs[key], col=col)
-        self._parameter_row(vcf, specs["filter_env_amount"])
+        self._parameter_knob_column(vcf_adsr, specs["filter_env_amount"], col=4)
 
         _, arp = self._synth_box(self.controls, "ARPEGGIATOR", 1, 10, columnspan=2)
         self._build_arpeggiator_panel(arp)
@@ -542,6 +548,35 @@ class Editor(tk.Tk):
         # performs the actual allocation and keeps all three rows the same size.
         self._synth_row_height_px = max(1, height // 3)
         self._synth_row_remainder_px = height - 3 * self._synth_row_height_px
+
+        # Decide compactness from the envelope module's own allocated height,
+        # not the full controls workspace. The latter is taller than 300 px at
+        # every target window size, even when the bottom-row panels are clipped.
+        graph_slots = getattr(self, "_envelope_graph_slots", {})
+        panel_heights = [
+            slot.master.winfo_height() for slot in graph_slots.values()
+            if slot.winfo_exists()
+        ]
+        envelope_panel_height = min(panel_heights, default=height // 3)
+        compact_height = envelope_panel_height < 190
+
+        # At short module heights, prioritize editable ADSR controls over the
+        # visualization. Restore the graph only when its panel has room again.
+        for key, graph_slot in graph_slots.items():
+            adsr_frame = self._envelope_adsr_frames[key]
+            if compact_height and graph_slot.winfo_manager():
+                graph_slot.pack_forget()
+            elif not compact_height and not graph_slot.winfo_manager():
+                graph_slot.pack(fill="x", expand=False, before=adsr_frame, pady=(0, 1))
+        for key in ("vca_attack", "vca_decay", "vca_sustain", "vca_release",
+                    "vcf_attack", "vcf_decay", "vcf_sustain", "vcf_release",
+                    "filter_env_amount"):
+            knob = getattr(self, "_knobs", {}).get(key)
+            if knob is not None:
+                try:
+                    knob.configure(height=46 if compact_height else 78)
+                except tk.TclError:
+                    pass
 
         compact = width < 1180
         label_width = 8 if width < 1000 else (9 if compact else 13)
@@ -1147,11 +1182,16 @@ class Editor(tk.Tk):
         column.grid(row=0, column=col, sticky="nsew", padx=1, pady=1)
         parent.grid_columnconfigure(col, weight=1, uniform="adsr")
 
+        # Put Reset in the header beside the parameter name, not beneath
+        # the knob. The old footer consumed a full extra line and was the first
+        # critical element clipped at short window heights.
+        header = tk.Frame(column, bg="#131D2B")
+        header.pack(fill="x", pady=(0, 1))
         segment_label = spec.key.rsplit("_", 1)[-1].capitalize()
-        label = tk.Label(column, text=segment_label,
+        label = tk.Label(header, text=segment_label,
                          bg="#131D2B", fg="#A8BDD3", anchor="center",
                          font=("TkDefaultFont", 8))
-        label.pack(fill="x", pady=(0, 1))
+        label.pack(side="left", fill="x", expand=True)
         self.section_labels[spec.key] = label
 
         var = tk.IntVar(value=spec.default)
@@ -1171,12 +1211,10 @@ class Editor(tk.Tk):
         self._knobs[spec.key] = knob
         knob.set_value(spec.default, self._formatted(spec.key, spec.default))
 
-        footer = tk.Frame(column, bg="#131D2B")
-        footer.pack(fill="x")
-        value_label = tk.Label(footer, textvariable=value, bg="#131D2B", fg="#F3F7FF",
+        value_label = tk.Label(header, textvariable=value, bg="#131D2B", fg="#F3F7FF",
                                width=6, anchor="center", font=("TkDefaultFont", 8))
         # Keep a reference for model synchronization, but do not pack a numeric readout.
-        reset = tk.Button(footer, text="↺", width=2, relief="flat",
+        reset = tk.Button(header, text="↺", width=2, relief="flat",
                           bg="#131D2B", fg="#8CA2BA", highlightthickness=0,
                           bd=0, command=lambda key=spec.key: self.reset_one(key))
         reset.pack(side="right")
