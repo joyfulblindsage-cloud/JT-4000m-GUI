@@ -359,71 +359,64 @@ class Editor(tk.Tk):
         return box, inner
 
     def _build_synth_tab(self, frame) -> None:
-        """Build the reference layout: 3 panels / 2 envelopes / 4 modules.
+        """Build a balanced three-row synth workspace.
 
         Row 1: OSC 1, OSC 2, FILTER.
-        Row 2: VCA Envelope and VCF Envelope, each with graph + ADSR.
-        Row 3: LFO 1, LFO 2, MIX / RING, MOD / PORTAMENTO.
+        Row 2: VCA Envelope, VCF Envelope, MIX / RING.
+        Row 3: LFO 1, LFO 2, MOD / PORTAMENTO.
         """
         self.controls = tk.Frame(frame, bg="#0B1018")
         self.controls.pack(fill="both", expand=True, padx=2, pady=2)
         self.controls.bind("<Configure>", self._on_synth_resize)
         for col in range(12):
             self.controls.grid_columnconfigure(col, weight=1, uniform="synth-col")
-        # Keep the established equal-row grid contract. Uniform sizing is
-        # intentional: it preserves the visual rhythm of the SYNTH workspace.
-        # Compact-height behavior is handled inside the envelope panels instead
-        # of reallocating the outer grid and destabilizing other modules.
+        # Equal row weights keep the three-row workspace predictable;
+        # each panel adapts internally to its allocated height.
+        for row in range(3):
+            self.controls.grid_rowconfigure(row, weight=1, minsize=0, uniform="synth-row")
         self._synth_row_height_px = 1
         self._synth_row_remainder_px = 0
-        for row in range(3):
-            self.controls.grid_rowconfigure(
-                row, weight=1, minsize=0, uniform="synth-row")
 
         self.section_labels: dict[str, tk.Label] = {}
         self.reset_buttons: dict[str, tuple[tk.Button, tk.Label]] = {}
         specs = {spec.key: spec for spec in PARAMETERS}
         self.wave_phase_var = tk.StringVar(value="")
 
-        # Row 1 — oscillators and filter.
+        # Row 1 — equally sized oscillator and filter panels.
         _, osc1 = self._synth_box(
-            self.controls, "OSC 1", 0, 0, columnspan=4, compact=True)
+            self.controls, "OSC 1", 0, 0, columnspan=4, compact=False)
         self._build_oscillator_wave_row(osc1, specs["osc1_wave"], "osc1_wave", "OSC1")
         for key in ("osc1_pwm_fm", "osc1_coarse", "osc1_fine"):
-            self._parameter_row(osc1, specs[key], compact=True)
+            self._parameter_row(osc1, specs[key], compact=True, row_pady=4)
 
         _, osc2 = self._synth_box(
-            self.controls, "OSC 2", 0, 4, columnspan=4, compact=True)
+            self.controls, "OSC 2", 0, 4, columnspan=4, compact=False)
         self._build_oscillator_wave_row(osc2, specs["osc2_wave"], "osc2_wave", "OSC2")
         for key in ("osc2_pwm", "osc2_coarse", "osc2_fine"):
-            self._parameter_row(osc2, specs[key], compact=True)
+            self._parameter_row(osc2, specs[key], compact=True, row_pady=4)
 
         _, filt = self._synth_box(
-            self.controls, "FILTER", 0, 8, columnspan=4, compact=True)
-        # Filter gives half the panel to the graph and a quarter to each control.
+            self.controls, "FILTER", 0, 8, columnspan=4, compact=False)
+        # Keep the response graph compact so Cutoff and Resonance have room.
         filter_layout = tk.Frame(filt, bg="#131D2B")
         filter_layout.pack(fill="both", expand=True)
-        filter_layout.grid_columnconfigure(0, weight=1)
-        for row, weight in enumerate((2, 1, 1)):
-            filter_layout.grid_rowconfigure(row, weight=weight, minsize=0)
-        graph_slot = tk.Frame(filter_layout, bg="#131D2B")
-        graph_slot.grid(row=0, column=0, sticky="nsew", pady=(0, 1))
-        self.filter_view = FilterView(graph_slot, width=300, height=72)
+        graph_slot = tk.Frame(filter_layout, bg="#131D2B", height=30)
+        graph_slot.pack(fill="x", expand=False, pady=(0, 2))
+        graph_slot.pack_propagate(False)
+        self.filter_view = FilterView(graph_slot, width=300, height=30)
         self.filter_view.pack(fill="both", expand=True, padx=1)
-        for row, key in enumerate(("filter_cutoff", "filter_resonance"), start=1):
-            control_slot = tk.Frame(filter_layout, bg="#131D2B")
-            control_slot.grid(row=row, column=0, sticky="nsew", pady=0)
-            self._parameter_row(control_slot, specs[key], compact=True)
+        for key in ("filter_cutoff", "filter_resonance"):
+            self._parameter_row(filter_layout, specs[key], compact=True, row_pady=2)
 
-        # Row 2 widths are VCA : VCF : ARP = 2:2:1 (5:5:2 grid columns).
-        # Envelope graphs and ADSR controls each receive half the module height.
-        _, vca = self._synth_box(self.controls, "VCA ENVELOPE", 1, 0, columnspan=5)
-        vca_graph_slot = tk.Frame(vca, bg="#131D2B", height=54)
+        # Row 2 — two related envelopes and the smaller MIX / RING module.
+        _, vca = self._synth_box(
+            self.controls, "VCA ENVELOPE", 1, 0, columnspan=4)
+        vca_graph_slot = tk.Frame(vca, bg="#131D2B", height=24)
         vca_graph_slot.pack(fill="x", expand=False, pady=(0, 1))
         vca_graph_slot.pack_propagate(False)
         self._envelope_graph_slots = {"vca": vca_graph_slot}
         self.vca_env_view = EnvelopeView(
-            vca_graph_slot, title="", width=360, height=52,
+            vca_graph_slot, title="", width=300, height=22,
             on_segment=lambda k, n: self._env_drag("vca", k, n))
         self.vca_env_view.pack(fill="both", expand=True, anchor="center")
         self._bind_env_release(self.vca_env_view)
@@ -433,66 +426,98 @@ class Editor(tk.Tk):
         for col, key in enumerate(("vca_attack", "vca_decay", "vca_sustain", "vca_release")):
             self._parameter_knob_column(vca_adsr, specs[key], col=col)
 
-        _, vcf = self._synth_box(self.controls, "VCF ENVELOPE", 1, 5, columnspan=5)
-        vcf_graph_slot = tk.Frame(vcf, bg="#131D2B", height=54)
+        _, vcf = self._synth_box(
+            self.controls, "VCF ENVELOPE", 1, 4, columnspan=4)
+        vcf_graph_slot = tk.Frame(vcf, bg="#131D2B", height=20)
         vcf_graph_slot.pack(fill="x", expand=False, pady=(0, 1))
         vcf_graph_slot.pack_propagate(False)
         self._envelope_graph_slots["vcf"] = vcf_graph_slot
         self.vcf_env_view = EnvelopeView(
-            vcf_graph_slot, title="", width=360, height=52,
+            vcf_graph_slot, title="", width=300, height=18,
             on_segment=lambda k, n: self._env_drag("vcf", k, n))
         self.vcf_env_view.pack(fill="both", expand=True, anchor="center")
         self._bind_env_release(self.vcf_env_view)
-        # Keep all five filter-envelope controls in one compact control band;
-        # a separate amount row needlessly increases the panel's minimum height.
+        # Keep all five editable VCF-envelope controls on one stable row.
+        # The second-row variant clipped the Amount knob at the baseline
+        # 900x700 window once the envelope graph and panel padding were counted.
         vcf_adsr = tk.Frame(vcf, bg="#131D2B")
         vcf_adsr.pack(fill="both", expand=True)
         self._envelope_adsr_frames["vcf"] = vcf_adsr
         for col, key in enumerate(("vcf_attack", "vcf_decay", "vcf_sustain", "vcf_release")):
-            self._parameter_knob_column(vcf_adsr, specs[key], col=col)
-        self._parameter_knob_column(vcf_adsr, specs["filter_env_amount"], col=4)
+            self._parameter_knob_column(vcf_adsr, specs[key], col=col, diameter=30)
+        self._vcf_amount_column = self._parameter_knob_column(
+            vcf_adsr, specs["filter_env_amount"], col=4, row=0,
+            diameter=26, label_text="Amt")
 
-        _, arp = self._synth_box(self.controls, "ARPEGGIATOR", 1, 10, columnspan=2)
-        self._build_arpeggiator_panel(arp)
+        _, mix = self._synth_box(
+            self.controls, "MIX / RING", 1, 8, columnspan=4)
+        self._p160_panel_frames = {"mix_ring": mix}
+        # Balance and the Ring Mod switch share the first row; the Amount
+        # slider spans the second row so it remains usable in the narrow panel.
+        mix_controls = tk.Frame(mix, bg="#131D2B")
+        mix_controls.pack(fill="x", expand=True)
+        balance_slot = tk.Frame(mix_controls, bg="#131D2B")
+        balance_slot.grid(row=0, column=0, sticky="ew", padx=(0, 2))
+        self._knob_row(balance_slot, specs["osc_balance"], compact=True)
+        self.section_labels["osc_balance"].configure(text="Bal", width=4)
+        self.reset_buttons["osc_balance"][0].configure(
+            width=1, padx=0, pady=0, font=("TkDefaultFont", 7))
 
-        # Row 3 — four compact modules.
-        # LFOs use a compact two-column control grid so all editable controls
-        # remain available when the SYNTH workspace is only 500 px tall.
-        _, lfo1 = self._synth_box(self.controls, "LFO 1", 2, 0, columnspan=3)
+        self._parameter_row(mix_controls, specs["ring_mod_toggle"], compact=True,
+                            grid=True, row=0, col=1, label_width=4)
+        self.section_labels["ring_mod_toggle"].configure(text="Ring")
+        self.reset_buttons["ring_mod_toggle"][0].configure(
+            width=1, padx=0, pady=0, font=("TkDefaultFont", 7))
+        ring_amount_slot = tk.Frame(mix_controls, bg="#131D2B")
+        ring_amount_slot.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(2, 0))
+        self._parameter_row(ring_amount_slot, specs["ring_mod_amount"], compact=True)
+        self.section_labels["ring_mod_amount"].configure(text="Amt", width=4)
+        self.reset_buttons["ring_mod_amount"][0].configure(
+            width=1, padx=0, pady=0, font=("TkDefaultFont", 7))
+        self._ring_mod_amount_scale = self._parameter_scales[-1]
+        self._ring_mod_amount_scale.configure(length=74)
+        mix_controls.grid_columnconfigure(0, weight=1, uniform="mix-controls")
+        mix_controls.grid_columnconfigure(1, weight=1, uniform="mix-controls")
+        mix_controls.grid_rowconfigure(1, weight=1)
+
+        # Row 3 — keep the LFOs and modulation controls equally sized.
+        _, lfo1 = self._synth_box(
+            self.controls, "LFO 1", 2, 0, columnspan=4)
         self._build_lfo_panel(
             lfo1, specs["lfo1_wave"], "LFO1",
             (specs["lfo1_destination"], specs["lfo1_rate"], specs["lfo1_amount"]))
 
-        _, lfo2 = self._synth_box(self.controls, "LFO 2", 2, 3, columnspan=3)
+        _, lfo2 = self._synth_box(
+            self.controls, "LFO 2", 2, 4, columnspan=4)
         self._build_lfo_panel(
             lfo2, specs["lfo2_wave"], "LFO2",
             (specs["lfo2_rate"], specs["lfo2_amount"]),
             note="Destination not documented (CC 56 = LFO1)")
 
-        _, mix = self._synth_box(self.controls, "MIX / RING", 2, 6, columnspan=3)
-        self._knob_row(mix, specs["osc_balance"])
-        self._parameter_row(mix, specs["ring_mod_toggle"])
-        self._parameter_row(mix, specs["ring_mod_amount"])
-
-        _, mod = self._synth_box(self.controls, "MOD / PORTAMENTO", 2, 9, columnspan=3)
-        for spec in PARAMETERS:
-            if spec.offset is None:
-                if spec.key in ("modulation", "portamento_time"):
-                    self._midi_only_parameter_row(mod, spec)
-                else:
-                    lbl = tk.Label(mod, text=f"{_synth_label(spec)}: CC {spec.cc}",
-                                   bg="#131D2B", fg="#8CA2BA", anchor="w")
-                    lbl.pack(fill="x", pady=1)
-                    self.section_labels[spec.key] = lbl
-        self._parameter_row(mod, specs["portamento_amount"])
-        self._parameter_row(mod, specs["portamento_mode"])
+        _, mod = self._synth_box(
+            self.controls, "MOD / PORTAMENTO", 2, 8, columnspan=4)
+        self._p160_panel_frames["mod_portamento"] = mod
+        live_controls = tk.Frame(mod, bg="#131D2B")
+        live_controls.pack(fill="x")
+        self._midi_only_parameter_row(live_controls, specs["modulation"], compact=True,
+                                      grid=True, row=0, col=0)
+        self.section_labels["modulation"].configure(text="Mod", width=4)
+        self.reset_buttons["modulation"][0].configure(
+            width=1, padx=0, pady=0, font=("TkDefaultFont", 7))
+        self._midi_only_parameter_row(live_controls, specs["portamento_time"], compact=True,
+                                      grid=True, row=0, col=1)
+        self.section_labels["portamento_time"].configure(text="Time", width=4)
+        self.reset_buttons["portamento_time"][0].configure(
+            width=1, padx=0, pady=0, font=("TkDefaultFont", 7))
+        live_controls.grid_columnconfigure(0, weight=1, uniform="portamento-live")
+        live_controls.grid_columnconfigure(1, weight=1, uniform="portamento-live")
+        self._parameter_row(mod, specs["portamento_amount"], compact=True)
+        self._parameter_row(mod, specs["portamento_mode"], compact=True)
         portamento_mode_combo = getattr(self, "combo_portamento_mode", None)
         if portamento_mode_combo is not None:
             portamento_mode_combo.configure(state="disabled")
-        self.section_labels["portamento_mode"].configure(text="Portamento Mode (ON unverified)")
-        tk.Label(mod, text="Portamento ON/OFF mapping unverified",
-                 bg="#131D2B", fg="#8CA2BA", anchor="w", justify="left").pack(
-                     fill="x", pady=(1, 0))
+        self.section_labels["portamento_mode"].configure(
+            text="Portamento Mode (ON unverified)")
 
     def _build_lfo_panel(self, parent, wave_spec, caption: str, control_specs,
                          *, note: str | None = None) -> None:
@@ -557,16 +582,9 @@ class Editor(tk.Tk):
             reset_button.configure(width=1, font=("TkDefaultFont", 7), padx=0, pady=0)
             if spec.kind == "enum":
                 control.configure(width=7)
-            # The default parameter-row packing lets expanding controls claim
-            # the whole narrow cell before the reset is allocated. Repack the
-            # control after the reset so both stay mapped in compact windows.
-            reset_button.pack_forget()
-            control.pack_forget()
-            reset_button.pack(side="right", padx=0)
-            if spec.kind == "enum":
-                control.pack(side="left", fill="x", expand=True)
-            else:
-                control.pack(side="left", fill="x", expand=True, padx=2)
+            # Keep the parameter row's original geometry-manager ownership.
+            # Repacking children after construction caused Scale widgets to
+            # become unmapped in Tk's compact two-column layout.
             self._lfo_reset_buttons[spec.key] = reset_button
 
         if note:
@@ -626,8 +644,7 @@ class Editor(tk.Tk):
         # Real Tk Configure events include height; older tests/callers may
         # provide width-only event doubles. Fall back to the live workspace.
         height = max(1, getattr(event, "height", self.controls.winfo_height()))
-        # Track the equal share for diagnostics/tests. Tk's uniform row group
-        # performs the actual allocation and keeps all three rows the same size.
+        # The uniform row group gives all three panels the same nominal height.
         self._synth_row_height_px = max(1, height // 3)
         self._synth_row_remainder_px = height - 3 * self._synth_row_height_px
 
@@ -635,12 +652,10 @@ class Editor(tk.Tk):
         # not the full controls workspace. The latter is taller than 300 px at
         # every target window size, even when the bottom-row panels are clipped.
         graph_slots = getattr(self, "_envelope_graph_slots", {})
-        panel_heights = [
-            slot.master.winfo_height() for slot in graph_slots.values()
-            if slot.winfo_exists()
-        ]
-        envelope_panel_height = min(panel_heights, default=height // 3)
-        compact_height = envelope_panel_height < 190
+        # The SYNTH workspace is about 100 px shorter than the top-level
+        # window. Below 550 px of workspace height, use the one-row VCF knob
+        # layout; at 900x700 the graph and the separate Amount row fit.
+        compact_height = height < 550
 
         # At short module heights, prioritize editable ADSR controls over the
         # visualization. Restore the graph only when its panel has room again.
@@ -656,9 +671,18 @@ class Editor(tk.Tk):
             knob = getattr(self, "_knobs", {}).get(key)
             if knob is not None:
                 try:
-                    knob.configure(height=46 if compact_height else 78)
+                    if key == "filter_env_amount":
+                        knob.configure(height=26)
+                    elif key.startswith("vcf_"):
+                        knob.configure(height=34)
+                    else:
+                        knob.configure(height=38)
                 except tk.TclError:
                     pass
+
+        # The five VCF controls stay on one row at every supported height.
+        # This avoids geometry-manager jumps and keeps Filter Envelope Amount
+        # inside its panel when the response graph is visible.
 
         compact = width < 1180
         label_width = 8 if width < 1000 else (9 if compact else 13)
@@ -678,9 +702,16 @@ class Editor(tk.Tk):
                     scale.configure(length=slider_length)
             except tk.TclError:
                 pass
-        # LFO sliders share narrow two-column cells; shorten only those
-        # tracks to keep labels and reset affordances inside their cells.
-        lfo_slider_length = max(24, min(44, width // 24))
+        # Ring Mod Amount spans the MIX/RING panel's second row.
+        ring_scale = getattr(self, "_ring_mod_amount_scale", None)
+        if ring_scale is not None:
+            try:
+                ring_scale.configure(length=max(48, min(110, width // 12)))
+            except tk.TclError:
+                pass
+        # LFO controls use two-column cells; give the slider a little more
+        # travel while reserving space for the short label and reset button.
+        lfo_slider_length = max(40, min(72, width // 18))
         for scale in getattr(self, "_lfo_scales", ()):
             try:
                 scale.configure(length=lfo_slider_length)
@@ -705,7 +736,9 @@ class Editor(tk.Tk):
         # width for them. Reset buttons remain in each control row.
         for scale in getattr(self, "_midi_only_scales", {}).values():
             try:
-                scale.configure(length=max(65, min(130, width // 24)))
+                # Live-only Mod and Portamento Time share two equal columns;
+                # retain the reset affordance while giving the scale a usable track.
+                scale.configure(length=max(40, min(85, width // 20)))
             except tk.TclError:
                 pass
 
@@ -717,7 +750,7 @@ class Editor(tk.Tk):
         bindings, model state, or MIDI behavior.
         """
         row = tk.Frame(parent, bg="#131D2B")
-        row.pack(fill="x", pady=(0, 2))
+        row.pack(fill="x", pady=(0, 4))
         width, height = 136, 32
         canvas = tk.Canvas(
             row, width=width, height=height, bg="#0D1521",
@@ -1035,7 +1068,9 @@ class Editor(tk.Tk):
                 tile.start()
 
     def _parameter_row(self, parent, spec, *, grid: bool = False,
-                       row: int = 0, col: int = 0, compact: bool = False) -> None:
+                       row: int = 0, col: int = 0, compact: bool = False,
+                       label_width: int | None = None,
+                       row_pady: int | None = None) -> None:
         """One parameter line: label | control(s) | value | reset.
 
         P1.26 polish: fixed label width and consistent vertical rhythm keep
@@ -1046,17 +1081,26 @@ class Editor(tk.Tk):
                         pady=0 if compact else 2)
         if grid:
             line.grid(row=row, column=col, sticky="ew",
-                      padx=(0, 4 if compact else 10), pady=0 if compact else 3)
+                      padx=(0, 1 if compact else 10), pady=0 if compact else 3)
         else:
-            line.pack(fill="x", pady=0 if compact else 3)
+            pady = row_pady if row_pady is not None else (0 if compact else 3)
+            line.pack(fill="x", pady=pady)
         # Enum controls already display their selected option in the combobox;
         # omit the duplicate left label and separate value readout for them.
         has_enum_options = spec.kind == "enum" and bool(enum_options(spec.key))
         label = tk.Label(line, text=_row_label(spec, self.developer_var.get()), bg="#131D2B",
-                         fg="#A8BDD3", width=8 if compact else 12, anchor="w")
+                         fg="#A8BDD3",
+                         width=label_width if label_width is not None else (8 if compact else 12),
+                         anchor="w", font=("TkDefaultFont", 8 if compact else 9))
         if not has_enum_options:
             label.pack(side="left")
         self.section_labels[spec.key] = label
+        # Reserve reset space before adding an expandable scale/combobox. Tk's
+        # packer otherwise lets the expandable control consume the reset's cell.
+        reset = tk.Button(line, text="↺", width=2, relief="flat", bg="#131D2B", fg="#8CA2BA",
+                          highlightthickness=0, bd=0,
+                          command=lambda key=spec.key: self.reset_one(key))
+        reset.pack(side="right", padx=(2, 0))
         # Initial value = documented default; it is overwritten from the model
         # as soon as a bank is loaded (_sync_widgets_from_model).
         var = tk.IntVar(value=spec.default)
@@ -1100,13 +1144,10 @@ class Editor(tk.Tk):
                            anchor="e")
         # Numeric readouts stay registered for model sync but are not shown;
         # removing them gives sliders the horizontal room they need.
-        reset = tk.Button(line, text="↺", width=2, relief="flat", bg="#131D2B", fg="#8CA2BA",
-                          highlightthickness=0, bd=0,
-                          command=lambda key=spec.key: self.reset_one(key))
-        reset.pack(side="right", padx=(2, 0))
         self.reset_buttons[spec.key] = (reset, val_lbl)
 
-    def _knob_row(self, parent, spec, *, row: int = 0, col: int = 0) -> None:
+    def _knob_row(self, parent, spec, *, row: int = 0, col: int = 0,
+                  compact: bool = False) -> None:
         """P1.35 — one parameter line driven by the custom rotary Knob.
 
         Presentation-only alternative to ``_parameter_row`` (same contract as
@@ -1117,12 +1158,15 @@ class Editor(tk.Tk):
         single-undo-snapshot-per-gesture rule come for free.  No second
         parameter system is introduced; range/limits stay registry-driven.
         """
-        line = tk.Frame(parent, bg="#131D2B", padx=2, pady=2)
+        line = tk.Frame(parent, bg="#131D2B", padx=1 if compact else 2,
+                        pady=0 if compact else 2)
         # This layout stacks the MIX / RING controls with pack; use the same
         # manager for the knob row (mix's parent) to avoid pack/grid conflicts.
-        line.pack(fill="x", pady=3)
+        line.pack(fill="x", pady=0 if compact else 3)
         label = tk.Label(line, text=_row_label(spec, self.developer_var.get()),
-                         bg="#131D2B", fg="#A8BDD3", width=14, anchor="w")
+                         bg="#131D2B", fg="#A8BDD3",
+                         width=8 if compact else 14, anchor="w",
+                         font=("TkDefaultFont", 8 if compact else 9))
         label.pack(side="left")
         self.section_labels[spec.key] = label
 
@@ -1132,7 +1176,8 @@ class Editor(tk.Tk):
         self.value_vars[spec.key] = value
 
         knob = Knob(line, label="", minimum=spec.minimum,
-                    maximum=spec.maximum, default_raw=spec.default, diameter=54,
+                    maximum=spec.maximum, default_raw=spec.default,
+                    diameter=26 if compact else 54,
                     show_entry=False,
                     on_gesture_start=lambda key=spec.key: self._begin_parameter_drag(key),
                     on_gesture_end=lambda key=spec.key: self._end_parameter_drag(key),
@@ -1158,17 +1203,24 @@ class Editor(tk.Tk):
         self.vars[key].set(int(raw))
         self._scale_changed(key)
 
-    def _midi_only_parameter_row(self, parent, spec) -> None:
+    def _midi_only_parameter_row(self, parent, spec, *, compact: bool = False,
+                                  grid: bool = False, row: int = 0, col: int = 0) -> None:
         """Live CC control for parameters with no confirmed SysEx byte offset.
 
         These controls transmit CC only; they do not alter or dirty the saved
         patch because the editor cannot serialize their values into a bank.
         """
-        row = tk.Frame(parent, bg="#131D2B")
-        row.pack(fill="x", pady=2)
+        line = tk.Frame(parent, bg="#131D2B")
+        if grid:
+            line.grid(row=row, column=col, sticky="ew", padx=(0, 2), pady=0)
+        else:
+            line.pack(fill="x", pady=0 if compact else 2)
+        label_text = (f"{_synth_label(spec)} · CC {spec.cc}" if grid
+                      else f"{_synth_label(spec)} · CC {spec.cc} · live only")
         label = tk.Label(
-            row, text=f"{_synth_label(spec)} · CC {spec.cc} · live only",
-            bg="#131D2B", fg="#A8BDD3", width=16, anchor="w",
+            line, text=label_text,
+            bg="#131D2B", fg="#A8BDD3", width=5 if grid else (13 if compact else 16), anchor="w",
+            font=("TkDefaultFont", 7 if grid else (8 if compact else 9)),
         )
         label.pack(side="left")
         self.section_labels[spec.key] = label
@@ -1179,24 +1231,36 @@ class Editor(tk.Tk):
         self._midi_only_value_vars[spec.key] = value_var
         self._midi_only_values[spec.key] = spec.default
 
+        # Reserve the right-hand reset affordance before the expandable scale.
+        reset = tk.Button(
+            line, text="↺", width=2, relief="flat", bg="#131D2B", fg="#8CA2BA",
+            highlightthickness=0, bd=0,
+            command=lambda key=spec.key, default=spec.default:
+                self._midi_only_changed(key, default),
+        )
+        reset.pack(side="right", padx=(2, 0))
         scale = tk.Scale(
-            row, from_=spec.minimum, to=spec.maximum, orient="horizontal",
+            line, from_=spec.minimum, to=spec.maximum, orient="horizontal",
             variable=var, showvalue=False, resolution=1, bg="#42D9FF",
             fg="#B6C8DC", troughcolor="#0D1521", highlightthickness=0, bd=0,
-            sliderrelief="flat", sliderlength=20, width=16,
-            activebackground="#42D9FF", length=105,
+            sliderrelief="flat", sliderlength=16 if compact else 20,
+            width=12 if compact else 16,
+            activebackground="#42D9FF", length=78 if compact else 105,
             command=lambda raw, key=spec.key: self._midi_only_changed(
                 key, int(float(raw))),
         )
-        scale.pack(side="left", fill="x", expand=True, padx=5)
+        scale.pack(side="left", fill="x", expand=True, padx=2 if compact else 5)
         scale.bind("<ButtonPress-1>",
                    lambda _e, key=spec.key: self._begin_midi_only_drag(key))
         scale.bind("<ButtonRelease-1>",
                    lambda _e, key=spec.key: self._end_midi_only_drag(key))
         self._midi_only_scales[spec.key] = scale
-        value_label = tk.Label(row, textvariable=value_var, bg="#131D2B", fg="#F3F7FF",
+        value_label = tk.Label(line, textvariable=value_var, bg="#131D2B", fg="#F3F7FF",
                                width=4, anchor="e")
         # MIDI-only readout is intentionally hidden to keep the control row compact.
+        # A live-only CC has no saved patch value to restore, but its reset
+        # affordance can safely send the documented default CC value again.
+        self.reset_buttons[spec.key] = (reset, value_label)
 
     def _midi_only_changed(self, key: str, raw: int) -> None:
         if self._syncing:
@@ -1272,7 +1336,8 @@ class Editor(tk.Tk):
         reset.pack(anchor="center", pady=(1, 0))
         self.reset_buttons[spec.key] = (reset, val_lbl)
 
-    def _parameter_knob_column(self, parent, spec, *, col: int) -> None:
+    def _parameter_knob_column(self, parent, spec, *, col: int, row: int = 0,
+                               diameter: int = 38, label_text: str | None = None) -> tk.Frame:
         """Compact ADSR control: rotary knob, value and reset in one column.
 
         This is the same registry/model/MIDI/undo path as the former vertical
@@ -1280,7 +1345,7 @@ class Editor(tk.Tk):
         """
         column = tk.Frame(parent, bg="#131D2B", padx=2, pady=2,
                           highlightthickness=1, highlightbackground="#2A3A4F")
-        column.grid(row=0, column=col, sticky="nsew", padx=1, pady=1)
+        column.grid(row=row, column=col, sticky="nsew", padx=1, pady=1)
         parent.grid_columnconfigure(col, weight=1, uniform="adsr")
 
         # Put Reset in the header beside the parameter name, not beneath
@@ -1288,7 +1353,7 @@ class Editor(tk.Tk):
         # critical element clipped at short window heights.
         header = tk.Frame(column, bg="#131D2B")
         header.pack(fill="x", pady=(0, 1))
-        segment_label = spec.key.rsplit("_", 1)[-1].capitalize()
+        segment_label = label_text or spec.key.rsplit("_", 1)[-1].capitalize()
         label = tk.Label(header, text=segment_label,
                          bg="#131D2B", fg="#A8BDD3", anchor="center",
                          font=("TkDefaultFont", 8))
@@ -1302,7 +1367,7 @@ class Editor(tk.Tk):
 
         knob = Knob(
             column, label="", minimum=spec.minimum, maximum=spec.maximum,
-            diameter=44, show_entry=False, default_raw=spec.default,
+            diameter=diameter, show_entry=False, default_raw=spec.default,
             start_angle=180.0, sweep_degrees=180.0, angle_direction=-1,
             on_gesture_start=lambda key=spec.key: self._begin_parameter_drag(key),
             on_gesture_end=lambda key=spec.key: self._end_parameter_drag(key),
@@ -1320,6 +1385,7 @@ class Editor(tk.Tk):
                           bd=0, command=lambda key=spec.key: self.reset_one(key))
         reset.pack(side="right")
         self.reset_buttons[spec.key] = (reset, value_label)
+        return column
 
     def reset_one(self, key: str) -> None:
         """Reset a single parameter to its documented default value."""

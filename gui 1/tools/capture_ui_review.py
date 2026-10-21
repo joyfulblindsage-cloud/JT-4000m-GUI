@@ -175,6 +175,46 @@ def main() -> int:
                     if record.get("clipped_by_ancestors"):
                         failures.append(f"{width}x{height}: LFO {part} for {key} is clipped by an ancestor")
 
+            # MIX/RING and MOD/PORTAMENTO are release-critical too: compact
+            # controls and their reset affordances must remain visible.
+            critical_mix_mod_records = []
+            mix_mod_keys = (
+                "osc_balance", "ring_mod_toggle", "ring_mod_amount",
+                "modulation", "portamento_time", "portamento_amount",
+                "portamento_mode",
+            )
+            for key in mix_mod_keys:
+                label = app.section_labels.get(key)
+                reset_pair = app.reset_buttons.get(key)
+                combo = getattr(app, f"combo_{key}", None)
+                # Enum rows with options intentionally suppress the duplicate
+                # text label; their combobox is the visible control/label.
+                critical_widgets = []
+                if combo is not None:
+                    critical_widgets.append(("control", combo))
+                elif label is not None and label.winfo_manager():
+                    critical_widgets.append(("label", label))
+                if reset_pair:
+                    critical_widgets.append(("reset", reset_pair[0]))
+                if key in getattr(app, "_midi_only_scales", {}):
+                    critical_widgets.append(("control", app._midi_only_scales[key]))
+                if key in getattr(app, "_knobs", {}):
+                    critical_widgets.append(("control", app._knobs[key]))
+                for part, widget in critical_widgets:
+                    if widget is None:
+                        failures.append(f"{width}x{height}: missing MIX/MOD {part} for {key}")
+                        continue
+                    record = widget_record(widget, app)
+                    record["parameter"] = key
+                    record["role"] = part
+                    critical_mix_mod_records.append(record)
+                    if not record.get("mapped"):
+                        failures.append(f"{width}x{height}: MIX/MOD {part} for {key} is not mapped")
+                    if record.get("outside_window"):
+                        failures.append(f"{width}x{height}: MIX/MOD {part} for {key} is outside window")
+                    if record.get("clipped_by_ancestors"):
+                        failures.append(f"{width}x{height}: MIX/MOD {part} for {key} is clipped by an ancestor")
+
             # Crop to the actual application window, not the full virtual desktop.
             left, top, right, bottom = bounds(app)
             screenshot = args.output / f"ui-{width}x{height}.png"
@@ -190,6 +230,7 @@ def main() -> int:
                 "widgets_clipped_by_ancestors": clipped,
                 "critical_adsr_controls": critical_records,
                 "critical_lfo_controls": critical_lfo_records,
+                "critical_mix_mod_controls": critical_mix_mod_records,
                 "widgets": widgets,
             })
 
@@ -218,6 +259,7 @@ def main() -> int:
             "ancestor_clipping_is_reported_not_yet_fatal": True,
             "critical_adsr_controls_must_be_mapped_and_unclipped": True,
             "critical_lfo_controls_must_be_mapped_and_unclipped": True,
+            "critical_mix_mod_controls_must_be_mapped_and_unclipped": True,
             "screenshots_are_cropped_to_application_window": True,
         },
         "failures": failures,

@@ -531,8 +531,8 @@ def test_synth_workspace_matches_reference_layout_without_scrollbar(app):
         if child.winfo_manager() == "grid"
     }
     assert {(0, 0, 4), (0, 4, 4), (0, 8, 4),
-            (1, 0, 5), (1, 5, 5), (1, 10, 2),
-            (2, 0, 3), (2, 3, 3), (2, 6, 3), (2, 9, 3)} <= cells
+            (1, 0, 4), (1, 4, 4), (1, 8, 4),
+            (2, 0, 4), (2, 4, 4), (2, 8, 4)} <= cells
     assert app.current_tab.get() == "SYNTH"
     assert [app.controls.grid_rowconfigure(i)["weight"] for i in range(3)] == [1, 1, 1]
     assert [app.controls.grid_rowconfigure(i)["uniform"] for i in range(3)] == [
@@ -590,14 +590,17 @@ def test_all_three_synth_rows_share_equal_adaptive_height(app):
 
 
 @gui_test
-def test_arpeggiator_panel_documents_native_settings_without_fake_controls(app):
-    """ARP settings are visible, but unmapped device controls must not be faked."""
-    assert hasattr(app, "arp_panel")
-    labels = [child.cget("text") for child in app.arp_panel.winfo_children()
-              if isinstance(child, tk.Label)]
-    assert any("Native engine" in label for label in labels)
-    assert any("MIDI Start/Stop" in label for label in labels)
-    assert { "lfo2_wave", "lfo2_rate", "lfo2_amount" } <= set(app.vars)
+def test_arpeggiator_is_not_part_of_the_synth_workspace(app):
+    """The native ARP settings are deliberately omitted from the editor GUI."""
+    assert not hasattr(app, "arp_panel")
+    cells = {
+        (int(child.grid_info()["row"]), int(child.grid_info()["column"]),
+         int(child.grid_info().get("columnspan", 1)))
+        for child in app.controls.winfo_children()
+        if child.winfo_manager() == "grid"
+    }
+    assert (1, 8, 4) in cells  # MIX / RING occupies the former ARP area.
+    assert {"lfo2_wave", "lfo2_rate", "lfo2_amount"} <= set(app.vars)
     assert "lfo2_destination" not in app.vars
 
 
@@ -669,6 +672,18 @@ def test_redundant_parameter_labels_are_hidden_for_knobs_and_combos(app):
 
 
 @gui_test
+def test_vcf_filter_amount_stays_on_stable_row_at_supported_heights(app):
+    # A fixed five-control row avoids the second-row Amount knob being clipped
+    # at 900x700 once the graph and panel padding are included.
+    for height in (700, 500):
+        app.geometry(f"900x{height}+0+0")
+        app.update()
+        assert int(app._vcf_amount_column.grid_info()["row"]) == 0
+        assert int(app._vcf_amount_column.grid_info()["column"]) == 4
+        assert app._knobs["filter_env_amount"].winfo_ismapped()
+
+
+@gui_test
 def test_adsr_controls_use_compact_knobs_with_requested_arc(app):
     from jt4000m.widgets import Knob
 
@@ -683,6 +698,44 @@ def test_adsr_controls_use_compact_knobs_with_requested_arc(app):
             assert knob.minimum == BY_KEY[key].minimum
             assert knob.maximum == BY_KEY[key].maximum
             assert key in app.vars and key in app.value_vars
+
+
+@gui_test
+def test_mix_ring_uses_two_rows_with_full_width_amount_control(app):
+    """The Amount slider gets room without squeezing Balance and Ring switch."""
+    app.geometry("900x500+0+0")
+    app.update()
+    balance_slot = app._knobs["osc_balance"].master.master
+    ring_toggle_line = app.section_labels["ring_mod_toggle"].master
+    ring_amount_slot = app.section_labels["ring_mod_amount"].master.master
+    assert int(balance_slot.grid_info()["row"]) == 0
+    assert int(balance_slot.grid_info()["column"]) == 0
+    assert int(ring_toggle_line.grid_info()["row"]) == 0
+    assert int(ring_toggle_line.grid_info()["column"]) == 1
+    assert int(ring_amount_slot.grid_info()["row"]) == 1
+    assert int(ring_amount_slot.grid_info()["column"]) == 0
+    assert int(ring_amount_slot.grid_info()["columnspan"]) == 2
+    assert app._ring_mod_amount_scale.winfo_ismapped()
+    assert int(app._ring_mod_amount_scale.cget("length")) >= 48
+
+
+@gui_test
+def test_lfo_and_live_modulation_scales_keep_usable_travel(app):
+    """Two-column LFO/MOD cells should not reduce the slider to a tiny stub."""
+    app.geometry("900x500+0+0")
+    app.update()
+    assert app._lfo_scales
+    assert app._midi_only_scales
+    for scale in app._lfo_scales:
+        assert int(scale.cget("length")) >= 40
+        assert scale.winfo_ismapped()
+    for scale in app._midi_only_scales.values():
+        assert int(scale.cget("length")) >= 40
+        assert scale.winfo_ismapped()
+    for key in ("lfo1_rate", "lfo1_amount", "lfo2_rate", "lfo2_amount",
+                "modulation", "portamento_time"):
+        reset, _value = app.reset_buttons[key]
+        assert reset.winfo_exists()
 
 
 @gui_test
@@ -708,4 +761,4 @@ def test_compact_controls_hide_numeric_readouts_but_keep_reset_buttons(app):
     scale = next(s for s in app._parameter_scales
                  if str(s.cget("orient")) == "horizontal")
     assert scale.cget("background") == "#42D9FF"
-    assert app._knobs["vca_attack"]._d == 44
+    assert app._knobs["vca_attack"]._d == 38
