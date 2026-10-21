@@ -672,16 +672,15 @@ def test_redundant_parameter_labels_are_hidden_for_knobs_and_combos(app):
 
 
 @gui_test
-def test_vcf_filter_amount_uses_second_row_only_when_workspace_has_height(app):
-    app.geometry("900x700+0+0")
-    app.update()
-    assert int(app._vcf_amount_column.grid_info()["row"]) == 1
-    assert int(app._vcf_amount_column.grid_info()["column"]) == 0
-
-    app.geometry("900x500+0+0")
-    app.update()
-    assert int(app._vcf_amount_column.grid_info()["row"]) == 0
-    assert int(app._vcf_amount_column.grid_info()["column"]) == 4
+def test_vcf_filter_amount_stays_on_stable_row_at_supported_heights(app):
+    # A fixed five-control row avoids the second-row Amount knob being clipped
+    # at 900x700 once the graph and panel padding are included.
+    for height in (700, 500):
+        app.geometry(f"900x{height}+0+0")
+        app.update()
+        assert int(app._vcf_amount_column.grid_info()["row"]) == 0
+        assert int(app._vcf_amount_column.grid_info()["column"]) == 4
+        assert app._knobs["filter_env_amount"].winfo_ismapped()
 
 
 @gui_test
