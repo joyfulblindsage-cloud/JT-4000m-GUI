@@ -1180,7 +1180,7 @@ class Editor(tk.Tk):
         """
         line = tk.Frame(parent, bg="#131D2B")
         if grid:
-            line.grid(row=line, column=col, sticky="ew", padx=(0, 2), pady=0)
+            line.grid(row=row, column=col, sticky="ew", padx=(0, 2), pady=0)
         else:
             line.pack(fill="x", pady=0 if compact else 2)
         label_text = (f"{_synth_label(spec)} · CC {spec.cc}" if grid
