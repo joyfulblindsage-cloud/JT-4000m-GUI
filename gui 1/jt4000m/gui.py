@@ -460,12 +460,12 @@ class Editor(tk.Tk):
         # remain available when the SYNTH workspace is only 500 px tall.
         _, lfo1 = self._synth_box(self.controls, "LFO 1", 2, 0, columnspan=3)
         self._build_lfo_panel(
-            lfo1, specs["lfo1_wave"], "LFO1 Preview",
+            lfo1, specs["lfo1_wave"], "LFO1",
             (specs["lfo1_destination"], specs["lfo1_rate"], specs["lfo1_amount"]))
 
         _, lfo2 = self._synth_box(self.controls, "LFO 2", 2, 3, columnspan=3)
         self._build_lfo_panel(
-            lfo2, specs["lfo2_wave"], "LFO2 Preview",
+            lfo2, specs["lfo2_wave"], "LFO2",
             (specs["lfo2_rate"], specs["lfo2_amount"]),
             note="Destination not documented (CC 56 = LFO1)")
 
@@ -510,8 +510,6 @@ class Editor(tk.Tk):
             highlightthickness=1, highlightbackground="#2A3A4F")
         canvas.pack(side="left", padx=(0, 2))
         tile = WaveTile(canvas, self._update_wave_phase, width=width, height=height)
-        canvas.create_text(3, height - 3, text=caption, anchor="w", fill="#8CA2BA",
-                           font=("TkDefaultFont", 6, "bold"))
         tile_attr = "lfo1_tile" if wave_spec.key.startswith("lfo1") else "lfo2_tile"
         setattr(self, tile_attr, tile)
         self._parameter_row(wave_row, wave_spec, compact=True)
@@ -726,8 +724,6 @@ class Editor(tk.Tk):
             highlightthickness=1, highlightbackground="#2A3A4F")
         canvas.pack(side="left", padx=(0, 2))
         tile = WaveTile(canvas, self._update_wave_phase, width=width, height=height)
-        canvas.create_text(4, height - 4, text=caption, anchor="w", fill="#8CA2BA",
-                           font=("TkDefaultFont", 7, "bold"))
         if not hasattr(self, "_osc_tiles"):
             self._osc_tiles: dict[str, WaveTile] = {}
         self._osc_tiles[key] = tile
