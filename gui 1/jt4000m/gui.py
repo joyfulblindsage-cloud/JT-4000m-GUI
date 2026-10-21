@@ -474,25 +474,33 @@ class Editor(tk.Tk):
         # Preserve the established rotary control and model/MIDI gesture path,
         # but reduce its footprint so the two Ring Mod rows fit at 500 px.
         self._knob_row(mix, specs["osc_balance"], compact=True)
+        # Keep grid-managed siblings inside their own child frame: the
+        # surrounding MIX / RING panel uses pack() for its other rows.
+        ring_controls = tk.Frame(mix, bg="#131D2B")
+        ring_controls.pack(fill="x")
         # The two Ring Mod controls share a row so both remain visible at
         # the minimum supported height; normal parameter wiring is unchanged.
-        self._parameter_row(mix, specs["ring_mod_toggle"], compact=True,
+        self._parameter_row(ring_controls, specs["ring_mod_toggle"], compact=True,
                             grid=True, row=0, col=0)
-        self._parameter_row(mix, specs["ring_mod_amount"], compact=True,
+        self._parameter_row(ring_controls, specs["ring_mod_amount"], compact=True,
                             grid=True, row=0, col=1)
-        mix.grid_columnconfigure(0, weight=1, uniform="ring-controls")
-        mix.grid_columnconfigure(1, weight=1, uniform="ring-controls")
+        ring_controls.grid_columnconfigure(0, weight=1, uniform="ring-controls")
+        ring_controls.grid_columnconfigure(1, weight=1, uniform="ring-controls")
 
         _, mod = self._synth_box(self.controls, "MOD / PORTAMENTO", 2, 9, columnspan=3)
         self._p160_panel_frames["mod_portamento"] = mod
+        # Keep the grid-managed live CC row in a child frame; Portamento
+        # Amount and Mode continue to be packed as full-width rows below.
+        live_controls = tk.Frame(mod, bg="#131D2B")
+        live_controls.pack(fill="x")
         # Live-only CC controls share a compact row; saved-parameter controls
         # retain their own full-width rows below.
-        self._midi_only_parameter_row(mod, specs["modulation"], compact=True,
+        self._midi_only_parameter_row(live_controls, specs["modulation"], compact=True,
                                       grid=True, row=0, col=0)
-        self._midi_only_parameter_row(mod, specs["portamento_time"], compact=True,
+        self._midi_only_parameter_row(live_controls, specs["portamento_time"], compact=True,
                                       grid=True, row=0, col=1)
-        mod.grid_columnconfigure(0, weight=1, uniform="portamento-live")
-        mod.grid_columnconfigure(1, weight=1, uniform="portamento-live")
+        live_controls.grid_columnconfigure(0, weight=1, uniform="portamento-live")
+        live_controls.grid_columnconfigure(1, weight=1, uniform="portamento-live")
         self._parameter_row(mod, specs["portamento_amount"], compact=True)
         self._parameter_row(mod, specs["portamento_mode"], compact=True)
         portamento_mode_combo = getattr(self, "combo_portamento_mode", None)
