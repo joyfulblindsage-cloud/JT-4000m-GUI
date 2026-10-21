@@ -468,16 +468,14 @@ class Editor(tk.Tk):
         self.section_labels["ring_mod_toggle"].configure(text="Ring")
         self.reset_buttons["ring_mod_toggle"][0].configure(
             width=1, padx=0, pady=0, font=("TkDefaultFont", 7))
-        self._parameter_row(mix_controls, specs["ring_mod_amount"], compact=True,
-                            grid=True, row=1, col=0, label_width=4)
-        self.section_labels["ring_mod_amount"].configure(text="Amt")
+        ring_amount_slot = tk.Frame(mix_controls, bg="#131D2B")
+        ring_amount_slot.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(2, 0))
+        self._parameter_row(ring_amount_slot, specs["ring_mod_amount"], compact=True)
+        self.section_labels["ring_mod_amount"].configure(text="Amt", width=4)
         self.reset_buttons["ring_mod_amount"][0].configure(
             width=1, padx=0, pady=0, font=("TkDefaultFont", 7))
         self._ring_mod_amount_scale = self._parameter_scales[-1]
         self._ring_mod_amount_scale.configure(length=74)
-        mix_controls.grid_columnconfigure(0, weight=1, uniform="mix-controls")
-        mix_controls.grid_columnconfigure(1, weight=1, uniform="mix-controls")
-        mix_controls.grid_columnconfigure(2, weight=0, minsize=0)
         mix_controls.grid_columnconfigure(0, weight=1, uniform="mix-controls")
         mix_controls.grid_columnconfigure(1, weight=1, uniform="mix-controls")
         mix_controls.grid_rowconfigure(1, weight=1)
