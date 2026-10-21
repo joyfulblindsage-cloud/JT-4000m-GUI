@@ -701,6 +701,25 @@ def test_adsr_controls_use_compact_knobs_with_requested_arc(app):
 
 
 @gui_test
+def test_mix_ring_uses_two_rows_with_full_width_amount_control(app):
+    """The Amount slider gets room without squeezing Balance and Ring switch."""
+    app.geometry("900x500+0+0")
+    app.update()
+    balance_slot = app._knobs["osc_balance"].master.master
+    ring_toggle_line = app.section_labels["ring_mod_toggle"].master
+    ring_amount_line = app.section_labels["ring_mod_amount"].master
+    assert int(balance_slot.grid_info()["row"]) == 0
+    assert int(balance_slot.grid_info()["column"]) == 0
+    assert int(ring_toggle_line.grid_info()["row"]) == 0
+    assert int(ring_toggle_line.grid_info()["column"]) == 1
+    assert int(ring_amount_line.grid_info()["row"]) == 1
+    assert int(ring_amount_line.grid_info()["column"]) == 0
+    assert int(ring_amount_line.grid_info()["columnspan"]) == 2
+    assert app._ring_mod_amount_scale.winfo_ismapped()
+    assert int(app._ring_mod_amount_scale.cget("length")) >= 48
+
+
+@gui_test
 def test_compact_controls_hide_numeric_readouts_but_keep_reset_buttons(app):
     """Free horizontal space for controls while keeping per-parameter reset."""
     app.load_path(FIX / "ALL INIT SAW.syx")
