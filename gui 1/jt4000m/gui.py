@@ -483,7 +483,11 @@ class Editor(tk.Tk):
             if spec.offset is None:
                 if spec.key in ("modulation", "portamento_time"):
                     self._midi_only_parameter_row(mod, spec, compact=True)
-                else:
+                elif spec.key not in ("portamento_amount", "portamento_mode"):
+                    # Other unmapped parameters may be shown as reference text.
+                    # Portamento amount/mode get real rows immediately below;
+                    # adding reference labels for them duplicates content and
+                    # pushes the disabled mode selector out of the 500 px view.
                     lbl = tk.Label(mod, text=f"{_synth_label(spec)}: CC {spec.cc}",
                                    bg="#131D2B", fg="#8CA2BA", anchor="w")
                     lbl.pack(fill="x", pady=1)
