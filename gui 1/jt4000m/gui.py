@@ -657,6 +657,30 @@ class Editor(tk.Tk):
         # layout; at 900x700 the graph and the separate Amount row fit.
         compact_height = height < 550
 
+        # OSC controls use two columns only in short workspaces; at taller
+        # sizes restore full-width rows for easier reading and longer sliders.
+        for key, line in getattr(self, "_oscillator_control_lines", {}).items():
+            index = self._oscillator_control_indices[key]
+            compact_osc = compact_height
+            line.grid_configure(
+                row=index // 2 if compact_osc else index,
+                column=index % 2 if compact_osc else 0,
+                columnspan=1 if compact_osc else 2,
+                sticky="ew", padx=(0, 1), pady=0 if compact_osc else 2)
+            label = self.section_labels[key]
+            spec = self._oscillator_control_specs[key]
+            label.configure(
+                text=self._oscillator_short_labels[key] if compact_osc
+                else _row_label(spec, self.developer_var.get()),
+                width=5 if compact_osc else 8)
+            self._oscillator_control_scales[key].configure(
+                width=8 if compact_osc else 12,
+                sliderlength=12 if compact_osc else 16)
+            self.reset_buttons[key][0].configure(
+                width=1 if compact_osc else 2,
+                padx=0 if compact_osc else (2, 0), pady=0,
+                font=("TkDefaultFont", 7 if compact_osc else 8))
+
         # At short module heights, prioritize editable ADSR controls over the
         # visualization. Restore the graph only when its panel has room again.
         for key, graph_slot in graph_slots.items():
@@ -773,19 +797,24 @@ class Editor(tk.Tk):
         for col in range(2):
             controls.grid_columnconfigure(col, weight=1, uniform="osc-controls")
         short_labels = {
-            "osc1_pwm_fm": "PWM/FM", "osc1_pwm": "PWM",
+            "osc1_pwm_fm": "PWM/FM", "osc1_pwm": "PWM", "osc2_pwm": "PWM",
             "osc1_coarse": "Coarse", "osc2_coarse": "Coarse",
             "osc1_fine": "Fine", "osc2_fine": "Fine",
         }
+        if not hasattr(self, "_oscillator_control_lines"):
+            self._oscillator_control_lines = {}
+            self._oscillator_control_indices = {}
+            self._oscillator_control_specs = {}
+            self._oscillator_control_scales = {}
+            self._oscillator_short_labels = {}
         for index, spec in enumerate(control_specs):
             row, col = divmod(index, 2)
             self._parameter_row(
                 controls, spec, grid=True, row=row, col=col,
                 compact=True, label_width=5)
             label = self.section_labels[spec.key]
-            label.configure(
-                text=short_labels.get(spec.key, _row_label(spec, self.developer_var.get())),
-                width=5)
+            label.configure(text=short_labels.get(
+                spec.key, _row_label(spec, self.developer_var.get())), width=5)
             line = label.master
             scale = next(
                 child for child in line.winfo_children()
@@ -793,6 +822,12 @@ class Editor(tk.Tk):
             scale.configure(width=8, sliderlength=12)
             self.reset_buttons[spec.key][0].configure(
                 width=1, padx=0, pady=0, font=("TkDefaultFont", 7))
+            self._oscillator_control_lines[spec.key] = line
+            self._oscillator_control_indices[spec.key] = index
+            self._oscillator_control_specs[spec.key] = spec
+            self._oscillator_control_scales[spec.key] = scale
+            self._oscillator_short_labels[spec.key] = short_labels.get(
+                spec.key, _row_label(spec, self.developer_var.get()))
 
     def _build_wave_tile_row(self, parent, key: str, caption: str, *,
                              width: int | None = None, height: int | None = None) -> None:
