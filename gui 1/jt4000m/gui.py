@@ -1182,11 +1182,16 @@ class Editor(tk.Tk):
         column.grid(row=0, column=col, sticky="nsew", padx=1, pady=1)
         parent.grid_columnconfigure(col, weight=1, uniform="adsr")
 
+        # Put Reset in the header beside the parameter name, not beneath
+        # the knob. The old footer consumed a full extra line and was the first
+        # critical element clipped at short window heights.
+        header = tk.Frame(column, bg="#131D2B")
+        header.pack(fill="x", pady=(0, 1))
         segment_label = spec.key.rsplit("_", 1)[-1].capitalize()
-        label = tk.Label(column, text=segment_label,
+        label = tk.Label(header, text=segment_label,
                          bg="#131D2B", fg="#A8BDD3", anchor="center",
                          font=("TkDefaultFont", 8))
-        label.pack(fill="x", pady=(0, 1))
+        label.pack(side="left", fill="x", expand=True)
         self.section_labels[spec.key] = label
 
         var = tk.IntVar(value=spec.default)
@@ -1206,12 +1211,10 @@ class Editor(tk.Tk):
         self._knobs[spec.key] = knob
         knob.set_value(spec.default, self._formatted(spec.key, spec.default))
 
-        footer = tk.Frame(column, bg="#131D2B")
-        footer.pack(fill="x")
-        value_label = tk.Label(footer, textvariable=value, bg="#131D2B", fg="#F3F7FF",
+        value_label = tk.Label(header, textvariable=value, bg="#131D2B", fg="#F3F7FF",
                                width=6, anchor="center", font=("TkDefaultFont", 8))
         # Keep a reference for model synchronization, but do not pack a numeric readout.
-        reset = tk.Button(footer, text="↺", width=2, relief="flat",
+        reset = tk.Button(header, text="↺", width=2, relief="flat",
                           bg="#131D2B", fg="#8CA2BA", highlightthickness=0,
                           bd=0, command=lambda key=spec.key: self.reset_one(key))
         reset.pack(side="right")
