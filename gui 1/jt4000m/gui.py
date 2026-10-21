@@ -709,9 +709,9 @@ class Editor(tk.Tk):
                 ring_scale.configure(length=max(48, min(110, width // 12)))
             except tk.TclError:
                 pass
-        # LFO sliders share narrow two-column cells; shorten only those
-        # tracks to keep labels and reset affordances inside their cells.
-        lfo_slider_length = max(24, min(44, width // 24))
+        # LFO controls use two-column cells; give the slider a little more
+        # travel while reserving space for the short label and reset button.
+        lfo_slider_length = max(40, min(72, width // 18))
         for scale in getattr(self, "_lfo_scales", ()):
             try:
                 scale.configure(length=lfo_slider_length)
@@ -736,10 +736,9 @@ class Editor(tk.Tk):
         # width for them. Reset buttons remain in each control row.
         for scale in getattr(self, "_midi_only_scales", {}).values():
             try:
-                # These live-only controls sit in two equal compact columns.
-                # A window-wide minimum of 65 px plus label and reset was wider
-                # than a cell, causing Tk to unmap the reset button.
-                scale.configure(length=max(30, min(70, width // 30)))
+                # Live-only Mod and Portamento Time share two equal columns;
+                # retain the reset affordance while giving the scale a usable track.
+                scale.configure(length=max(40, min(85, width // 20)))
             except tk.TclError:
                 pass
 
