@@ -1873,7 +1873,7 @@ class Editor(tk.Tk):
             self._set_midi_status("error")
             # Keep the persistent status strip readable at compact widths;
             # the full backend error remains available in _midi_last_error.
-            self.status_var.set("MIDI unavailable — check the MIDI backend/driver")
+            self.status_var.set("MIDI unavailable — install python-rtmidi / check driver")
             return
         # Preserve current selections where possible.
         cur_in = self.midi_in_combo.get()
