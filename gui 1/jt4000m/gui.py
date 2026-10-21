@@ -678,7 +678,7 @@ class Editor(tk.Tk):
                 sliderlength=12 if compact_osc else 16)
             self.reset_buttons[key][0].configure(
                 width=1 if compact_osc else 2,
-                padx=0 if compact_osc else (2, 0), pady=0,
+                padx=0 if compact_osc else 2, pady=0,
                 font=("TkDefaultFont", 7 if compact_osc else 8))
 
         # At short module heights, prioritize editable ADSR controls over the
