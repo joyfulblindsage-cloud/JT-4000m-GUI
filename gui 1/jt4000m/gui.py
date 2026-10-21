@@ -1136,7 +1136,7 @@ class Editor(tk.Tk):
 
         knob = Knob(line, label="", minimum=spec.minimum,
                     maximum=spec.maximum, default_raw=spec.default,
-                    diameter=38 if compact else 54,
+                    diameter=30 if compact else 54,
                     show_entry=False,
                     on_gesture_start=lambda key=spec.key: self._begin_parameter_drag(key),
                     on_gesture_end=lambda key=spec.key: self._end_parameter_drag(key),
