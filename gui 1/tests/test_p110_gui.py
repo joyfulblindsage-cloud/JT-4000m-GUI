@@ -572,6 +572,27 @@ def test_synth_workspace_matches_reference_layout_without_scrollbar(app):
     assert {spec.key for spec in editable_parameters()} <= set(app.vars)
 
 
+@pytest.mark.skipif(not _HAS_DISPLAY, reason="no display available")
+@gui_test
+def test_synth_panel_widths_do_not_change_when_selecting_presets(app):
+    """Preset content must not resize the fixed SYNTH panel layout."""
+    app.geometry("900x700+0+0")
+    app.load_path(FIX / "Synthmania-EDM-Soundset-JT-4000.syx")
+    app.update()
+    expected = tuple(
+        tuple(panel.winfo_width() for panel in row_panels)
+        for row_panels in app._synth_row_panels
+    )
+    for index in range(1, 33):
+        app.select_program(index)
+        app.update_idletasks()
+        actual = tuple(
+            tuple(panel.winfo_width() for panel in row_panels)
+            for row_panels in app._synth_row_panels
+        )
+        assert actual == expected, f"panel widths changed at preset P{index:02d}"
+
+
 @gui_test
 def test_window_allows_compact_height(app):
     """The withdrawn test window must allow reduced-height visual review."""
