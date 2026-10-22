@@ -304,7 +304,7 @@ class Editor(tk.Tk):
         tk.Label(nav, textvariable=self.nav_slot_var, bg="#080D14", fg="#42D9FF",
                  font=("TkDefaultFont", 11, "bold")).pack(side="left", padx=(0, 4))
         self.nav_query_var = tk.StringVar(value="")
-        self.nav_query_entry = ttk.Entry(nav, textvariable=self.nav_query_var, width=22)
+        self.nav_query_entry = ttk.Entry(nav, textvariable=self.nav_query_var, width=9)
         self.nav_query_entry.pack(side="left", padx=3)
         self.nav_query_entry.bind("<Return>", self._apply_nav_query)
         self.nav_query_entry.bind("<FocusOut>", self._apply_nav_query)
