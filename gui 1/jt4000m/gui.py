@@ -541,8 +541,7 @@ class Editor(tk.Tk):
         for row_frame, panels in zip(self._synth_rows, self._synth_row_panels):
             for col, panel in enumerate(panels):
                 requested = max(1, panel.winfo_reqwidth())
-                row_frame.grid_columnconfigure(
-                    col, weight=requested, minsize=0, uniform=None)
+                row_frame.grid_columnconfigure(col, weight=requested, minsize=0)
 
     def _build_lfo_panel(self, parent, wave_spec, caption: str, control_specs,
                          *, note: str | None = None) -> None:
