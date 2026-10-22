@@ -530,9 +530,14 @@ def test_synth_workspace_matches_reference_layout_without_scrollbar(app):
         for child in app.controls.winfo_children()
         if child.winfo_manager() == "grid"
     }
-    assert {(0, 0, 4), (0, 4, 4), (0, 8, 4),
-            (1, 0, 4), (1, 4, 4), (1, 8, 4),
-            (2, 0, 4), (2, 4, 4), (2, 8, 4)} <= cells
+    # These spans are the explicit SYNTH design contract:
+    # OSC1/OSC2/FILTER = 4:4:4; VCA/VCF/MIX-RING = 4:5:3;
+    # LFO1/LFO2/MOD-PORTAMENTO = 4:4:4.
+    assert cells == {
+        (0, 0, 4), (0, 4, 4), (0, 8, 4),
+        (1, 0, 4), (1, 4, 5), (1, 9, 3),
+        (2, 0, 4), (2, 4, 4), (2, 8, 4),
+    }
     assert app.current_tab.get() == "SYNTH"
     assert [app.controls.grid_rowconfigure(i)["weight"] for i in range(3)] == [1, 1, 1]
     assert [app.controls.grid_rowconfigure(i)["uniform"] for i in range(3)] == [
@@ -599,7 +604,7 @@ def test_arpeggiator_is_not_part_of_the_synth_workspace(app):
         for child in app.controls.winfo_children()
         if child.winfo_manager() == "grid"
     }
-    assert (1, 8, 4) in cells  # MIX / RING occupies the former ARP area.
+    assert (1, 9, 3) in cells  # MIX / RING occupies the former ARP area.
     assert {"lfo2_wave", "lfo2_rate", "lfo2_amount"} <= set(app.vars)
     assert "lfo2_destination" not in app.vars
 
