@@ -539,6 +539,12 @@ def test_synth_workspace_matches_reference_layout_without_scrollbar(app):
         (2, 0, 4), (2, 4, 4), (2, 8, 4),
     }
     assert app.current_tab.get() == "SYNTH"
+    # Panel contents must not feed requested widths back into the shared grid.
+    assert all(panel.pack_propagate() == 0
+               for row_panels in app._synth_row_panels for panel in row_panels)
+    # Tk theme padding means the visible nine-character preset field needs
+    # width=10 in character units; this is display width, not a name limit.
+    assert int(app.nav_query_entry.cget("width")) == 10
     assert [app.controls.grid_rowconfigure(i)["weight"] for i in range(3)] == [1, 1, 1]
     assert [app.controls.grid_rowconfigure(i)["uniform"] for i in range(3)] == [
         "synth-row", "synth-row", "synth-row"
