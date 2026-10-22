@@ -314,7 +314,11 @@ class Editor(tk.Tk):
         tk.Label(nav, textvariable=self.nav_slot_var, bg="#080D14", fg="#42D9FF",
                  font=("TkDefaultFont", 11, "bold")).pack(side="left", padx=(0, 4))
         self.nav_query_var = tk.StringVar(value="")
-        self.nav_query_entry = ttk.Entry(nav, textvariable=self.nav_query_var, width=9)
+        # ttk.Entry width is measured in average characters; the internal
+        # theme padding means width=9 only shows eight complete preset-name
+        # characters on the target theme. Keep the intended nine-character
+        # visible field without imposing a limit on the stored patch name.
+        self.nav_query_entry = ttk.Entry(nav, textvariable=self.nav_query_var, width=10)
         self.nav_query_entry.pack(side="left", padx=3)
         self.nav_query_entry.bind("<Return>", self._apply_nav_query)
         self.nav_query_entry.bind("<FocusOut>", self._apply_nav_query)
@@ -358,6 +362,11 @@ class Editor(tk.Tk):
             highlightbackground="#2A3A4F", bd=0)
         box.grid(row=row, column=col, columnspan=columnspan,
                  sticky="nsew", padx=1 if compact else 3, pady=1 if compact else 3)
+        # Prevent child requested widths (notably preset-dependent enum text
+        # such as "Unknown (0xNN)") from feeding back into the parent grid's
+        # column sizing. The panel's allocated span, not its contents, owns its
+        # width; children must adapt or clip within that stable panel geometry.
+        box.pack_propagate(False)
         head = tk.Frame(box, bg="#131D2B")
         head.pack(fill="x", padx=2 if compact else 5, pady=(0 if compact else 3, 0))
         tk.Label(head, text=title, bg="#131D2B", fg="#F3F7FF",
@@ -386,8 +395,6 @@ class Editor(tk.Tk):
             self.controls.grid_columnconfigure(col, weight=1, uniform="synth-col")
         for row in range(3):
             self.controls.grid_rowconfigure(row, weight=1, minsize=0, uniform="synth-row")
-        self._synth_row_height_px = 1
-        self._synth_row_remainder_px = 0
         self._synth_row_panels = [[], [], []]
 
         self.section_labels: dict[str, tk.Label] = {}
@@ -551,6 +558,8 @@ class Editor(tk.Tk):
             col = 0
             for panel, span in zip(panels, spans):
                 panel.grid_configure(row=row, column=col, columnspan=span, sticky="nsew")
+                # Panel width is allocated by the workspace grid, never requested by contents.
+                panel.pack_propagate(False)
                 col += span
 
     def _build_lfo_panel(self, parent, wave_spec, caption: str, control_specs,
@@ -678,10 +687,6 @@ class Editor(tk.Tk):
         # Real Tk Configure events include height; older tests/callers may
         # provide width-only event doubles. Fall back to the live workspace.
         height = max(1, getattr(event, "height", self.controls.winfo_height()))
-        # The uniform row group gives all three panels the same nominal height.
-        self._synth_row_height_px = max(1, height // 3)
-        self._synth_row_remainder_px = height - 3 * self._synth_row_height_px
-
         # Decide compactness from the envelope module's own allocated height,
         # not the full controls workspace. The latter is taller than 300 px at
         # every target window size, even when the bottom-row panels are clipped.

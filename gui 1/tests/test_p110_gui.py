@@ -539,6 +539,16 @@ def test_synth_workspace_matches_reference_layout_without_scrollbar(app):
         (2, 0, 4), (2, 4, 4), (2, 8, 4),
     }
     assert app.current_tab.get() == "SYNTH"
+    # Panel contents must not feed requested widths back into the shared grid.
+    # Tkinter pack_propagate() with no argument sets propagation to True;
+    # query Tcl directly so this assertion does not mutate the widget state.
+    propagation = [(row, int(panel.tk.call("pack", "propagate", panel._w)))
+                   for row, panels in enumerate(app._synth_row_panels)
+                   for panel in panels]
+    assert all(state == 0 for _, state in propagation), propagation
+    # Tk theme padding means the visible nine-character preset field needs
+    # width=10 in character units; this is display width, not a name limit.
+    assert int(app.nav_query_entry.cget("width")) == 10
     assert [app.controls.grid_rowconfigure(i)["weight"] for i in range(3)] == [1, 1, 1]
     assert [app.controls.grid_rowconfigure(i)["uniform"] for i in range(3)] == [
         "synth-row", "synth-row", "synth-row"
@@ -566,6 +576,27 @@ def test_synth_workspace_matches_reference_layout_without_scrollbar(app):
     assert {spec.key for spec in editable_parameters()} <= set(app.vars)
 
 
+@pytest.mark.skipif(not _HAS_DISPLAY, reason="no display available")
+@gui_test
+def test_synth_panel_widths_do_not_change_when_selecting_presets(app):
+    """Preset content must not resize the fixed SYNTH panel layout."""
+    app.geometry("900x700+0+0")
+    app.load_path(FIX / "Synthmania-EDM-Soundset-JT-4000.syx")
+    app.update()
+    expected = tuple(
+        tuple(panel.winfo_width() for panel in row_panels)
+        for row_panels in app._synth_row_panels
+    )
+    for index in range(1, 33):
+        app.select_program(index)
+        app.update_idletasks()
+        actual = tuple(
+            tuple(panel.winfo_width() for panel in row_panels)
+            for row_panels in app._synth_row_panels
+        )
+        assert actual == expected, f"panel widths changed at preset P{index:02d}"
+
+
 @gui_test
 def test_window_allows_compact_height(app):
     """The withdrawn test window must allow reduced-height visual review."""
@@ -574,24 +605,18 @@ def test_window_allows_compact_height(app):
     assert app.minsize() == (900, 500)
 
 
+@pytest.mark.skipif(not _HAS_DISPLAY, reason="no display available")
 @gui_test
-def test_all_three_synth_rows_share_equal_adaptive_height(app):
-    """All three grid rows use one uniform sizing group at every height."""
-    from types import SimpleNamespace
-
-    for height in (900, 600, 420):
-        app._on_synth_resize(SimpleNamespace(width=900, height=height))
-        assert app._synth_row_height_px == height // 3
-        assert app._synth_row_remainder_px == height - 3 * (height // 3)
-        for row in range(3):
-            config = app.controls.grid_rowconfigure(row)
-            assert config["weight"] == 1
-            assert config["uniform"] == "synth-row"
-            assert config["minsize"] == 0
-
-    # Width adaptation remains independent from the vertical row geometry.
-    app._on_synth_resize(SimpleNamespace(width=800, height=600))
-    assert app._synth_row_height_px == 200
+def test_all_three_synth_rows_have_equal_realized_height(app):
+    """The Tk grid realizes three equal-height rows at the baseline window size."""
+    app.geometry("900x700+0+0")
+    app.update()
+    row_heights = [
+        app.controls.grid_bbox(0, row, 11, row)[3]
+        for row in range(3)
+    ]
+    assert all(height > 0 for height in row_heights), row_heights
+    assert max(row_heights) - min(row_heights) <= 1, row_heights
 
 
 @gui_test
