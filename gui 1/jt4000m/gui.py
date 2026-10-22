@@ -298,18 +298,18 @@ class Editor(tk.Tk):
         utility = tk.Frame(self, bg="#080D14")
         utility.pack(fill="x", side="top", padx=0, pady=(0, 2))
         nav = tk.Frame(utility, bg="#080D14")
-        nav.pack(side="left", fill="y", padx=(8, 12), pady=3)
+        nav.pack(side="left", fill="y", padx=(10, 8), pady=3)
         ttk.Button(nav, text="◀", width=3,
-                   command=lambda: self._nav_step(-1)).pack(side="left", padx=(0, 5))
+                   command=lambda: self._nav_step(-1)).pack(side="left", padx=(0, 4))
         tk.Label(nav, textvariable=self.nav_slot_var, bg="#080D14", fg="#42D9FF",
-                 font=("TkDefaultFont", 11, "bold")).pack(side="left", padx=(0, 5))
+                 font=("TkDefaultFont", 11, "bold")).pack(side="left", padx=(0, 4))
         self.nav_query_var = tk.StringVar(value="")
-        self.nav_query_entry = ttk.Entry(nav, textvariable=self.nav_query_var, width=24)
-        self.nav_query_entry.pack(side="left", padx=4)
+        self.nav_query_entry = ttk.Entry(nav, textvariable=self.nav_query_var, width=22)
+        self.nav_query_entry.pack(side="left", padx=3)
         self.nav_query_entry.bind("<Return>", self._apply_nav_query)
         self.nav_query_entry.bind("<FocusOut>", self._apply_nav_query)
         ttk.Button(nav, text="▶", width=3,
-                   command=lambda: self._nav_step(1)).pack(side="left", padx=(5, 0))
+                   command=lambda: self._nav_step(1)).pack(side="left", padx=(4, 0))
         self._build_midi_panel(parent=utility)
 
         status = tk.Frame(self, bg="#080D14")
@@ -1903,21 +1903,21 @@ class Editor(tk.Tk):
     def _build_midi_panel(self, parent=None) -> None:
         """Compact top-row MIDI controls; discovery never opens ports."""
         panel = tk.Frame(parent or self, bg="#080D14")
-        panel.pack(side="right", fill="y", padx=(4, 10), pady=3)
-        ttk.Label(panel, text="USB MIDI", style="Muted.TLabel").pack(side="left", padx=(0, 4))
+        panel.pack(side="right", fill="y", padx=(6, 10), pady=3)
+        ttk.Label(panel, text="USB MIDI", style="Muted.TLabel").pack(side="left", padx=(0, 5))
         ttk.Button(panel, text="Refresh", width=7, command=self.refresh_midi_ports).pack(
-            side="left", padx=2, pady=2)
-        ttk.Label(panel, text="In:", style="Muted.TLabel").pack(side="left", padx=(5, 2))
-        self.midi_in_combo = ttk.Combobox(panel, state="readonly", width=17, values=[])
+            side="left", padx=3, pady=2)
+        ttk.Label(panel, text="In:", style="Muted.TLabel").pack(side="left", padx=(4, 2))
+        self.midi_in_combo = ttk.Combobox(panel, state="readonly", width=16, values=[])
         self.midi_in_combo.pack(side="left")
-        ttk.Label(panel, text="Out:", style="Muted.TLabel").pack(side="left", padx=(5, 2))
-        self.midi_out_combo = ttk.Combobox(panel, state="readonly", width=17, values=[])
+        ttk.Label(panel, text="Out:", style="Muted.TLabel").pack(side="left", padx=(4, 2))
+        self.midi_out_combo = ttk.Combobox(panel, state="readonly", width=16, values=[])
         self.midi_out_combo.pack(side="left")
         self.midibtn = ttk.Button(panel, text="Connect", width=8, command=self.toggle_midi_connection)
-        self.midibtn.pack(side="left", padx=(4, 2))
+        self.midibtn.pack(side="left", padx=(5, 3))
         self.status_lbl = tk.Label(panel, text="Status: Offline", bg="#080D14",
                                    fg="#8CA2BA", font=("TkDefaultFont", 9, "bold"))
-        self.status_lbl.pack(side="left", padx=3)
+        self.status_lbl.pack(side="left", padx=4)
         self.refresh_midi_ports()   # initial enumeration (no ports opened)
 
     def _nav_frame_ref(self):
