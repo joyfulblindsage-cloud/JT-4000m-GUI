@@ -540,7 +540,9 @@ def test_synth_workspace_matches_reference_layout_without_scrollbar(app):
     }
     assert app.current_tab.get() == "SYNTH"
     # Panel contents must not feed requested widths back into the shared grid.
-    propagation = [(row, panel.pack_propagate())
+    # Tkinter pack_propagate() with no argument sets propagation to True;
+    # query Tcl directly so this assertion does not mutate the widget state.
+    propagation = [(row, int(panel.tk.call("pack", "propagate", panel._w)))
                    for row, panels in enumerate(app._synth_row_panels)
                    for panel in panels]
     assert all(state == 0 for _, state in propagation), propagation
