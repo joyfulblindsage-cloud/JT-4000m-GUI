@@ -395,8 +395,6 @@ class Editor(tk.Tk):
             self.controls.grid_columnconfigure(col, weight=1, uniform="synth-col")
         for row in range(3):
             self.controls.grid_rowconfigure(row, weight=1, minsize=0, uniform="synth-row")
-        self._synth_row_height_px = 1
-        self._synth_row_remainder_px = 0
         self._synth_row_panels = [[], [], []]
 
         self.section_labels: dict[str, tk.Label] = {}
@@ -560,6 +558,8 @@ class Editor(tk.Tk):
             col = 0
             for panel, span in zip(panels, spans):
                 panel.grid_configure(row=row, column=col, columnspan=span, sticky="nsew")
+                # Panel width is allocated by the workspace grid, never requested by contents.
+                panel.pack_propagate(False)
                 col += span
 
     def _build_lfo_panel(self, parent, wave_spec, caption: str, control_specs,
@@ -687,10 +687,6 @@ class Editor(tk.Tk):
         # Real Tk Configure events include height; older tests/callers may
         # provide width-only event doubles. Fall back to the live workspace.
         height = max(1, getattr(event, "height", self.controls.winfo_height()))
-        # The uniform row group gives all three panels the same nominal height.
-        self._synth_row_height_px = max(1, height // 3)
-        self._synth_row_remainder_px = height - 3 * self._synth_row_height_px
-
         # Decide compactness from the envelope module's own allocated height,
         # not the full controls workspace. The latter is taller than 300 px at
         # every target window size, even when the bottom-row panels are clipped.
