@@ -33,6 +33,16 @@ from .syx import SysExFile, field_name, parse as parse_sysex, parse_file, semant
 from .waveforms import WaveTile
 from .widgets import EnvelopeView, FilterView, Knob
 
+# Explicit design proportions for the three SYNTH workspace rows.
+# These are tunable layout weights, not pixel widths: the shared 12-column
+# grid maps each row to the available window width.
+# Order: OSC 1 / OSC 2 / FILTER; VCA / VCF / MIX-RING; LFO 1 / LFO 2 / MOD.
+SYNTH_PANEL_LAYOUT = (
+    (4, 4, 4),
+    (4, 5, 3),
+    (4, 4, 4),
+)
+
 # Sections rendered inside the SYNTH workspace, in musical order.
 SYNTH_SECTION_ORDER = ["OSCILLATORS", "FILTER", "VCF ENVELOPE",
                        "VCA ENVELOPE", "LFO", "MODULATION"]
@@ -370,9 +380,8 @@ class Editor(tk.Tk):
         self.controls.pack(fill="both", expand=True, padx=2, pady=2)
         self.controls.bind("<Configure>", self._on_synth_resize)
         # Retain the public 12-column workspace grid used by integration
-        # checks and layout tooling. Panel spans are adapted after construction
-        # from each panel's requested content width; the 4:4:4 / 4:5:3 idea is
-        # a reference, not a fixed allocation.
+        # checks and layout tooling. Panel proportions are explicitly defined
+        # by SYNTH_PANEL_LAYOUT; only their pixel widths respond to resizing.
         for col in range(12):
             self.controls.grid_columnconfigure(col, weight=1, uniform="synth-col")
         for row in range(3):
@@ -532,24 +541,13 @@ class Editor(tk.Tk):
         self.section_labels["portamento_mode"].configure(
             text="Portamento Mode (ON unverified)")
 
-        # Translate requested panel widths into spans across the shared
-        # 12-column grid. This preserves the established workspace structure
-        # while allowing each row to find its own balance without fixed ratios.
-        for row, panels in enumerate(self._synth_row_panels):
-            requested = [max(1, panel.winfo_reqwidth()) for panel in panels]
-            total = sum(requested)
-            raw = [12 * width / total for width in requested]
-            spans = [max(1, int(value)) for value in raw]
-            while sum(spans) > 12:
-                candidates = [i for i, span in enumerate(spans) if span > 1]
-                if not candidates:
-                    break
-                idx = min(candidates, key=lambda i: raw[i] - spans[i])
-                spans[idx] -= 1
-            while sum(spans) < 12:
-                idx = max(range(len(spans)), key=lambda i: raw[i] - spans[i])
-                spans[idx] += 1
-                raw[idx] -= 1
+        # Map the explicit design weights to the shared 12-column grid.
+        # All current rows have three panels and weights summing to 12, so the
+        # spans stay exact and easy to audit; Tk distributes pixels as the
+        # window resizes. Panel content is checked by visual/integration tests,
+        # not used to invent the design proportions at runtime.
+        for row, (panels, spans) in enumerate(zip(
+                self._synth_row_panels, SYNTH_PANEL_LAYOUT)):
             col = 0
             for panel, span in zip(panels, spans):
                 panel.grid_configure(row=row, column=col, columnspan=span, sticky="nsew")
