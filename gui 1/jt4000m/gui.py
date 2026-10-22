@@ -369,17 +369,14 @@ class Editor(tk.Tk):
         self.controls = tk.Frame(frame, bg="#0B1018")
         self.controls.pack(fill="both", expand=True, padx=2, pady=2)
         self.controls.bind("<Configure>", self._on_synth_resize)
-        # Keep three rows equal in height, but give each row its own horizontal
-        # grid. Panel widths are balanced from their requested content sizes
-        # after construction, rather than forcing the same three-way split on
-        # every row.
-        self._synth_rows = []
+        # Retain the public 12-column workspace grid used by integration
+        # checks and layout tooling. Panel spans are adapted after construction
+        # from each panel's requested content width; the 4:4:4 / 4:5:3 idea is
+        # a reference, not a fixed allocation.
+        for col in range(12):
+            self.controls.grid_columnconfigure(col, weight=1, uniform="synth-col")
         for row in range(3):
             self.controls.grid_rowconfigure(row, weight=1, minsize=0, uniform="synth-row")
-            row_frame = tk.Frame(self.controls, bg="#0B1018")
-            row_frame.grid(row=row, column=0, columnspan=12, sticky="nsew")
-            self.controls.grid_columnconfigure(0, weight=1)
-            self._synth_rows.append(row_frame)
         self._synth_row_height_px = 1
         self._synth_row_remainder_px = 0
         self._synth_row_panels = [[], [], []]
@@ -391,21 +388,21 @@ class Editor(tk.Tk):
 
         # Row 1 — equally sized oscillator and filter panels.
         osc1_box, osc1 = self._synth_box(
-            self._synth_rows[0], "OSC 1", 0, 0, compact=False)
+            self.controls, "OSC 1", 0, 0, columnspan=4, compact=False)
         self._synth_row_panels[0].append(osc1_box)
         self._build_oscillator_wave_row(osc1, specs["osc1_wave"], "osc1_wave", "OSC1")
         self._build_oscillator_controls(
             osc1, (specs["osc1_pwm_fm"], specs["osc1_coarse"], specs["osc1_fine"]))
 
         osc2_box, osc2 = self._synth_box(
-            self._synth_rows[0], "OSC 2", 0, 1, compact=False)
+            self.controls, "OSC 2", 0, 4, columnspan=4, compact=False)
         self._synth_row_panels[0].append(osc2_box)
         self._build_oscillator_wave_row(osc2, specs["osc2_wave"], "osc2_wave", "OSC2")
         self._build_oscillator_controls(
             osc2, (specs["osc2_pwm"], specs["osc2_coarse"], specs["osc2_fine"]))
 
         filter_box, filt = self._synth_box(
-            self._synth_rows[0], "FILTER", 0, 2, compact=False)
+            self.controls, "FILTER", 0, 8, columnspan=4, compact=False)
         self._synth_row_panels[0].append(filter_box)
         # Keep the response graph compact so Cutoff and Resonance have room.
         filter_layout = tk.Frame(filt, bg="#131D2B")
@@ -420,7 +417,7 @@ class Editor(tk.Tk):
 
         # Row 2 — two related envelopes and the smaller MIX / RING module.
         vca_box, vca = self._synth_box(
-            self._synth_rows[1], "VCA ENVELOPE", 0, 0)
+            self.controls, "VCA ENVELOPE", 1, 0, columnspan=4)
         self._synth_row_panels[1].append(vca_box)
         vca_graph_slot = tk.Frame(vca, bg="#131D2B", height=24)
         vca_graph_slot.pack(fill="x", expand=False, pady=(0, 1))
@@ -438,7 +435,7 @@ class Editor(tk.Tk):
             self._parameter_knob_column(vca_adsr, specs[key], col=col)
 
         vcf_box, vcf = self._synth_box(
-            self._synth_rows[1], "VCF ENVELOPE", 0, 1)
+            self.controls, "VCF ENVELOPE", 1, 4, columnspan=4)
         self._synth_row_panels[1].append(vcf_box)
         vcf_graph_slot = tk.Frame(vcf, bg="#131D2B", height=20)
         vcf_graph_slot.pack(fill="x", expand=False, pady=(0, 1))
@@ -462,7 +459,7 @@ class Editor(tk.Tk):
             diameter=26, label_text="Amt")
 
         mix_box, mix = self._synth_box(
-            self._synth_rows[1], "MIX / RING", 0, 2)
+            self.controls, "MIX / RING", 1, 8, columnspan=4)
         self._synth_row_panels[1].append(mix_box)
         self._p160_panel_frames = {"mix_ring": mix}
         # Balance and the Ring Mod switch share the first row; the Amount
@@ -495,14 +492,14 @@ class Editor(tk.Tk):
 
         # Row 3 — keep the LFOs and modulation controls equally sized.
         lfo1_box, lfo1 = self._synth_box(
-            self._synth_rows[2], "LFO 1", 0, 0)
+            self.controls, "LFO 1", 2, 0, columnspan=4)
         self._synth_row_panels[2].append(lfo1_box)
         self._build_lfo_panel(
             lfo1, specs["lfo1_wave"], "LFO1",
             (specs["lfo1_destination"], specs["lfo1_rate"], specs["lfo1_amount"]))
 
         lfo2_box, lfo2 = self._synth_box(
-            self._synth_rows[2], "LFO 2", 0, 1)
+            self.controls, "LFO 2", 2, 4, columnspan=4)
         self._synth_row_panels[2].append(lfo2_box)
         self._build_lfo_panel(
             lfo2, specs["lfo2_wave"], "LFO2",
@@ -510,7 +507,7 @@ class Editor(tk.Tk):
             note="Destination not documented (CC 56 = LFO1)")
 
         mod_box, mod = self._synth_box(
-            self._synth_rows[2], "MOD / PORTAMENTO", 0, 2)
+            self.controls, "MOD / PORTAMENTO", 2, 8, columnspan=4)
         self._synth_row_panels[2].append(mod_box)
         self._p160_panel_frames["mod_portamento"] = mod
         live_controls = tk.Frame(mod, bg="#131D2B")
@@ -535,13 +532,28 @@ class Editor(tk.Tk):
         self.section_labels["portamento_mode"].configure(
             text="Portamento Mode (ON unverified)")
 
-        # Use each panel's natural content width as its starting weight. This
-        # lets the five-control VCF envelope request more room than MIX/RING,
-        # while leaving the final split responsive to the actual window size.
-        for row_frame, panels in zip(self._synth_rows, self._synth_row_panels):
-            for col, panel in enumerate(panels):
-                requested = max(1, panel.winfo_reqwidth())
-                row_frame.grid_columnconfigure(col, weight=requested, minsize=0)
+        # Translate requested panel widths into spans across the shared
+        # 12-column grid. This preserves the established workspace structure
+        # while allowing each row to find its own balance without fixed ratios.
+        for row, panels in enumerate(self._synth_row_panels):
+            requested = [max(1, panel.winfo_reqwidth()) for panel in panels]
+            total = sum(requested)
+            raw = [12 * width / total for width in requested]
+            spans = [max(1, int(value)) for value in raw]
+            while sum(spans) > 12:
+                candidates = [i for i, span in enumerate(spans) if span > 1]
+                if not candidates:
+                    break
+                idx = min(candidates, key=lambda i: raw[i] - spans[i])
+                spans[idx] -= 1
+            while sum(spans) < 12:
+                idx = max(range(len(spans)), key=lambda i: raw[i] - spans[i])
+                spans[idx] += 1
+                raw[idx] -= 1
+            col = 0
+            for panel, span in zip(panels, spans):
+                panel.grid_configure(row=row, column=col, columnspan=span, sticky="nsew")
+                col += span
 
     def _build_lfo_panel(self, parent, wave_spec, caption: str, control_specs,
                          *, note: str | None = None) -> None:
